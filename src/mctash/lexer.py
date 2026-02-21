@@ -64,6 +64,10 @@ def tokenize(source: str) -> Iterator[Token]:
         if ch in " \t\r":
             advance()
             continue
+        if ch == "#":
+            while i < len(source) and peek() != "\n":
+                advance()
+            continue
         if ch == "\\" and peek(1) == "\n":
             advance(2)
             continue
