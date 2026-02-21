@@ -1,0 +1,721 @@
+# Data types for the Oils AST, aka "Lossless Syntax Tree".
+#
+# Invariant: the source text can be reconstructed byte-for-byte from this tree.
+# The test/lossless.sh suite verifies this.
+
+# We usually try to preserve the physical order of the source in the ASDL
+# fields.  One exception is the order of redirects:
+#
+#     echo >out.txt hi   
+#     # versus
+#     echo hi >out.txt
+
+# Unrepresented:
+# - let arithmetic (rarely used)
+# - coprocesses # one with arg and one without
+# - select block
+
+# Possible refactorings:
+#
+#   # %CompoundWord as first class variant:
+#   bool_expr = WordTest %CompoundWord | ...
+#
+#   # Can DoubleQuoted have a subset of parts compared with CompoundWord?
+#   string_part = ...  # subset of word_part
+#
+#   - Distinguish word_t with BracedTree vs. those without?  seq_word_t?
+
+module syntax
+{
+  use frontend id_kind {
+    id  # special case use of uint16_t: normally we can only use pointer types
+  }
+  use core value {
+    value
+  }
+
+  # More efficient than the List[bool] pattern we've been using
+  BoolParamBox = (bool b)
+  IntParamBox = (int i)
+
+  # core/main_loop.py
+  parse_result = EmptyLine | Eof | Node(command cmd)
+ 
+  # 'source' represents the location of a line / token.
+  source = 
+    Interactive
+  | Headless
+  | Unused(str comment)     # completion and history never show parse errors?
+  | CFlag
+  | Stdin(str comment)
+
+    # MainFile is for main.{osh,ysh}, --eval oshrc/yshrc.  They're files loaded
+    # directly by the shell.
+  | MainFile(str path)
+    # A file loaded by 'source' or 'use'.
+    # TODO: we probably don't need this location?  The debug stack provides a
+    # chain of locations back to the sourced script.  Maybe we need to point to
+    # a debug_frame instead?
+    # It could be DiskFileShell and DiskFileUser, or just DiskFile.
+  | OtherFile(str path, loc location)
+
+    # Code parsed from a word.  (TODO: rename source.Word?)
+    # used for 'eval arg', 'trap arg', 'printf arg',
+    # parseCommand() - this is a string?
+    # dynamic LHS - move this to Reparsed?
+    # complete -W
+  | Dynamic(str what, loc location)
+
+    # Point to the original variable reference
+  | VarRef(Token orig_tok)
+
+    # code parsed from the value of a variable
+    # used for $PS1 $PROMPT_COMMAND
+  | Variable(str var_name, loc location)
+
+    # alias expansion (location of first word)
+  | Alias(str argv0, loc argv0_loc)
+
+    # 2 kinds of reparsing: backticks, and x+1 in a[x+1]=y
+  | Reparsed(str what, Token left_token, Token right_token)
+
+    # For --location-str
+  | Synthetic(str s)
+
+  SourceLine = (int line_num, str content, source src)
+
+  # Note that ASDL generates:
+  #    typedef uint16_t Id_t;
+  # So Token is
+  #    8 bytes GC header + 2 + 4 + 4 + 8 + 8 = 34 bytes on 64-bit machines
+  #
+  # We transpose (id, col, length) -> (id, length, col) for C struct packing.
+  Token = (id id, int length, int col, SourceLine? line, str? tval)
+
+  # I wanted to get rid of Token.tval with this separate WideToken type, but it
+  # is more efficient if word_part.Literal %Token literally is the same thing
+  # that comes out of the lexer.  Otherwise we have extra garbage.
+
+  # WideToken = (id id, int length, int col, SourceLine? line, str? tval)
+
+  # Slight ASDL bug: CompoundWord has to be defined before using it as a shared
+  # variant.  The _product_counter algorithm should be moved into a separate
+  # tag-assigning pass, and shared between gen_python.py and gen_cpp.py.
+  CompoundWord = (List[word_part] parts)
+
+  # Source location for errors
+  loc = 
+    Missing  # equivalent of runtime.NO_SPID
+  | Token %Token
+    # Very common case: argv arrays need original location
+  | ArgWord %CompoundWord
+  | WordPart(word_part p)
+  | Word(word w)
+  | Arith(arith_expr a)
+    # e.g. for errexit blaming
+  | Command(command c)
+
+  # debug_frame_t is an EXECUTION stack (proc func source use eval), while
+  # source_t (in some cases) is like a PARSING stack (files, strings from vars,
+  # etc.)
+  debug_frame = 
+    # OSH: main_filename => BASH_SOURCE
+    MainFile(str main_filename)
+    # YSH
+  | Dummy                        # -c or stdin, not used by BASH_* vars
+    # Note: we could have more "frame 0" than MainFile and Dummy -
+    # - Completion hooks - dev.Tracer is missing these
+    # - PS1
+    # - PROMPT_COMMAND
+
+    # OSH: call_tok => BASH_LINENO, source_name => BASH_SOURCE
+  | Source(CompoundWord source_loc, str source_name)
+
+    # OSH: call_tok => BASH_LINENO, def_tok => BASH_SOURCE
+    # YSH: procs
+  | ProcLike(CompoundWord invoke_loc, Token def_tok, str proc_name)
+
+    # for io->eval, myfunc()
+  | Token %Token
+
+    # For 'eval', 'use', ...
+  | CompoundWord %CompoundWord
+
+    # Special frame added when running 'trap ERR', for more info, and as a sentinel
+  | BeforeErrTrap(Token tok)
+
+  #
+  # Shell language
+  #
+
+  bracket_op = 
+    WholeArray(id op_id)  # * or @
+  | ArrayIndex(arith_expr expr)
+
+  suffix_op = 
+    Nullary %Token  # ${x@Q} or ${!prefix@} (which also has prefix_op)
+  | Unary(Token op, rhs_word arg_word)  # e.g. ${v:-default}
+    # TODO: Implement YSH ${x|html} and ${x %.3f}
+  | Static(Token tok, str arg)
+  | PatSub(CompoundWord pat, rhs_word replace, id replace_mode, Token slash_tok)
+    # optional begin is arith_expr.EmptyZero
+    # optional length is None, because it's handled in a special way
+  | Slice(arith_expr begin, arith_expr? length)
+
+  BracedVarSub = (
+      Token left,        # in dynamic ParseVarRef, same as name_tok
+      Token name_tok,    # location for the name
+      str var_name,      # the name - TODO: remove this, use LazyStr() instead
+      Token? prefix_op,  # prefix # or ! operators
+      bracket_op? bracket_op,
+      suffix_op? suffix_op,
+      Token right        # in dynamic ParseVarRef, same as name_tok
+  )
+
+  # Variants:
+  # - Look at left token ID for $'' c'' vs r'' '' e.g. Id.Left_DollarSingleQuote
+  # - And """ and ''' e.g. Id.Left_TDoubleQuote
+  DoubleQuoted = (Token left, List[word_part] parts, Token right)
+
+  # Consider making str? sval LAZY, like lexer.LazyStr(tok)
+  SingleQuoted = (Token left, str sval, Token right)
+
+  # e.g. Id.VSub_QMark, Id.VSub_DollarName $foo with lexer.LazyStr()
+  SimpleVarSub = (Token tok)
+
+  CommandSub = (Token left_token, command child, Token right)
+
+  # @[expr] or $[expr] - expression substitution
+  # Used in both word_part and expr contexts
+  ExprSub = (Token left, expr child, Token right)
+
+  # - can contain word.BracedTree
+  # - no 'Token right' for now, doesn't appear to be used
+  YshArrayLiteral = (Token left, List[word] words, Token right)
+
+  # Unevaluated, typed arguments for func and proc.
+  # Note that ...arg is expr.Spread.
+  ArgList = (
+     Token left, List[expr] pos_args,
+     Token? semi_tok, List[NamedArg] named_args,
+     Token? semi_tok2, expr? block_expr,
+     Token right
+  )
+
+  AssocPair = (CompoundWord key, CompoundWord value, bool has_plus)
+
+  InitializerWord =
+    ArrayWord(word w)
+  | AssocPair %AssocPair
+
+  word_part = 
+    YshArrayLiteral %YshArrayLiteral
+  | InitializerLiteral(Token left, List[InitializerWord] pairs, Token right)
+  | Literal %Token
+    # escaped case is separate so the evaluator doesn't have to check token ID
+  | EscapedLiteral(Token token, str ch)
+  | SingleQuoted %SingleQuoted
+  | DoubleQuoted %DoubleQuoted
+    # Could be SimpleVarSub %Token that's VSub_DollarName, but let's not
+    # confuse with the comon word_part.Literal is common for wno
+  | SimpleVarSub %SimpleVarSub
+  | BracedVarSub %BracedVarSub
+  | ZshVarSub (Token left, CompoundWord ignored, Token right)
+    # For command sub and process sub: $(...)  <(...)  >(...)
+  | CommandSub %CommandSub
+    # ~ or ~bob
+  | TildeSub(Token left, # always the tilde
+             Token? name, str? user_name)
+  | ArithSub(Token left, arith_expr anode, Token right)
+    # {a,b,c}
+  | BracedTuple(List[CompoundWord] words)
+    # {1..10} or {-5..10..2} or {01..10} (leading zeros matter)
+    # {a..f} or {a..f..2} or {a..f..-2}
+    # the whole range is one Token,
+  | BracedRange(Token blame_tok, id kind, str start, str end, int step)
+    # expanded version of {1..10}
+  | BracedRangeDigit(str s, Token orig_tok)
+    # extended globs are parsed statically, unlike globs
+  | ExtGlob(Token op, List[CompoundWord] arms, Token right)
+    # a regex group is similar to an extended glob part
+  | BashRegexGroup(Token left, CompoundWord? child, Token right)
+
+    # YSH word_part extensions
+
+    # @myarray - Id.Lit_Splice (could be optimized to %Token)
+  | Splice(Token blame_tok, str var_name)
+    # @[expr] $[expr] - array splice or expr sub
+  | ExprSub %ExprSub
+
+  # Use cases for Empty: RHS of 'x=', the argument in "${x:-}".
+  # The latter is semantically necessary.  (See osh/word_parse.py). 
+  # At runtime: RHS of 'declare x='.
+  rhs_word = Empty | Compound %CompoundWord
+
+  word = 
+    # Returns from WordParser, but not generally stored in LST
+    Operator %Token
+    # A Compound word can contain any word_part except the Braced*Part.
+    # We could model this with another variant type but it incurs runtime
+    # overhead and seems like overkill.  Note that DoubleQuoted can't
+    # contain a SingleQuoted, etc. either.
+  | Compound %CompoundWord
+    # For word sequences command.Simple, YshArrayLiteral, for_iter.Words
+    # Could be its own type
+  | BracedTree(List[word_part] parts)
+    # For dynamic parsing of test aka [ - the string is already evaluated.
+  | String(id id, str s, CompoundWord? blame_loc)
+    # Redirect words like   >   3>  {myvar}>
+  | Redir(Token? left_tok, Token op)
+
+  # Note: the name 'foo' is derived from token value 'foo=' or 'foo+='
+  sh_lhs =
+    Name(Token left, str name)  # Lit_VarLike foo=
+                                # TODO: Could be Name %Token
+  | IndexedName(Token left, str name, arith_expr index)
+  | UnparsedIndex(Token left, str name, str index)  # for translation
+
+  arith_expr =
+    EmptyZero              # these are valid:  $(( ))  (( ))  ${a[@]: : }
+  | EmptyOne               # condition is 1 for infinite loop:  for (( ; ; ))
+  | VarSub %Token          # e.g. $(( x ))  Id.Arith_VarLike
+  | Word %CompoundWord     # e.g. $(( 123'456'$y ))
+
+  | UnaryAssign(id op_id, arith_expr child)
+  | BinaryAssign(id op_id, arith_expr left, arith_expr right)
+
+  | Unary(id op_id, arith_expr child)
+  | Binary(Token op, arith_expr left, arith_expr right)
+  | TernaryOp(arith_expr cond, arith_expr true_expr, arith_expr false_expr)
+
+  bool_expr =
+    WordTest(word w)  # e.g. [[ myword ]]
+  | Binary(id op_id, word left, word right)
+  | Unary(id op_id, word child)
+  | LogicalNot(bool_expr child)
+  | LogicalAnd(bool_expr left, bool_expr right)
+  | LogicalOr(bool_expr left, bool_expr right)
+
+  redir_loc =
+    Fd(int fd) | VarName(str name)
+
+  redir_param =
+    Word %CompoundWord
+  | HereWord(CompoundWord w, bool is_multiline)
+  | HereDoc(word here_begin,  # e.g. EOF or 'EOF'
+            Token? here_end_tok,  # Token consisting of the whole line
+                                  # It's always filled in AFTER creation, but
+                                  # temporarily so optional
+            List[word_part] stdin_parts  # one for each line
+           )
+
+  Redir = (Token op, redir_loc loc, redir_param arg)
+
+  assign_op = Equal | PlusEqual
+  AssignPair = (Token left, sh_lhs lhs, assign_op op, rhs_word rhs)
+  # TODO: could put Id.Lit_VarLike foo= into LazyStr() with -1 slice
+  EnvPair = (Token left, str name, rhs_word val)
+
+  List_of_command < List[command]
+
+  condition = 
+    Shell %List_of_command         # if false; true; then echo hi; fi
+  | YshExpr(expr e)                # if (x > 0) { echo hi }
+                                   # TODO: add more specific blame location
+
+  # Each arm tests one word against multiple words
+  # shell:  *.cc|*.h) echo C++ ;;
+  # YSH:    *.cc|*.h { echo C++ }
+  #
+  # Three location tokens:
+  # 1. left   - shell has ( or *.cc    ysh has *.cc
+  # 2. middle - shell has )            ysh has {
+  # 3. right  - shell has optional ;;  ysh has required }
+  #
+  # For YSH typed case, left can be ( and /
+  # And case_pat may contain more details
+  CaseArm = (
+      Token left, pat pattern, Token middle, List[command] action,
+      Token? right
+  )
+
+  # The argument to match against in a case command
+  # In YSH-style case commands we match against an `expr`, but in sh-style case
+  # commands we match against a word.
+  case_arg =
+    Word(word w)
+  | YshExpr(expr e)
+
+  EggexFlag = (bool negated, Token flag)
+
+  # canonical_flags can be compared for equality.  This is needed to splice
+  # eggexes correctly, e.g.  / 'abc' @pat ; i /
+  Eggex = (
+      Token left, re regex, List[EggexFlag] flags, Token? trans_pref,
+      str? canonical_flags)
+
+  pat =
+    Else
+  | Words(List[word] words)
+  | YshExprs(List[expr] exprs)
+  | Eggex %Eggex
+  
+  # Each if arm starts with either an "if" or "elif" keyword
+  # In YSH, the then keyword is not used (replaced by braces {})
+  IfArm = (
+      Token keyword, condition cond, Token? then_kw, List[command] action,
+      # then_tok used in ysh-ify
+      Token? then_tok)
+
+  for_iter =
+    Args                          # for x; do echo $x; done # implicit "$@"
+  | Words(List[word] words)       # for x in 'foo' *.py { echo $x }S
+                                  # like YshArrayLiteral, but no location for %(
+  | YshExpr(expr e, Token blame)  # for x in (mylist) { echo $x }
+  #| Files(Token left, List[word] words)
+                                  # for x in <> {
+                                  # for x in < @myfiles > {
+
+  BraceGroup = (
+      Token left, Token? doc_token, List[command] children, Token right
+  )
+
+  Param = (Token blame_tok, str name, TypeExpr? type, expr? default_val)
+  RestParam = (Token blame_tok, str name)
+
+  ParamGroup = (List[Param] params, RestParam? rest_of)
+
+  # 'open' is for proc p { }; closed is for proc p () { }
+  proc_sig =
+    Open
+  | Closed(ParamGroup? word, ParamGroup? positional, ParamGroup? named,
+           Param? block_param)
+
+  Proc = (Token keyword, Token name, proc_sig sig, command body)
+
+  Func = (
+      Token keyword, Token name,
+      ParamGroup? positional, ParamGroup? named,
+      command body
+  )
+
+  # Represents all these case:  s=1  s+=1  s[x]=1 ...
+  ParsedAssignment = (Token? left, Token? close, int part_offset, CompoundWord w)
+
+  # var, const.
+  # - Keyword is None for hay blocks.  TODO: consider using BareDecl?
+  # - 'var x' allowed - RHS is None; idiomatic with value.Place
+  VarDecl = (Token? keyword, List[NameType] lhs, expr? rhs)
+
+  # setvar, maybe 'auto' later
+  Mutation = (Token keyword, List[y_lhs] lhs, Token op, expr rhs)
+
+  # call f(x)   = 42
+  ExprCommand = (Token keyword, expr e)
+
+  ShFunction = (
+      Token? keyword, Token name_tok, str name, command body,
+      str? code_str
+  )
+
+  # Retain references to lines
+  LiteralBlock = (BraceGroup brace_group, str? code_str)
+
+  cmd_frag =
+    LiteralBlock %LiteralBlock  # p { echo hi } has backing lines
+  | Expr(command c)             # var b = ^(echo hi)
+
+  command =
+    NoOp
+
+    # can wrap many children, e.g. { }, loops, functions
+  | Redirect(command child, List[Redir] redirects)
+
+  | Simple(Token? blame_tok,  # TODO: make required (BracedTuple?)
+           List[EnvPair] more_env,
+           List[word] words,
+           ArgList? typed_args, LiteralBlock? block,
+           # is_last_cmd is used for fork() optimizations
+           bool is_last_cmd,
+           # (#2307) Redirects on simple commands are evaluated
+           # AFTER the argv word list, unlike all other commands.
+           # This field is null if there are no redirects
+           List[Redir]? redirects)
+
+    # This doesn't technically belong in the LST, but it's convenient for
+    # execution
+  | ExpandedAlias(command child, List[EnvPair] more_env)
+  | Sentence(command child, Token terminator)
+    # Represents "bare assignment"
+    # Token left is redundant with pairs[0].left
+  | ShAssignment(Token left, List[AssignPair] pairs)
+
+  | ControlFlow(Token keyword, CompoundWord? arg_word)
+
+    # ops are |  |&
+  | Pipeline(Token? negated, List[command] children, List[Token] ops)
+    # ops are &&  ||
+  | AndOr(List[command] children, List[Token] ops)
+
+    # Part of for, while, until (but not if, case, ShFunction).  No redirects.
+  | DoGroup(Token left, List[command] children, Token right)
+    # A brace group is a compound command, with redirects.
+  | BraceGroup %BraceGroup
+    # Contains a single child, like CommandSub
+  | Subshell(Token left, command child, Token right, bool is_last_cmd)
+  | DParen(Token left, arith_expr child, Token right)
+  | DBracket(Token left, bool_expr expr, Token right)
+
+    # up to 3 iterations variables
+  | ForEach(Token keyword, List[str] iter_names, for_iter iterable,
+            Token? semi_tok, command body)
+    # C-style for loop.  Any of the 3 expressions can be omitted.
+    # Note: body is required, but only optional here because of initialization
+    # order.
+  | ForExpr(Token keyword, arith_expr? init, arith_expr? cond,
+            arith_expr? update, command? body)
+  | WhileUntil(Token keyword, condition cond, command body)
+
+  | If(Token if_kw, List[IfArm] arms, Token? else_kw, List[command] else_action,
+       Token? fi_kw)
+  | Case(Token case_kw, case_arg to_match, Token arms_start, List[CaseArm] arms,
+         Token arms_end)
+
+    # The keyword is optional in the case of bash-style functions
+    # (ie. "foo() { ... }") which do not have one.
+  | ShFunction %ShFunction
+
+  | TimeBlock(Token keyword, command pipeline)
+    # Some nodes optimize it out as List[command], but we use CommandList for
+    # 1. the top level
+    # 2. ls ; ls & ls  (same line)
+    # 3. CommandSub  # single child that's a CommandList
+    # 4. Subshell  # single child that's a CommandList
+
+    # TODO: Use List_of_command
+  | CommandList(List[command] children)
+
+    # YSH command constructs
+
+  | VarDecl %VarDecl
+
+    # this can behave like 'var', can be desugared
+  | BareDecl(Token lhs, expr rhs)
+
+  | Mutation %Mutation
+  | Expr %ExprCommand
+  | Proc %Proc
+  | Func %Func
+  | Retval(Token keyword, expr val)
+
+  # bytecode
+  b_command =
+    VarDecl %VarDecl
+  | Mutation %Mutation
+
+  #
+  # Glob representation, for converting ${x//} to extended regexes.
+  #
+
+  # Example: *.[ch] is:
+  #   GlobOp(<Glob_Star '*'>),
+  #   GlobLit(Glob_OtherLiteral, '.'),
+  #   CharClass(False, ['ch'])  # from Glob_CleanLiterals token
+
+  glob_part =
+    Literal(id id, str s)
+  | Operator(id op_id)  # * or ?
+  | CharClass(bool negated, List[str] strs)
+
+  # Char classes are opaque for now.  If we ever need them:
+  # - Collating symbols are [. .]
+  # - Equivalence classes are [=
+
+  printf_part =
+    Literal %Token
+    # flags are 0 hyphen space + #
+    # type is 's' for %s, etc.
+  | Percent(List[Token] flags, Token? width, Token? precision, Token type)
+
+  #
+  # YSH Language
+  #
+  # Copied and modified from Python-3.7/Parser/Python.asdl !
+
+  expr_context = Load | Store | Del | AugLoad | AugStore | Param
+
+  # Type expressions:   Int   List[Int]   Dict[Str, Any]
+  # Do we have Func[Int, Int => Int] ?  I guess we can parse that into this
+  # system.
+  TypeExpr = (Token tok, str name, List[TypeExpr] params)
+
+  # LHS bindings in var/const, and eggex
+  NameType = (Token left, str name, TypeExpr? typ)
+
+  # TODO: Inline this into GenExp and ListComp?  Just use a flag there?
+  Comprehension = (List[NameType] lhs, expr iter, expr? cond)
+
+  # Named arguments supplied to call.  Token is null for f(; ...named).
+  NamedArg = (Token? name, expr value)
+
+  # Subscripts are lists of expressions
+  #   a[:i, n]      (we don't have matrices, but we have data frames)
+  Subscript = (Token left, expr obj, expr index)
+
+  # Attributes are obj.attr, d->key, name::scope,
+  Attribute = (expr obj, Token op, Token attr, str attr_name, expr_context ctx)
+
+  y_lhs = 
+    Var %Token  # Id.Expr_Name
+  | Subscript %Subscript
+  | Attribute %Attribute
+
+  place_op = 
+    # &a[i+1]
+    Subscript(Token op, expr index)
+    # &d.mykey
+  | Attribute(Token op, Token attr)
+
+  expr =
+    Var(Token left, str name)  # a variable name to evaluate
+    # Constants are typically Null, Bool, Int, Float
+    #           and also Str for key in {key: 42}
+    # But string literals are SingleQuoted or DoubleQuoted
+    # Python uses Num(object n), which doesn't respect our "LST" invariant.
+  | Const(Token c, value val)
+
+    # read(&x)  json read (&x[0])
+  | Place(Token blame_tok, str var_name, place_op* ops)
+
+    # :| one 'two' "$three" |
+  | YshArrayLiteral %YshArrayLiteral
+
+    # / d+ ; ignorecase; %python /
+  | Eggex %Eggex
+
+    # $name is not an expr, but $? is, e.g. Id.VSub_QMark
+  | SimpleVarSub %SimpleVarSub
+  | BracedVarSub %BracedVarSub
+  | CommandSub %CommandSub
+  | ExprSub %ExprSub
+  | SingleQuoted %SingleQuoted
+  | DoubleQuoted %DoubleQuoted
+
+  | Literal(expr inner)
+  | Lambda(List[NameType] params, expr body)
+
+  | Unary(Token op, expr child)
+  | Binary(Token op, expr left, expr right)
+    # x < 4 < 3 and (x < 4) < 3
+  | Compare(expr left, List[Token] ops, List[expr] comparators)
+  | FuncCall(expr func, ArgList args)
+
+    # TODO: Need a representation for method call.  We don't just want
+    # Attribute() and then Call()
+
+  | IfExp(expr test, expr body, expr orelse)
+  | Tuple(Token left, List[expr] elts, expr_context ctx)
+
+  | List(Token left, List[expr] elts, expr_context ctx)
+  | Dict(Token left, List[expr] keys, List[expr] values)
+    # For the values in {n1, n2}
+  | Implicit
+
+  | ListComp(Token left, expr elt, List[Comprehension] generators)
+    # not implemented
+  | DictComp(Token left, expr key, expr value, List[Comprehension] generators)
+  | GeneratorExp(expr elt, List[Comprehension] generators)
+
+    # Ranges are written 1:2, with first class expression syntax. There is no
+    # step as in Python. Use range(0, 10, step=2) for that.
+  | Range(expr lower, Token op, expr upper)
+
+    # Slices occur within [] only.  Unlike ranges, the start/end can be #
+    # implicit.  Like ranges, denote a step with slice(0, 10, step=2).
+    #   a[3:]   a[:i]
+  | Slice(expr? lower, Token op, expr? upper)
+
+  | Subscript %Subscript
+  | Attribute %Attribute
+
+    # Ellipsis is like 'Starred' within Python, which are valid on the LHS in
+    # Python for unpacking, and # within list literals for splicing.
+    # (Starred is NOT used for {k:v, **a}.  That used a blank "keys"
+    # attribute.)
+
+    # I think we can use { **pairs } like Python
+  | Spread(Token left, expr child)
+
+  #
+  # Regex Language (Eggex)
+  #
+
+  # e.g. alnum digit
+  PosixClass = (Token? negated, str name)
+  # e.g. d w s
+  PerlClass = (Token? negated, str name)
+
+  # Char Sets and Ranges both use Char Codes
+  # with u_braced == true : \u{ff}
+  # with u_braced == false: \xff \\ 'a' a '0' 0
+  # ERE doesn't make a distinction, but compiling to Python/PCRE can use it
+  CharCode = (Token blame_tok, int i, bool u_braced)
+  CharRange = (CharCode start, CharCode end)
+
+  # Note: .NET has && in character classes, making it a recursive language
+
+  class_literal_term = 
+    PosixClass %PosixClass
+  | PerlClass %PerlClass
+  | CharRange %CharRange
+  | CharCode %CharCode
+
+  | SingleQuoted %SingleQuoted
+    # @chars
+  | Splice(Token name, str var_name)  # coudl be Splice %Token
+
+  # evaluated version of class_literal_term (could be in runtime.asdl)
+  char_class_term =
+    PosixClass %PosixClass
+  | PerlClass %PerlClass
+
+  | CharRange %CharRange
+    # For [ \x00 \\ ]
+  | CharCode %CharCode
+
+  # NOTE: modifier is unused now, can represent L or P
+  re_repeat =
+    Op %Token  # + * ? or Expr_DecInt for x{3}
+  | Range(Token? left, str lower, str upper, Token? right)  # dot{1,2}
+  # Haven't implemented the modifier, e.g. x{+ P}
+  # | Num(Token times, id modifier)
+  # | Range(Token? lower, Token? upper, id modifier)
+
+  re = 
+    Primitive(Token blame_tok, id id)  # . ^ $   dot %start %end
+  | PosixClass %PosixClass
+  | PerlClass %PerlClass
+    # syntax [ $x \n ]
+  | CharClassLiteral(bool negated, List[class_literal_term] terms)
+    # evaluated [ 'abc' \n ]
+  | CharClass(bool negated, List[char_class_term] terms)
+
+    # @D
+  | Splice(Token name, str var_name)  # TODO: Splice %Token ?
+
+  | SingleQuoted %SingleQuoted
+
+    # Compound:
+  | Repeat(re child, re_repeat op)
+  | Seq(List[re] children)
+  | Alt(List[re] children)
+
+  | Group(re child)
+    # convert_func is filled in on evaluation
+    # TODO: name and func_name can be expanded to strings
+  | Capture(re child, Token? name, Token? func_name)
+  | Backtracking(bool negated, Token name, re child)
+
+    # \u{ff} is parsed as this, but SingleQuoted also evaluates to it
+  | LiteralChars(Token blame_tok, str s)
+}
