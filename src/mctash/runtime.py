@@ -14,6 +14,7 @@ from .ast_nodes import (
     AndOr,
     Assignment,
     Command,
+    ForCommand,
     FunctionDef,
     GroupCommand,
     IfCommand,
@@ -22,6 +23,7 @@ from .ast_nodes import (
     Redirect,
     Script,
     SimpleCommand,
+    SubshellCommand,
     WhileCommand,
     Word,
 )
@@ -103,9 +105,13 @@ class Runtime:
     def _exec_command(self, node: Command) -> int:
         if isinstance(node, GroupCommand):
             return self._exec_list(node.body)
+        if isinstance(node, SubshellCommand):
+            return self._run_subshell(node.body)
         if isinstance(node, FunctionDef):
             self.functions[node.name] = node.body
             return 0
+        if isinstance(node, ForCommand):
+            return self._run_for(node)
         if isinstance(node, IfCommand):
             status = self._exec_list(node.cond)
             if status == 0:
@@ -153,6 +159,35 @@ class Runtime:
             self.env.update(local_env)
             return status
         return 2
+
+    def _run_subshell(self, body: ListNode) -> int:
+        saved_env = dict(self.env)
+        saved_local = [dict(s) for s in self.local_stack]
+        saved_positional = list(self.positional)
+        saved_cwd = os.getcwd()
+        try:
+            return self._exec_list(body)
+        finally:
+            self.env = saved_env
+            self.local_stack = saved_local
+            self.positional = saved_positional
+            try:
+                os.chdir(saved_cwd)
+            except OSError:
+                pass
+
+    def _run_for(self, node: ForCommand) -> int:
+        if node.items:
+            items: List[str] = []
+            for w in node.items:
+                items.extend(self._expand_argv([w]))
+        else:
+            items = list(self.positional)
+        status = 0
+        for item in items:
+            self.env[node.name] = item
+            status = self._exec_list(node.body)
+        return status
 
     def _run_builtin(self, name: str, argv: List[str]) -> int:
         if name == "cd":

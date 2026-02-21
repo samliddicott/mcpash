@@ -6,6 +6,7 @@ from .ast_nodes import (
     AndOr,
     Assignment,
     Command,
+    ForCommand,
     FunctionDef,
     GroupCommand,
     IfCommand,
@@ -14,6 +15,7 @@ from .ast_nodes import (
     Redirect,
     Script,
     SimpleCommand,
+    SubshellCommand,
     WhileCommand,
     Word,
 )
@@ -140,8 +142,12 @@ class Parser:
             return self.parse_if()
         if tok and tok.kind == "WORD" and tok.value in ["while", "until"]:
             return self.parse_while()
+        if tok and tok.kind == "WORD" and tok.value == "for":
+            return self.parse_for()
         if tok and tok.kind == "OP" and tok.value == "{":
             return self.parse_group()
+        if tok and tok.kind == "OP" and tok.value == "(":
+            return self.parse_subshell()
         if self._looks_like_function_def():
             return self.parse_function_def()
         argv: List[Word] = []
@@ -242,6 +248,46 @@ class Parser:
         self._expect_op(")")
         body_cmd = self.parse_group()
         return FunctionDef(name=name_tok.value, body=body_cmd.body)
+
+    def parse_subshell(self) -> SubshellCommand:
+        self._expect_op("(")
+        body = self.parse_compound_list({")"})
+        self._expect_op(")")
+        return SubshellCommand(body=body)
+
+    def parse_for(self) -> ForCommand:
+        tok = self._advance()
+        if tok is None or tok.kind != "WORD" or tok.value != "for":
+            raise ParseError(f"expected for at {self._where(tok)}")
+        name_tok = self._advance()
+        if name_tok is None or name_tok.kind != "WORD":
+            raise ParseError(f"expected name at {self._where(name_tok)}")
+        items: List[Word] = []
+        tok = self._peek()
+        if tok and tok.kind == "WORD" and tok.value == "in":
+            self._advance()
+            while True:
+                tok = self._peek()
+                if tok is None:
+                    break
+                if tok.kind == "WORD" and tok.value == "do":
+                    break
+                if tok.kind == "OP" and tok.value in [";", "\n"]:
+                    self._advance()
+                    continue
+                if tok.kind == "WORD":
+                    items.append(Word(tok.value))
+                    self._advance()
+                    continue
+                break
+        do_tok = self._advance()
+        if do_tok is None or do_tok.kind != "WORD" or do_tok.value != "do":
+            raise ParseError(f"expected do at {self._where(do_tok)}")
+        body = self.parse_compound_list({"done"})
+        done_tok = self._advance()
+        if done_tok is None or done_tok.kind != "WORD" or done_tok.value != "done":
+            raise ParseError(f"expected done at {self._where(done_tok)}")
+        return ForCommand(name=name_tok.value, items=items, body=body)
 
     def parse_if(self) -> IfCommand:
         tok = self._advance()

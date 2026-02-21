@@ -57,7 +57,19 @@ class FunctionDef:
     body: "ListNode"
 
 
-Command = Union[SimpleCommand, GroupCommand, IfCommand, WhileCommand, FunctionDef]
+@dataclass
+class SubshellCommand:
+    body: "ListNode"
+
+
+@dataclass
+class ForCommand:
+    name: str
+    items: List[Word]
+    body: "ListNode"
+
+
+Command = Union[SimpleCommand, GroupCommand, IfCommand, WhileCommand, FunctionDef, SubshellCommand, ForCommand]
 
 
 @dataclass
