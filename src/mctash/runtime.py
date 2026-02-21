@@ -45,6 +45,18 @@ class ReturnFromFunction(Exception):
         self.code = code
 
 
+class BreakLoop(Exception):
+    def __init__(self, count: int = 1) -> None:
+        super().__init__(f"break {count}")
+        self.count = count
+
+
+class ContinueLoop(Exception):
+    def __init__(self, count: int = 1) -> None:
+        super().__init__(f"continue {count}")
+        self.count = count
+
+
 class Runtime:
     def __init__(self) -> None:
         self.last_status = 0
@@ -135,7 +147,14 @@ class Runtime:
                 should_run = cond_status != 0 if node.until else cond_status == 0
                 if not should_run:
                     break
-                last = self._exec_list(node.body)
+                try:
+                    last = self._exec_list(node.body)
+                except ContinueLoop:
+                    continue
+                except BreakLoop as e:
+                    if e.count > 1:
+                        raise BreakLoop(e.count - 1)
+                    break
             return last
         if isinstance(node, SimpleCommand):
             local_env = dict(self.env)
@@ -150,7 +169,7 @@ class Runtime:
                 self.env.update(local_env)
                 return 0
             name = argv[0]
-            if name in ["cd", "exit", ":", "return", ".", "source", "local", "eval", "declare", "[", "[[", "test", "set", "export", "unset", "shift", "printf", "read", "true", "false", "command"]:
+            if name in ["cd", "exit", ":", "return", ".", "source", "local", "eval", "declare", "[", "[[", "test", "set", "export", "unset", "shift", "printf", "read", "true", "false", "command", "break", "continue"]:
                 try:
                     with self._redirected_fds(node.redirects):
                         status = self._run_builtin(name, argv)
@@ -195,7 +214,14 @@ class Runtime:
         status = 0
         for item in items:
             self.env[node.name] = item
-            status = self._exec_list(node.body)
+            try:
+                status = self._exec_list(node.body)
+            except ContinueLoop:
+                continue
+            except BreakLoop as e:
+                if e.count > 1:
+                    raise BreakLoop(e.count - 1)
+                break
         return status
 
     def _run_case(self, node: CaseCommand) -> int:
@@ -255,6 +281,12 @@ class Runtime:
             raise ReturnFromFunction(code)
         if name == ":":
             return 0
+        if name == "break":
+            count = int(argv[1]) if len(argv) > 1 else 1
+            raise BreakLoop(count)
+        if name == "continue":
+            count = int(argv[1]) if len(argv) > 1 else 1
+            raise ContinueLoop(count)
         return 2
 
     def _run_source(self, path: str, args: List[str]) -> int:
