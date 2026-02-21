@@ -44,6 +44,7 @@ class Runtime:
         self.env: Dict[str, str] = dict(os.environ)
         self.positional: List[str] = []
         self.functions: Dict[str, ListNode] = {}
+        self.local_stack: List[Dict[str, str]] = []
 
     def set_positional_args(self, args: List[str]) -> None:
         self.positional = list(args)
@@ -127,7 +128,7 @@ class Runtime:
                 self.env.update(local_env)
                 return 0
             name = argv[0]
-            if name in ["cd", "exit", ":", "return", ".", "source"]:
+            if name in ["cd", "exit", ":", "return", ".", "source", "local", "eval", "declare"]:
                 try:
                     with self._redirected_fds(node.redirects):
                         status = self._run_builtin(name, argv)
@@ -160,6 +161,12 @@ class Runtime:
             path = argv[1]
             args = argv[2:]
             return self._run_source(path, args)
+        if name == "local":
+            return self._run_local(argv[1:])
+        if name == "eval":
+            return self._run_eval(argv[1:])
+        if name == "declare":
+            return self._run_declare(argv[1:])
         if name == "exit":
             code = int(argv[1]) if len(argv) > 1 else self.last_status
             raise SystemExit(code)
@@ -199,12 +206,14 @@ class Runtime:
             return 127
         saved_positional = list(self.positional)
         self.set_positional_args(args)
+        self.local_stack.append({})
         status = 0
         try:
             status = self._exec_list(body)
         except ReturnFromFunction as e:
             status = e.code
         finally:
+            self.local_stack.pop()
             self.set_positional_args(saved_positional)
         return status
 
@@ -435,7 +444,7 @@ class Runtime:
                     out.append(text[i:])
                     break
                 name = text[i + 2 : end]
-                out.append(self.env.get(name, ""))
+                out.append(self._get_var(name))
                 i = end + 1
                 continue
             i += 1
@@ -444,7 +453,7 @@ class Runtime:
                 name.append(text[i])
                 i += 1
             if name:
-                out.append(self.env.get("".join(name), ""))
+                out.append(self._get_var("".join(name)))
             else:
                 out.append("$")
         return "".join(out)
@@ -476,6 +485,49 @@ class Runtime:
         f = open(target, mode)
         os.dup2(f.fileno(), fd)
         f.close()
+
+    def _get_var(self, name: str) -> str:
+        for scope in reversed(self.local_stack):
+            if name in scope:
+                return scope[name]
+        return self.env.get(name, "")
+
+    def _set_local(self, name: str, value: str) -> None:
+        if not self.local_stack:
+            self.env[name] = value
+            return
+        self.local_stack[-1][name] = value
+
+    def _run_local(self, args: List[str]) -> int:
+        for arg in args:
+            if "=" in arg:
+                name, value = arg.split("=", 1)
+                self._set_local(name, self._expand_word(value))
+            else:
+                self._set_local(arg, "")
+        return 0
+
+    def _run_eval(self, args: List[str]) -> int:
+        source = " ".join(args)
+        tokens = list(tokenize(source))
+        parser_impl = Parser(tokens)
+        status = 0
+        try:
+            while True:
+                node = parser_impl.parse_next()
+                if node is None:
+                    break
+                status = self._exec_and_or(node)
+        except ReturnFromFunction as e:
+            status = e.code
+        return status
+
+    def _run_declare(self, args: List[str]) -> int:
+        if args and args[0] == "-F":
+            for name in sorted(self.functions.keys()):
+                print(name)
+            return 0
+        return 0
 
     def _expand_command_subst(self, text: str) -> str:
         result: List[str] = []
