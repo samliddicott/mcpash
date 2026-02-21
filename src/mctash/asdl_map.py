@@ -10,6 +10,7 @@ from .lst_nodes import (
     LstCaseCommand,
     LstCaseItem,
     LstCommandSubPart,
+    LstControlFlowCommand,
     LstDoubleQuotedPart,
     LstForCommand,
     LstFunctionDef,
@@ -20,7 +21,9 @@ from .lst_nodes import (
     LstParamPart,
     LstPipeline,
     LstRedirect,
+    LstRedirectCommand,
     LstScript,
+    LstShAssignmentCommand,
     LstSingleQuotedPart,
     LstSimpleCommand,
     LstSubshellCommand,
@@ -59,6 +62,12 @@ def _lst_pipeline_to_command(node: LstPipeline) -> Dict[str, Any]:
 def _lst_command_to_command(node) -> Dict[str, Any]:
     if isinstance(node, LstSimpleCommand):
         return _simple_command(node)
+    if isinstance(node, LstRedirectCommand):
+        return {
+            "type": "command.Redirect",
+            "child": _lst_command_to_command(node.child),
+            "redirects": [_redir(r) for r in node.redirects],
+        }
     if isinstance(node, LstGroupCommand):
         return {
             "type": "command.BraceGroup",
@@ -84,6 +93,17 @@ def _lst_command_to_command(node) -> Dict[str, Any]:
         return _for_command(node)
     if isinstance(node, LstCaseCommand):
         return _case_command(node)
+    if isinstance(node, LstControlFlowCommand):
+        return {
+            "type": "command.ControlFlow",
+            "keyword": token(node.keyword),
+            "arg_word": word(node.arg) if node.arg else None,
+        }
+    if isinstance(node, LstShAssignmentCommand):
+        return {
+            "type": "command.ShAssignment",
+            "pairs": [_env_pair(a) for a in node.assignments],
+        }
     return {"type": "command.NoOp"}
 
 

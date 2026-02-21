@@ -90,6 +90,12 @@ class LstSimpleCommand:
 
 
 @dataclass
+class LstRedirectCommand:
+    child: "LstCommand"
+    redirects: List[LstRedirect]
+
+
+@dataclass
 class LstGroupCommand:
     body: "LstListNode"
 
@@ -139,8 +145,20 @@ class LstCaseCommand:
     items: List[LstCaseItem]
 
 
+@dataclass
+class LstControlFlowCommand:
+    keyword: str
+    arg: Optional[LstWord]
+
+
+@dataclass
+class LstShAssignmentCommand:
+    assignments: List[LstAssignment]
+
+
 LstCommand = Union[
     LstSimpleCommand,
+    LstRedirectCommand,
     LstGroupCommand,
     LstIfCommand,
     LstWhileCommand,
@@ -148,6 +166,8 @@ LstCommand = Union[
     LstSubshellCommand,
     LstForCommand,
     LstCaseCommand,
+    LstControlFlowCommand,
+    LstShAssignmentCommand,
 ]
 
 

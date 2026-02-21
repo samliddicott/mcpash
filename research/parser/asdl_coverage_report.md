@@ -25,12 +25,12 @@ Source: `research/parser/osh_syntax/frontend.syntax.asdl`
 
 ## command
 - `NoOp`: missing
-- `Redirect`: missing
+- `Redirect`: implemented
 - `Simple`: implemented
 - `ExpandedAlias`: missing
 - `Sentence`: missing
-- `ShAssignment`: missing
-- `ControlFlow`: missing
+- `ShAssignment`: implemented
+- `ControlFlow`: implemented
 - `Pipeline`: implemented
 - `AndOr`: implemented
 - `DoGroup`: missing
@@ -60,7 +60,7 @@ Source: `research/parser/osh_syntax/frontend.syntax.asdl`
 - `HereDoc`: implemented
 
 ## redir_loc
-- `Fd`: missing
+- `Fd`: implemented
 
 ## assign_op
 - `Equal`: missing

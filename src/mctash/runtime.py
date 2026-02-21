@@ -24,6 +24,7 @@ from .ast_nodes import (
     ListNode,
     Pipeline,
     Redirect,
+    RedirectCommand,
     Script,
     SimpleCommand,
     SubshellCommand,
@@ -190,6 +191,9 @@ class Runtime:
             status = self._run_external(argv, local_env, node.redirects)
             self.env.update(local_env)
             return status
+        if isinstance(node, RedirectCommand):
+            with self._redirected_fds(node.redirects):
+                return self._exec_command(node.child)
         return 2
 
     def _run_subshell(self, body: ListNode) -> int:

@@ -15,6 +15,7 @@ from .ast_nodes import (
     ListNode,
     Pipeline,
     Redirect,
+    RedirectCommand,
     Script,
     SimpleCommand,
     SubshellCommand,
@@ -30,6 +31,7 @@ from .lst_nodes import (
     LstCaseItem,
     LstCommandSubPart,
     LstCommand,
+    LstControlFlowCommand,
     LstDoubleQuotedPart,
     LstForCommand,
     LstFunctionDef,
@@ -39,7 +41,9 @@ from .lst_nodes import (
     LstLiteralPart,
     LstPipeline,
     LstRedirect,
+    LstRedirectCommand,
     LstScript,
+    LstShAssignmentCommand,
     LstSimpleCommand,
     LstSubshellCommand,
     LstWhileCommand,
@@ -233,19 +237,26 @@ class Parser:
     def parse_command(self) -> tuple[Command, LstCommand]:
         tok = self._peek()
         if self._is_word(tok) and tok.value == "if":
-            return self.parse_if()
+            command, lst_command = self.parse_if()
+            return self._maybe_wrap_redirects(command, lst_command)
         if self._is_word(tok) and tok.value in ["while", "until"]:
-            return self.parse_while()
+            command, lst_command = self.parse_while()
+            return self._maybe_wrap_redirects(command, lst_command)
         if self._is_word(tok) and tok.value == "for":
-            return self.parse_for()
+            command, lst_command = self.parse_for()
+            return self._maybe_wrap_redirects(command, lst_command)
         if self._is_word(tok) and tok.value == "case":
-            return self.parse_case()
+            command, lst_command = self.parse_case()
+            return self._maybe_wrap_redirects(command, lst_command)
         if tok and tok.kind == "OP" and tok.value == "{":
-            return self.parse_group()
+            command, lst_command = self.parse_group()
+            return self._maybe_wrap_redirects(command, lst_command)
         if tok and tok.kind == "OP" and tok.value == "(":
-            return self.parse_subshell()
+            command, lst_command = self.parse_subshell()
+            return self._maybe_wrap_redirects(command, lst_command)
         if self._looks_like_function_def():
-            return self.parse_function_def()
+            command, lst_command = self.parse_function_def()
+            return self._maybe_wrap_redirects(command, lst_command)
 
         argv: List[Word] = []
         lst_argv: List = []
@@ -323,10 +334,14 @@ class Parser:
             break
         if not argv and not assignments and not redirects:
             raise ParseError(f"expected command at {self._where(tok)}")
-        return (
-            SimpleCommand(argv=argv, assignments=assignments, redirects=redirects),
-            LstSimpleCommand(argv=lst_argv, assignments=lst_assignments, redirects=lst_redirects),
-        )
+        simple_cmd = SimpleCommand(argv=argv, assignments=assignments, redirects=redirects)
+        lst_simple_cmd = LstSimpleCommand(argv=lst_argv, assignments=lst_assignments, redirects=lst_redirects)
+        if not argv and assignments:
+            return simple_cmd, LstShAssignmentCommand(assignments=lst_assignments)
+        if argv and argv[0].text in ["break", "continue", "return", "exit"]:
+            arg = lst_argv[1] if len(lst_argv) > 1 else None
+            return simple_cmd, LstControlFlowCommand(keyword=argv[0].text, arg=arg)
+        return simple_cmd, lst_simple_cmd
 
     def _is_assignment(self, text: str) -> bool:
         if "=" not in text:
@@ -617,6 +632,37 @@ class Parser:
             col=tok.col,
             length=len(tok.value),
             index=tok.index,
+        )
+
+    def _maybe_wrap_redirects(self, command: Command, lst_command: LstCommand) -> tuple[Command, LstCommand]:
+        redirects: List[Redirect] = []
+        lst_redirects: List[LstRedirect] = []
+        while True:
+            tok = self._peek()
+            if tok is None:
+                break
+            if tok.kind == "OP" and tok.value in ["<", ">", ">>", "<<", "<<-", ">&", "<&"]:
+                op_tok = tok
+                self._advance()
+                target_tok = self._peek()
+                if target_tok is None or not self._is_word(target_tok):
+                    raise ParseError(f"expected redirection target at {self._where(target_tok)}")
+                redir = self._make_redirect(op_tok.value, target_tok.value, None)
+                lst_redir = self._make_lst_redirect(op_tok, target_tok, None)
+                self._advance()
+                if redir.op in ["<<", "<<-"]:
+                    here_tok = self._peek()
+                    if here_tok and here_tok.kind == "HEREDOC":
+                        self._apply_heredoc_token(redir, lst_redir, here_tok.value)
+                        self._advance()
+                redirects.append(redir)
+                lst_redirects.append(lst_redir)
+                continue
+            break
+        if not redirects:
+            return command, lst_command
+        return RedirectCommand(child=command, redirects=redirects), LstRedirectCommand(
+            child=lst_command, redirects=lst_redirects
         )
 
 

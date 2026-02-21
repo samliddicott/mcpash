@@ -38,6 +38,12 @@ class SimpleCommand:
 
 
 @dataclass
+class RedirectCommand:
+    child: "Command"
+    redirects: List[Redirect]
+
+
+@dataclass
 class GroupCommand:
     body: "ListNode"
 
@@ -89,6 +95,7 @@ class CaseCommand:
 
 Command = Union[
     SimpleCommand,
+    RedirectCommand,
     GroupCommand,
     IfCommand,
     WhileCommand,

@@ -46,8 +46,12 @@ def main() -> None:
             "CommandList",
             "ForEach",
             "WhileUntil",
+            "Redirect",
+            "ShAssignment",
+            "ControlFlow",
         },
         "redir_param": {"Word", "HereDoc"},
+        "redir_loc": {"Fd"},
         "word": {"Compound"},
     }
 
