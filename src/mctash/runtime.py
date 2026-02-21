@@ -58,6 +58,22 @@ class ContinueLoop(Exception):
 
 
 class Runtime:
+    SPECIAL_BUILTINS = {
+        ":",
+        ".",
+        "source",
+        "break",
+        "continue",
+        "eval",
+        "exit",
+        "export",
+        "readonly",
+        "return",
+        "set",
+        "shift",
+        "trap",
+        "unset",
+    }
     def __init__(self) -> None:
         self.last_status = 0
         self.env: Dict[str, str] = dict(os.environ)
@@ -187,22 +203,27 @@ class Runtime:
                 return 0
             name = argv[0]
             if name in ["cd", "exit", ":", "return", ".", "source", "local", "eval", "declare", "[", "[[", "test", "set", "export", "unset", "shift", "printf", "read", "true", "false", "command", "break", "continue", "trap"]:
-                try:
+                is_special = name in self.SPECIAL_BUILTINS
+                if is_special:
+                    self.env = local_env
                     with self._redirected_fds(node.redirects):
-                        status = self._run_builtin(name, argv)
+                        return self._run_builtin(name, argv)
+                saved_env = self.env
+                try:
+                    self.env = local_env
+                    with self._redirected_fds(node.redirects):
+                        return self._run_builtin(name, argv)
                 finally:
-                    self.env.update(local_env)
-                return status
+                    self.env = saved_env
             if name in self.functions:
+                saved_env = self.env
                 try:
+                    self.env = local_env
                     with self._redirected_fds(node.redirects):
-                        status = self._run_function(name, argv[1:])
+                        return self._run_function(name, argv[1:])
                 finally:
-                    self.env.update(local_env)
-                return status
-            status = self._run_external(argv, local_env, node.redirects)
-            self.env.update(local_env)
-            return status
+                    self.env = saved_env
+            return self._run_external(argv, local_env, node.redirects)
         if isinstance(node, RedirectCommand):
             with self._redirected_fds(node.redirects):
                 return self._exec_command(node.child)
