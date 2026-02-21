@@ -25,6 +25,7 @@ from .ast_nodes import (
     WhileCommand,
     Word,
 )
+from .expand import expand_word
 from .lexer import tokenize
 from .parser import Parser
 
@@ -47,6 +48,7 @@ class Runtime:
         self.functions: Dict[str, ListNode] = {}
         self.local_stack: List[Dict[str, str]] = []
         self.script_name: str = ""
+        self.options: Dict[str, bool] = {}
 
     def set_positional_args(self, args: List[str]) -> None:
         self.positional = list(args)
@@ -133,7 +135,7 @@ class Runtime:
                 self.env.update(local_env)
                 return 0
             name = argv[0]
-            if name in ["cd", "exit", ":", "return", ".", "source", "local", "eval", "declare", "[", "[[", "test"]:
+            if name in ["cd", "exit", ":", "return", ".", "source", "local", "eval", "declare", "[", "[[", "test", "set"]:
                 try:
                     with self._redirected_fds(node.redirects):
                         status = self._run_builtin(name, argv)
@@ -172,6 +174,8 @@ class Runtime:
             return self._run_eval(argv[1:])
         if name == "declare":
             return self._run_declare(argv[1:])
+        if name == "set":
+            return self._run_set(argv[1:])
         if name in ["[", "[[", "test"]:
             return self._run_test(name, argv[1:])
         if name == "exit":
@@ -316,90 +320,28 @@ class Runtime:
     def _expand_argv(self, words: List[Word]) -> List[str]:
         argv: List[str] = []
         for w in words:
-            argv.extend(self._expand_fields(w.text))
+            argv.extend(
+                expand_word(
+                    w.text,
+                    self._expand_param,
+                    self._expand_command_subst_text,
+                    self._expand_arith,
+                    self._split_ifs,
+                    self._glob_field,
+                )
+            )
         return argv
 
     def _expand_word(self, text: str) -> str:
-        fields = self._expand_fields(text)
+        fields = expand_word(
+            text,
+            self._expand_param,
+            self._expand_command_subst_text,
+            self._expand_arith,
+            self._split_ifs,
+            self._glob_field,
+        )
         return fields[0] if fields else ""
-
-    def _expand_fields(self, text: str) -> List[str]:
-        segments = self._split_quoted(text)
-        fields: List[Tuple[str, bool]] = [("", False)]
-        for seg_text, quoted, expand in segments:
-            seg_val = seg_text
-            if expand:
-                seg_val = self._expand_command_subst(self._expand_params(seg_val))
-            if quoted:
-                fields = [(f + seg_val, True or q) for f, q in fields]
-            else:
-                parts = self._split_ifs(seg_val)
-                if not parts:
-                    fields = [(f, q) for f, q in fields]
-                else:
-                    new_fields: List[Tuple[str, bool]] = []
-                    for f, q in fields:
-                        for p in parts:
-                            new_fields.append((f + p, q))
-                    fields = new_fields
-        expanded: List[str] = []
-        for f, quoted in fields:
-            if quoted:
-                expanded.append(f)
-            else:
-                expanded.extend(self._glob_field(f))
-        return expanded
-
-    def _split_quoted(self, text: str) -> List[Tuple[str, bool, bool]]:
-        segments: List[Tuple[str, bool, bool]] = []
-        buf: List[str] = []
-        i = 0
-        mode = "plain"
-        while i < len(text):
-            ch = text[i]
-            if mode == "plain":
-                if ch == "'":
-                    if buf:
-                        segments.append(("".join(buf), False, True))
-                        buf = []
-                    mode = "single"
-                    i += 1
-                    continue
-                if ch == '"':
-                    if buf:
-                        segments.append(("".join(buf), False, True))
-                        buf = []
-                    mode = "double"
-                    i += 1
-                    continue
-                buf.append(ch)
-                i += 1
-            elif mode == "single":
-                if ch == "'":
-                    segments.append(("".join(buf), True, False))
-                    buf = []
-                    mode = "plain"
-                    i += 1
-                    continue
-                buf.append(ch)
-                i += 1
-            elif mode == "double":
-                if ch == '"':
-                    segments.append(("".join(buf), True, True))
-                    buf = []
-                    mode = "plain"
-                    i += 1
-                    continue
-                if ch == "\\" and i + 1 < len(text) and text[i + 1] in ['"', "\\", "$", "`"]:
-                    i += 1
-                    buf.append(text[i])
-                    i += 1
-                    continue
-                buf.append(ch)
-                i += 1
-        if buf:
-            segments.append(("".join(buf), mode != "plain", mode != "single"))
-        return segments
 
     def _split_ifs(self, text: str) -> List[str]:
         if text == "":
@@ -424,50 +366,15 @@ class Runtime:
             return matches if matches else [text]
         return [text]
 
-    def _expand_params(self, text: str) -> str:
-        out: List[str] = []
-        i = 0
-        while i < len(text):
-            ch = text[i]
-            if ch != "$":
-                out.append(ch)
-                i += 1
-                continue
-            if i + 1 < len(text) and text[i + 1] == "#":
-                out.append(str(len(self.positional)))
-                i += 2
-                continue
-            if i + 1 < len(text) and text[i + 1] == "@":
-                out.append(" ".join(self.positional))
-                i += 2
-                continue
-            if i + 1 < len(text) and text[i + 1] == "*":
-                out.append(" ".join(self.positional))
-                i += 2
-                continue
-            if i + 1 < len(text) and text[i + 1].isdigit():
-                out.append(self._get_positional(text[i + 1]))
-                i += 2
-                continue
-            if i + 1 < len(text) and text[i + 1] == "{":
-                end = text.find("}", i + 2)
-                if end == -1:
-                    out.append(text[i:])
-                    break
-                name = text[i + 2 : end]
-                out.append(self._get_var(name))
-                i = end + 1
-                continue
-            i += 1
-            name = []
-            while i < len(text) and (text[i].isalnum() or text[i] == "_"):
-                name.append(text[i])
-                i += 1
-            if name:
-                out.append(self._get_var("".join(name)))
-            else:
-                out.append("$")
-        return "".join(out)
+    def _expand_param(self, name: str, quoted: bool) -> str:
+        if name == "#":
+            return str(len(self.positional))
+        if name in ["@", "*"]:
+            sep = " " if quoted else " "
+            return sep.join(self.positional)
+        if name.isdigit():
+            return self._get_positional(name)
+        return self._get_var(name)
 
     def _get_positional(self, digit: str) -> str:
         idx = int(digit)
@@ -477,11 +384,38 @@ class Runtime:
             return self.positional[idx - 1]
         return ""
 
+    def _expand_command_subst_text(self, cmd: str) -> str:
+        return self._capture_eval(cmd).rstrip("\n")
+
+    def _expand_arith(self, expr: str) -> str:
+        parts = expand_word(
+            expr,
+            self._expand_param,
+            self._expand_command_subst_text,
+            lambda s: s,
+            self._split_ifs,
+            self._glob_field,
+        )
+        joined = parts[0] if parts else "0"
+        try:
+            value = int(eval(joined, {"__builtins__": {}}, {}))
+        except Exception:
+            value = 0
+        return str(value)
+
     def _expand_heredoc(self, redir: Redirect) -> str:
         content = redir.here_doc or ""
         if not redir.here_doc_expand:
             return content
-        return self._expand_command_subst(self._expand_params(content))
+        fields = expand_word(
+            content,
+            self._expand_param,
+            self._expand_command_subst_text,
+            self._expand_arith,
+            self._split_ifs,
+            self._glob_field,
+        )
+        return fields[0] if fields else ""
 
     def _dup_fd(self, redir: Redirect, is_output: bool, default_fd: int | None = None) -> None:
         fd = redir.fd if redir.fd is not None else (1 if is_output else 0)
@@ -527,6 +461,28 @@ class Runtime:
             for name in sorted(self.functions.keys()):
                 print(name)
             return 0
+        return 0
+
+    def _run_set(self, args: List[str]) -> int:
+        if not args:
+            return 0
+        if args[0] == "--":
+            self.set_positional_args(args[1:])
+            return 0
+        if args[0].startswith("-") or args[0].startswith("+"):
+            for token in args:
+                if token == "--":
+                    rest = args[args.index(token) + 1 :]
+                    self.set_positional_args(rest)
+                    return 0
+                if token.startswith("-"):
+                    for ch in token[1:]:
+                        self.options[ch] = True
+                elif token.startswith("+"):
+                    for ch in token[1:]:
+                        self.options[ch] = False
+            return 0
+        self.set_positional_args(args)
         return 0
 
     def _run_test(self, name: str, args: List[str]) -> int:
@@ -585,30 +541,4 @@ class Runtime:
         return data.decode("utf-8", errors="ignore")
 
     def _expand_command_subst(self, text: str) -> str:
-        result: List[str] = []
-        i = 0
-        while i < len(text):
-            if text.startswith("$(", i):
-                depth = 1
-                j = i + 2
-                while j < len(text) and depth > 0:
-                    if text.startswith("$(", j):
-                        depth += 1
-                        j += 2
-                        continue
-                    if text[j] == ")":
-                        depth -= 1
-                        if depth == 0:
-                            break
-                    j += 1
-                if depth != 0:
-                    result.append(text[i:])
-                    break
-                cmd = text[i + 2 : j]
-                output = self._capture_eval(cmd)
-                result.append(output.rstrip("\n"))
-                i = j + 1
-                continue
-            result.append(text[i])
-            i += 1
-        return "".join(result)
+        return self._expand_command_subst_text(text)
