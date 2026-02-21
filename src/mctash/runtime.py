@@ -6,6 +6,7 @@ import os
 import subprocess
 import sys
 import tempfile
+import threading
 from contextlib import contextmanager
 from typing import Dict, Iterable, List, Optional, Tuple
 
@@ -513,6 +514,16 @@ class Runtime:
 
     def _run_eval(self, args: List[str]) -> int:
         source = " ".join(args)
+        return self._eval_source(source)
+
+    def _run_declare(self, args: List[str]) -> int:
+        if args and args[0] == "-F":
+            for name in sorted(self.functions.keys()):
+                print(name)
+            return 0
+        return 0
+
+    def _eval_source(self, source: str) -> int:
         tokens = list(tokenize(source))
         parser_impl = Parser(tokens)
         status = 0
@@ -526,12 +537,19 @@ class Runtime:
             status = e.code
         return status
 
-    def _run_declare(self, args: List[str]) -> int:
-        if args and args[0] == "-F":
-            for name in sorted(self.functions.keys()):
-                print(name)
-            return 0
-        return 0
+    def _capture_eval(self, source: str) -> str:
+        r_fd, w_fd = os.pipe()
+        saved_stdout = os.dup(1)
+        os.dup2(w_fd, 1)
+        os.close(w_fd)
+        try:
+            self._eval_source(source)
+        finally:
+            os.dup2(saved_stdout, 1)
+            os.close(saved_stdout)
+        with os.fdopen(r_fd, "rb") as r:
+            data = r.read()
+        return data.decode("utf-8", errors="ignore")
 
     def _expand_command_subst(self, text: str) -> str:
         result: List[str] = []
@@ -554,8 +572,8 @@ class Runtime:
                     result.append(text[i:])
                     break
                 cmd = text[i + 2 : j]
-                output = subprocess.check_output(["/bin/sh", "-c", cmd], env=self.env)
-                result.append(output.decode("utf-8", errors="ignore").rstrip("\n"))
+                output = self._capture_eval(cmd)
+                result.append(output.rstrip("\n"))
                 i = j + 1
                 continue
             result.append(text[i])
