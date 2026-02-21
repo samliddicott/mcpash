@@ -80,6 +80,8 @@ class Runtime:
         status = 0
         for item in node.items:
             status = self._exec_and_or(item)
+            if status != 0 and self.options.get("e", False):
+                raise SystemExit(status)
         return status
 
     def _exec_and_or(self, node: AndOr) -> int:
@@ -479,7 +481,10 @@ class Runtime:
             return sep.join(self.positional)
         if name.isdigit():
             return self._get_positional(name)
-        return self._get_var(name)
+        value = self._get_var(name)
+        if value == "" and self.options.get("u", False) and name not in ["@", "*", "#"]:
+            raise RuntimeError(f"unbound variable: {name}")
+        return value
 
     def _get_positional(self, digit: str) -> str:
         idx = int(digit)
