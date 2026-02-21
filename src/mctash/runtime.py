@@ -544,6 +544,8 @@ class Runtime:
         result = False
         if len(tokens) >= 2 and tokens[0] == "-f":
             result = os.path.isfile(tokens[1])
+        elif len(tokens) >= 2 and tokens[0] == "-d":
+            result = os.path.isdir(tokens[1])
         elif len(tokens) >= 3 and tokens[1] in ["=", "!="]:
             left = tokens[0]
             right = tokens[2]
