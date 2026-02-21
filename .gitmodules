@@ -1,0 +1,3 @@
+[submodule "external/ash-shell-test"]
+	path = external/ash-shell-test
+	url = https://github.com/ash-shell/test.git

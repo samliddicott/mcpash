@@ -10,6 +10,7 @@ Deliverables
 - ASDL schema for executable AST.
 - Minimal executor: commands, pipelines, redirections, variables, functions.
 - Test harness and ash compliance suite: `ash-shell/test`.
+- Runnable target: `scripts/run-ash-test.sh` to execute the ash test harness with `mctash`.
 
 Exit Criteria
 - Pass the `ash-shell/test` suite with reproducible results.
