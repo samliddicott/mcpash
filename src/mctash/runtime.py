@@ -477,10 +477,30 @@ class Runtime:
         return parts
 
     def _glob_field(self, text: str) -> List[str]:
+        text = self._tilde_expand(text)
         if any(c in text for c in ["*", "?", "["]):
             matches = [p for p in glob.glob(text)]
             return matches if matches else [text]
         return [text]
+
+    def _tilde_expand(self, text: str) -> str:
+        if not text.startswith("~"):
+            return text
+        if text == "~" or text.startswith("~/"):
+            home = self.env.get("HOME", "")
+            return home + text[1:]
+        if "/" in text:
+            user, rest = text[1:].split("/", 1)
+            return self._user_home(user) + "/" + rest
+        return self._user_home(text[1:])
+
+    def _user_home(self, user: str) -> str:
+        try:
+            import pwd
+
+            return pwd.getpwnam(user).pw_dir
+        except Exception:
+            return "~" + user
 
     def _expand_param(self, name: str, quoted: bool):
         if name == "@":
@@ -601,7 +621,7 @@ class Runtime:
         if name == "@":
             return " ".join(self.positional), True
         if name == "*":
-            return " ".join(self.positional), True
+            return self._ifs_join(self.positional), True
         if name.isdigit():
             value = self._get_positional(name)
             idx = int(name)
@@ -609,6 +629,11 @@ class Runtime:
                 return value, True
             return value, idx <= len(self.positional)
         return self._get_var_with_state(name)
+
+    def _ifs_join(self, items: List[str]) -> str:
+        ifs = self.env.get("IFS", " \t\n")
+        sep = ifs[0] if ifs else ""
+        return sep.join(items)
 
     def _remove_prefix(self, value: str, pattern: str, longest: bool) -> str:
         if pattern == "":
