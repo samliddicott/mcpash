@@ -441,6 +441,10 @@ class Runtime:
                 out.append(" ".join(self.positional))
                 i += 2
                 continue
+            if i + 1 < len(text) and text[i + 1] == "*":
+                out.append(" ".join(self.positional))
+                i += 2
+                continue
             if i + 1 < len(text) and text[i + 1].isdigit():
                 out.append(self._get_positional(text[i + 1]))
                 i += 2
