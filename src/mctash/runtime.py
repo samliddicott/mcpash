@@ -121,6 +121,10 @@ class Runtime:
             status = self._exec_list(node.cond)
             if status == 0:
                 return self._exec_list(node.then_body)
+            for elif_cond, elif_body in node.elifs:
+                status = self._exec_list(elif_cond)
+                if status == 0:
+                    return self._exec_list(elif_body)
             if node.else_body is not None:
                 return self._exec_list(node.else_body)
             return status

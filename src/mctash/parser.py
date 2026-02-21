@@ -354,8 +354,21 @@ class Parser:
         then_tok = self._advance()
         if then_tok is None or then_tok.kind != "WORD" or then_tok.value != "then":
             raise ParseError(f"expected then at {self._where(then_tok)}")
-        then_body = self.parse_compound_list({"else", "fi"})
+        then_body = self.parse_compound_list({"else", "elif", "fi"})
+        elifs: List[tuple[ListNode, ListNode]] = []
         else_body = None
+        while True:
+            tok = self._peek()
+            if tok and tok.kind == "WORD" and tok.value == "elif":
+                self._advance()
+                elif_cond = self.parse_compound_list({"then"})
+                then_tok = self._advance()
+                if then_tok is None or then_tok.kind != "WORD" or then_tok.value != "then":
+                    raise ParseError(f"expected then at {self._where(then_tok)}")
+                elif_body = self.parse_compound_list({"else", "elif", "fi"})
+                elifs.append((elif_cond, elif_body))
+                continue
+            break
         tok = self._peek()
         if tok and tok.kind == "WORD" and tok.value == "else":
             self._advance()
@@ -363,7 +376,7 @@ class Parser:
         end_tok = self._advance()
         if end_tok is None or end_tok.kind != "WORD" or end_tok.value != "fi":
             raise ParseError(f"expected fi at {self._where(end_tok)}")
-        return IfCommand(cond=cond, then_body=then_body, else_body=else_body)
+        return IfCommand(cond=cond, then_body=then_body, elifs=elifs, else_body=else_body)
 
     def parse_while(self) -> WhileCommand:
         tok = self._advance()

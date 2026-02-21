@@ -41,6 +41,7 @@ class GroupCommand:
 class IfCommand:
     cond: "ListNode"
     then_body: "ListNode"
+    elifs: List[tuple["ListNode", "ListNode"]]
     else_body: Optional["ListNode"]
 
 
