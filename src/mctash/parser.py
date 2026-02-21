@@ -6,6 +6,7 @@ from .ast_nodes import (
     AndOr,
     Assignment,
     Command,
+    FunctionDef,
     GroupCommand,
     IfCommand,
     ListNode,
@@ -141,6 +142,8 @@ class Parser:
             return self.parse_while()
         if tok and tok.kind == "OP" and tok.value == "{":
             return self.parse_group()
+        if self._looks_like_function_def():
+            return self.parse_function_def()
         argv: List[Word] = []
         assignments: List[Assignment] = []
         redirects: List[Redirect] = []
@@ -231,6 +234,15 @@ class Parser:
         self._expect_op("}")
         return GroupCommand(body=body)
 
+    def parse_function_def(self) -> FunctionDef:
+        name_tok = self._advance()
+        if name_tok is None or name_tok.kind != "WORD":
+            raise ParseError(f"expected function name at {self._where(name_tok)}")
+        self._expect_op("(")
+        self._expect_op(")")
+        body_cmd = self.parse_group()
+        return FunctionDef(name=name_tok.value, body=body_cmd.body)
+
     def parse_if(self) -> IfCommand:
         tok = self._advance()
         if tok is None or tok.value != "if":
@@ -264,6 +276,18 @@ class Parser:
         if done_tok is None or done_tok.kind != "WORD" or done_tok.value != "done":
             raise ParseError(f"expected done at {self._where(done_tok)}")
         return WhileCommand(cond=cond, body=body, until=until)
+
+    def _looks_like_function_def(self) -> bool:
+        tok = self._peek()
+        if tok is None or tok.kind != "WORD":
+            return False
+        if self.pos + 2 >= len(self.tokens):
+            return False
+        tok1 = self.tokens[self.pos + 1]
+        tok2 = self.tokens[self.pos + 2]
+        if tok1.kind == "OP" and tok1.value == "(" and tok2.kind == "OP" and tok2.value == ")":
+            return True
+        return False
 
 
 def parse(tokens: List[Token]) -> Script:

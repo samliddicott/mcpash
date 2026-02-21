@@ -51,7 +51,13 @@ class WhileCommand:
     until: bool = False
 
 
-Command = Union[SimpleCommand, GroupCommand, IfCommand, WhileCommand]
+@dataclass
+class FunctionDef:
+    name: str
+    body: "ListNode"
+
+
+Command = Union[SimpleCommand, GroupCommand, IfCommand, WhileCommand, FunctionDef]
 
 
 @dataclass

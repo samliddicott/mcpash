@@ -13,6 +13,7 @@ from .ast_nodes import (
     AndOr,
     Assignment,
     Command,
+    FunctionDef,
     GroupCommand,
     IfCommand,
     ListNode,
@@ -23,10 +24,18 @@ from .ast_nodes import (
     WhileCommand,
     Word,
 )
+from .lexer import tokenize
+from .parser import Parser
 
 
 class RuntimeError(Exception):
     pass
+
+
+class ReturnFromFunction(Exception):
+    def __init__(self, code: int) -> None:
+        super().__init__(f"return {code}")
+        self.code = code
 
 
 class Runtime:
@@ -34,6 +43,7 @@ class Runtime:
         self.last_status = 0
         self.env: Dict[str, str] = dict(os.environ)
         self.positional: List[str] = []
+        self.functions: Dict[str, ListNode] = {}
 
     def set_positional_args(self, args: List[str]) -> None:
         self.positional = list(args)
@@ -85,6 +95,9 @@ class Runtime:
     def _exec_command(self, node: Command) -> int:
         if isinstance(node, GroupCommand):
             return self._exec_list(node.body)
+        if isinstance(node, FunctionDef):
+            self.functions[node.name] = node.body
+            return 0
         if isinstance(node, IfCommand):
             status = self._exec_list(node.cond)
             if status == 0:
@@ -114,10 +127,17 @@ class Runtime:
                 self.env.update(local_env)
                 return 0
             name = argv[0]
-            if name in ["cd", "exit", ":"]:
+            if name in ["cd", "exit", ":", "return", ".", "source"]:
                 try:
                     with self._redirected_fds(node.redirects):
                         status = self._run_builtin(name, argv)
+                finally:
+                    self.env.update(local_env)
+                return status
+            if name in self.functions:
+                try:
+                    with self._redirected_fds(node.redirects):
+                        status = self._run_function(name, argv[1:])
                 finally:
                     self.env.update(local_env)
                 return status
@@ -134,12 +154,59 @@ class Runtime:
                 return 0
             except OSError:
                 return 1
+        if name in [".", "source"]:
+            if len(argv) < 2:
+                return 2
+            path = argv[1]
+            args = argv[2:]
+            return self._run_source(path, args)
         if name == "exit":
             code = int(argv[1]) if len(argv) > 1 else self.last_status
             raise SystemExit(code)
+        if name == "return":
+            code = int(argv[1]) if len(argv) > 1 else self.last_status
+            raise ReturnFromFunction(code)
         if name == ":":
             return 0
         return 2
+
+    def _run_source(self, path: str, args: List[str]) -> int:
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                source = f.read()
+        except OSError:
+            return 1
+        tokens = list(tokenize(source))
+        parser_impl = Parser(tokens)
+        saved_positional = list(self.positional)
+        self.set_positional_args(args)
+        status = 0
+        try:
+            while True:
+                node = parser_impl.parse_next()
+                if node is None:
+                    break
+                status = self._exec_and_or(node)
+        except ReturnFromFunction as e:
+            status = e.code
+        finally:
+            self.set_positional_args(saved_positional)
+        return status
+
+    def _run_function(self, name: str, args: List[str]) -> int:
+        body = self.functions.get(name)
+        if body is None:
+            return 127
+        saved_positional = list(self.positional)
+        self.set_positional_args(args)
+        status = 0
+        try:
+            status = self._exec_list(body)
+        except ReturnFromFunction as e:
+            status = e.code
+        finally:
+            self.set_positional_args(saved_positional)
+        return status
 
     def _run_external(self, argv: List[str], env: Dict[str, str], redirects: List[Redirect]) -> int:
         stdin, stdout = self._apply_redirects(redirects, None, None)
