@@ -6,6 +6,8 @@ from .ast_nodes import (
     AndOr,
     Assignment,
     Command,
+    CaseCommand,
+    CaseItem,
     ForCommand,
     FunctionDef,
     GroupCommand,
@@ -144,6 +146,8 @@ class Parser:
             return self.parse_while()
         if tok and tok.kind == "WORD" and tok.value == "for":
             return self.parse_for()
+        if tok and tok.kind == "WORD" and tok.value == "case":
+            return self.parse_case()
         if tok and tok.kind == "OP" and tok.value == "{":
             return self.parse_group()
         if tok and tok.kind == "OP" and tok.value == "(":
@@ -288,6 +292,59 @@ class Parser:
         if done_tok is None or done_tok.kind != "WORD" or done_tok.value != "done":
             raise ParseError(f"expected done at {self._where(done_tok)}")
         return ForCommand(name=name_tok.value, items=items, body=body)
+
+    def parse_case(self) -> CaseCommand:
+        tok = self._advance()
+        if tok is None or tok.kind != "WORD" or tok.value != "case":
+            raise ParseError(f"expected case at {self._where(tok)}")
+        word_tok = self._advance()
+        if word_tok is None or word_tok.kind != "WORD":
+            raise ParseError(f"expected case word at {self._where(word_tok)}")
+        in_tok = self._advance()
+        if in_tok is None or in_tok.kind != "WORD" or in_tok.value != "in":
+            raise ParseError(f"expected in at {self._where(in_tok)}")
+        items: List[CaseItem] = []
+        while True:
+            tok = self._peek()
+            if tok is None:
+                break
+            if tok.kind == "WORD" and tok.value == "esac":
+                self._advance()
+                break
+            if tok.kind == "OP" and tok.value in ["\n", ";"]:
+                self._advance()
+                continue
+            patterns: List[str] = []
+            while True:
+                tok = self._peek()
+                if tok is None:
+                    break
+                if tok.kind == "OP" and tok.value == ")":
+                    self._advance()
+                    break
+                if tok.kind == "WORD":
+                    part = tok.value
+                    self._advance()
+                    if part.endswith("|"):
+                        part = part[:-1]
+                        patterns.append(part)
+                        continue
+                    patterns.append(part)
+                    tok2 = self._peek()
+                    if tok2 and tok2.kind == "OP" and tok2.value == "|":
+                        self._advance()
+                        continue
+                    continue
+                if tok.kind == "OP" and tok.value == "|":
+                    self._advance()
+                    continue
+                break
+            body = self.parse_compound_list({";;", "esac"})
+            tok = self._peek()
+            if tok and tok.kind == "OP" and tok.value == ";;":
+                self._advance()
+            items.append(CaseItem(patterns=patterns, body=body))
+        return CaseCommand(value=Word(word_tok.value), items=items)
 
     def parse_if(self) -> IfCommand:
         tok = self._advance()

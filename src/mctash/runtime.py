@@ -7,12 +7,15 @@ import subprocess
 import sys
 import tempfile
 import threading
+import fnmatch
 from contextlib import contextmanager
 from typing import Dict, Iterable, List, Optional, Tuple
 
 from .ast_nodes import (
     AndOr,
     Assignment,
+    CaseCommand,
+    CaseItem,
     Command,
     ForCommand,
     FunctionDef,
@@ -112,6 +115,8 @@ class Runtime:
             return 0
         if isinstance(node, ForCommand):
             return self._run_for(node)
+        if isinstance(node, CaseCommand):
+            return self._run_case(node)
         if isinstance(node, IfCommand):
             status = self._exec_list(node.cond)
             if status == 0:
@@ -188,6 +193,15 @@ class Runtime:
             self.env[node.name] = item
             status = self._exec_list(node.body)
         return status
+
+    def _run_case(self, node: CaseCommand) -> int:
+        value_parts = self._expand_argv([node.value])
+        value = value_parts[0] if value_parts else ""
+        for item in node.items:
+            for pat in item.patterns:
+                if fnmatch.fnmatch(value, pat):
+                    return self._exec_list(item.body)
+        return 0
 
     def _run_builtin(self, name: str, argv: List[str]) -> int:
         if name == "cd":

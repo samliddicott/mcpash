@@ -69,7 +69,28 @@ class ForCommand:
     body: "ListNode"
 
 
-Command = Union[SimpleCommand, GroupCommand, IfCommand, WhileCommand, FunctionDef, SubshellCommand, ForCommand]
+@dataclass
+class CaseItem:
+    patterns: List[str]
+    body: "ListNode"
+
+
+@dataclass
+class CaseCommand:
+    value: Word
+    items: List[CaseItem]
+
+
+Command = Union[
+    SimpleCommand,
+    GroupCommand,
+    IfCommand,
+    WhileCommand,
+    FunctionDef,
+    SubshellCommand,
+    ForCommand,
+    CaseCommand,
+]
 
 
 @dataclass
