@@ -133,7 +133,7 @@ class Runtime:
                 self.env.update(local_env)
                 return 0
             name = argv[0]
-            if name in ["cd", "exit", ":", "return", ".", "source", "local", "eval", "declare"]:
+            if name in ["cd", "exit", ":", "return", ".", "source", "local", "eval", "declare", "[", "[[", "test"]:
                 try:
                     with self._redirected_fds(node.redirects):
                         status = self._run_builtin(name, argv)
@@ -172,6 +172,8 @@ class Runtime:
             return self._run_eval(argv[1:])
         if name == "declare":
             return self._run_declare(argv[1:])
+        if name in ["[", "[[", "test"]:
+            return self._run_test(name, argv[1:])
         if name == "exit":
             code = int(argv[1]) if len(argv) > 1 else self.last_status
             raise SystemExit(code)
@@ -522,6 +524,31 @@ class Runtime:
                 print(name)
             return 0
         return 0
+
+    def _run_test(self, name: str, args: List[str]) -> int:
+        tokens = list(args)
+        if name == "[":
+            if tokens and tokens[-1] == "]":
+                tokens = tokens[:-1]
+        if name == "[[":
+            if tokens and tokens[-1] == "]]":
+                tokens = tokens[:-1]
+        negate = False
+        if tokens and tokens[0] == "!":
+            negate = True
+            tokens = tokens[1:]
+        result = False
+        if len(tokens) >= 2 and tokens[0] == "-f":
+            result = os.path.isfile(tokens[1])
+        elif len(tokens) >= 3 and tokens[1] in ["=", "!="]:
+            left = tokens[0]
+            right = tokens[2]
+            result = (left == right)
+            if tokens[1] == "!=":
+                result = not result
+        elif len(tokens) == 1:
+            result = tokens[0] != ""
+        return 0 if (result ^ negate) else 1
 
     def _eval_source(self, source: str) -> int:
         tokens = list(tokenize(source))
