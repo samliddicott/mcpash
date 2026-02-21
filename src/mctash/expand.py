@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Callable, List, Tuple
+from typing import Callable, List, Tuple, Union
 
 
 @dataclass
@@ -132,7 +132,7 @@ def _extract_balanced(text: str, start: int, closing: str) -> Tuple[str, int]:
 
 def expand_word(
     text: str,
-    get_param: Callable[[str, bool], str],
+    get_param: Callable[[str, bool], Union[str, List[str]]],
     eval_cmd: Callable[[str], str],
     eval_arith: Callable[[str], str],
     split_ifs: Callable[[str], List[str]],
@@ -142,7 +142,7 @@ def expand_word(
     fields: List[Tuple[str, bool]] = [("", False)]
     for part in parts:
         if part.kind == "LIT":
-            value = part.value
+            value: Union[str, List[str]] = part.value
         elif part.kind == "PARAM":
             value = get_param(part.value, part.quoted)
         elif part.kind == "CMD":
@@ -152,6 +152,24 @@ def expand_word(
         else:
             value = part.value
 
+        if isinstance(value, list):
+            new_fields: List[Tuple[str, bool]] = []
+            if part.quoted:
+                for f, q in fields:
+                    for v in value:
+                        new_fields.append((f + v, True or q))
+            else:
+                for f, q in fields:
+                    for v in value:
+                        pieces = split_ifs(v)
+                        if not pieces:
+                            new_fields.append((f, q))
+                        else:
+                            for p in pieces:
+                                new_fields.append((f + p, q))
+            fields = new_fields
+            continue
+
         if part.quoted:
             fields = [(f + value, True or q) for f, q in fields]
         else:
@@ -159,7 +177,7 @@ def expand_word(
             if not pieces:
                 fields = [(f, q) for f, q in fields]
             else:
-                new_fields: List[Tuple[str, bool]] = []
+                new_fields = []
                 for f, q in fields:
                     for p in pieces:
                         new_fields.append((f + p, q))

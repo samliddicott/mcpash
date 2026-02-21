@@ -366,11 +366,13 @@ class Runtime:
             return matches if matches else [text]
         return [text]
 
-    def _expand_param(self, name: str, quoted: bool) -> str:
+    def _expand_param(self, name: str, quoted: bool):
         if name == "#":
             return str(len(self.positional))
-        if name in ["@", "*"]:
-            sep = " " if quoted else " "
+        if name == "@":
+            return list(self.positional)
+        if name == "*":
+            sep = " "
             return sep.join(self.positional)
         if name.isdigit():
             return self._get_positional(name)
