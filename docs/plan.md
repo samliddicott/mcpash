@@ -57,6 +57,7 @@ Exit Criteria
 - Licensing review for any borrowed tests or fixtures.
 - CI setup with deterministic test runs.
 - Performance profiling of parsing and execution paths.
+- Threading model investigation (threads vs fork), with per-thread CWD and FD isolation requirements.
 
 ## Open Decisions
 - Exact ash compliance criteria and test suite selection.

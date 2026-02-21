@@ -1,0 +1,353 @@
+from __future__ import annotations
+
+import glob
+import io
+import os
+import subprocess
+import sys
+import tempfile
+from contextlib import contextmanager
+from typing import Dict, Iterable, List, Optional, Tuple
+
+from .ast_nodes import AndOr, Assignment, Command, ListNode, Pipeline, Redirect, Script, Word
+
+
+class RuntimeError(Exception):
+    pass
+
+
+class Runtime:
+    def __init__(self) -> None:
+        self.last_status = 0
+        self.env: Dict[str, str] = dict(os.environ)
+
+    def run(self, script: Script) -> int:
+        return self._exec_list(script.body)
+
+    def _exec_list(self, node: ListNode) -> int:
+        status = 0
+        for item in node.items:
+            status = self._exec_and_or(item)
+        return status
+
+    def _exec_and_or(self, node: AndOr) -> int:
+        status = self._exec_pipeline(node.pipelines[0])
+        for op, pipeline in zip(node.operators, node.pipelines[1:]):
+            if op == "&&":
+                if status == 0:
+                    status = self._exec_pipeline(pipeline)
+            elif op == "||":
+                if status != 0:
+                    status = self._exec_pipeline(pipeline)
+        return status
+
+    def _exec_pipeline(self, node: Pipeline) -> int:
+        if len(node.commands) == 1:
+            return self._exec_command(node.commands[0])
+        procs: List[subprocess.Popen] = []
+        prev = None
+        for i, cmd in enumerate(node.commands):
+            argv = self._expand_argv(cmd.argv)
+            if not argv:
+                return 2
+            stdin = prev.stdout if prev is not None else None
+            stdout = subprocess.PIPE if i < len(node.commands) - 1 else None
+            stdin, stdout = self._apply_redirects(cmd.redirects, stdin, stdout)
+            proc = subprocess.Popen(argv, stdin=stdin, stdout=stdout, env=self.env)
+            procs.append(proc)
+            if prev is not None:
+                prev.stdout.close()
+            prev = proc
+        status = procs[-1].wait()
+        for p in procs[:-1]:
+            p.wait()
+        return status
+
+    def _exec_command(self, node: Command) -> int:
+        local_env = dict(self.env)
+        for assign in node.assignments:
+            local_env[assign.name] = self._expand_word(assign.value)
+
+        argv = self._expand_argv(node.argv)
+        if not argv:
+            if node.redirects:
+                with self._redirected_fds(node.redirects):
+                    pass
+            self.env.update(local_env)
+            return 0
+        name = argv[0]
+        if name in ["cd", "exit", ":"]:
+            try:
+                with self._redirected_fds(node.redirects):
+                    status = self._run_builtin(name, argv)
+            finally:
+                self.env.update(local_env)
+            return status
+        status = self._run_external(argv, local_env, node.redirects)
+        self.env.update(local_env)
+        return status
+
+    def _run_builtin(self, name: str, argv: List[str]) -> int:
+        if name == "cd":
+            target = argv[1] if len(argv) > 1 else self.env.get("HOME", "/")
+            try:
+                os.chdir(target)
+                return 0
+            except OSError:
+                return 1
+        if name == "exit":
+            code = int(argv[1]) if len(argv) > 1 else self.last_status
+            raise SystemExit(code)
+        if name == ":":
+            return 0
+        return 2
+
+    def _run_external(self, argv: List[str], env: Dict[str, str], redirects: List[Redirect]) -> int:
+        stdin, stdout = self._apply_redirects(redirects, None, None)
+        try:
+            proc = subprocess.run(argv, env=env, stdin=stdin, stdout=stdout)
+            return proc.returncode
+        finally:
+            if stdin not in (None, sys.stdin):
+                stdin.close()
+            if stdout not in (None, sys.stdout):
+                stdout.close()
+
+    def _apply_redirects(
+        self,
+        redirects: List[Redirect],
+        stdin: Optional[object],
+        stdout: Optional[object],
+    ) -> Tuple[Optional[object], Optional[object]]:
+        for redir in redirects:
+            target_fd = redir.fd
+            if redir.op == "<":
+                f = open(redir.target, "rb")
+                if target_fd in (None, 0):
+                    stdin = f
+                else:
+                    os.dup2(f.fileno(), target_fd)
+            elif redir.op == ">":
+                f = open(redir.target, "wb")
+                if target_fd in (None, 1):
+                    stdout = f
+                else:
+                    os.dup2(f.fileno(), target_fd)
+            elif redir.op == ">>":
+                f = open(redir.target, "ab")
+                if target_fd in (None, 1):
+                    stdout = f
+                else:
+                    os.dup2(f.fileno(), target_fd)
+            elif redir.op == "<<":
+                content = redir.here_doc if redir.here_doc is not None else ""
+                f = tempfile.TemporaryFile()
+                f.write(content.encode("utf-8"))
+                f.seek(0)
+                if target_fd in (None, 0):
+                    stdin = f
+                else:
+                    os.dup2(f.fileno(), target_fd)
+        return stdin, stdout
+
+    @contextmanager
+    def _redirected_fds(self, redirects: List[Redirect]):
+        saved: List[Tuple[int, int]] = []
+        try:
+            for redir in redirects:
+                fd = redir.fd if redir.fd is not None else (0 if redir.op in ["<", "<<"] else 1)
+                saved_fd = os.dup(fd)
+                saved.append((fd, saved_fd))
+                if redir.op == "<":
+                    f = open(redir.target, "rb")
+                    os.dup2(f.fileno(), fd)
+                    f.close()
+                elif redir.op == ">":
+                    f = open(redir.target, "wb")
+                    os.dup2(f.fileno(), fd)
+                    f.close()
+                elif redir.op == ">>":
+                    f = open(redir.target, "ab")
+                    os.dup2(f.fileno(), fd)
+                    f.close()
+                elif redir.op == "<<":
+                    content = redir.here_doc if redir.here_doc is not None else ""
+                    f = tempfile.TemporaryFile()
+                    f.write(content.encode("utf-8"))
+                    f.seek(0)
+                    os.dup2(f.fileno(), fd)
+                    f.close()
+            yield
+        finally:
+            for fd, saved_fd in saved:
+                os.dup2(saved_fd, fd)
+                os.close(saved_fd)
+
+    def _expand_argv(self, words: List[Word]) -> List[str]:
+        argv: List[str] = []
+        for w in words:
+            argv.extend(self._expand_fields(w.text))
+        return argv
+
+    def _expand_word(self, text: str) -> str:
+        fields = self._expand_fields(text)
+        return fields[0] if fields else ""
+
+    def _expand_fields(self, text: str) -> List[str]:
+        segments = self._split_quoted(text)
+        fields: List[Tuple[str, bool]] = [("", False)]
+        for seg_text, quoted, expand in segments:
+            seg_val = seg_text
+            if expand:
+                seg_val = self._expand_command_subst(self._expand_params(seg_val))
+            if quoted:
+                fields = [(f + seg_val, True or q) for f, q in fields]
+            else:
+                parts = self._split_ifs(seg_val)
+                if not parts:
+                    fields = [(f, q) for f, q in fields]
+                else:
+                    new_fields: List[Tuple[str, bool]] = []
+                    for f, q in fields:
+                        for p in parts:
+                            new_fields.append((f + p, q))
+                    fields = new_fields
+        expanded: List[str] = []
+        for f, quoted in fields:
+            if quoted:
+                expanded.append(f)
+            else:
+                expanded.extend(self._glob_field(f))
+        return expanded
+
+    def _split_quoted(self, text: str) -> List[Tuple[str, bool, bool]]:
+        segments: List[Tuple[str, bool, bool]] = []
+        buf: List[str] = []
+        i = 0
+        mode = "plain"
+        while i < len(text):
+            ch = text[i]
+            if mode == "plain":
+                if ch == "'":
+                    if buf:
+                        segments.append(("".join(buf), False, True))
+                        buf = []
+                    mode = "single"
+                    i += 1
+                    continue
+                if ch == '"':
+                    if buf:
+                        segments.append(("".join(buf), False, True))
+                        buf = []
+                    mode = "double"
+                    i += 1
+                    continue
+                buf.append(ch)
+                i += 1
+            elif mode == "single":
+                if ch == "'":
+                    segments.append(("".join(buf), True, False))
+                    buf = []
+                    mode = "plain"
+                    i += 1
+                    continue
+                buf.append(ch)
+                i += 1
+            elif mode == "double":
+                if ch == '"':
+                    segments.append(("".join(buf), True, True))
+                    buf = []
+                    mode = "plain"
+                    i += 1
+                    continue
+                if ch == "\\" and i + 1 < len(text) and text[i + 1] in ['"', "\\", "$", "`"]:
+                    i += 1
+                    buf.append(text[i])
+                    i += 1
+                    continue
+                buf.append(ch)
+                i += 1
+        if buf:
+            segments.append(("".join(buf), mode != "plain", mode != "single"))
+        return segments
+
+    def _split_ifs(self, text: str) -> List[str]:
+        if text == "":
+            return []
+        ifs = self.env.get("IFS", " \t\n")
+        parts: List[str] = []
+        current: List[str] = []
+        for ch in text:
+            if ch in ifs:
+                if current:
+                    parts.append("".join(current))
+                    current = []
+            else:
+                current.append(ch)
+        if current:
+            parts.append("".join(current))
+        return parts
+
+    def _glob_field(self, text: str) -> List[str]:
+        if any(c in text for c in ["*", "?", "["]):
+            matches = [p for p in glob.glob(text)]
+            return matches if matches else [text]
+        return [text]
+
+    def _expand_params(self, text: str) -> str:
+        out: List[str] = []
+        i = 0
+        while i < len(text):
+            ch = text[i]
+            if ch != "$":
+                out.append(ch)
+                i += 1
+                continue
+            if i + 1 < len(text) and text[i + 1] == "{":
+                end = text.find("}", i + 2)
+                if end == -1:
+                    out.append(text[i:])
+                    break
+                name = text[i + 2 : end]
+                out.append(self.env.get(name, ""))
+                i = end + 1
+                continue
+            i += 1
+            name = []
+            while i < len(text) and (text[i].isalnum() or text[i] == "_"):
+                name.append(text[i])
+                i += 1
+            if name:
+                out.append(self.env.get("".join(name), ""))
+            else:
+                out.append("$")
+        return "".join(out)
+
+    def _expand_command_subst(self, text: str) -> str:
+        result: List[str] = []
+        i = 0
+        while i < len(text):
+            if text.startswith("$(", i):
+                depth = 1
+                j = i + 2
+                while j < len(text) and depth > 0:
+                    if text.startswith("$(", j):
+                        depth += 1
+                        j += 2
+                        continue
+                    if text[j] == ")":
+                        depth -= 1
+                        if depth == 0:
+                            break
+                    j += 1
+                if depth != 0:
+                    result.append(text[i:])
+                    break
+                cmd = text[i + 2 : j]
+                output = subprocess.check_output(["/bin/sh", "-c", cmd], env=self.env)
+                result.append(output.decode("utf-8", errors="ignore").rstrip("\n"))
+                i = j + 1
+                continue
+            result.append(text[i])
+            i += 1
+        return "".join(result)

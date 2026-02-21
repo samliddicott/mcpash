@@ -1,0 +1,28 @@
+module mctash
+{
+  script = Script(list<and_or> body)
+
+  and_or = AndOr(list<pipeline> pipelines, list<and_or_op> operators)
+  and_or_op = AndIf | OrIf
+
+  pipeline = Pipeline(list<command> commands, bool negate)
+
+  command = Command(
+    list<word> argv,
+    list<assignment> assignments,
+    list<redirect> redirects
+  )
+
+  word = Word(string text)
+
+  assignment = Assignment(identifier name, string value)
+
+  redirect = Redirect(
+    redir_op op,
+    string target,
+    int? fd,
+    string? here_doc
+  )
+
+  redir_op = Less | Great | DGreat | DLess
+}

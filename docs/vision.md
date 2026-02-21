@@ -61,6 +61,7 @@ These ideas are foundational for Mctash because **interop and tooling require st
 - **Compatibility will be staged**: we will start with a well-defined subset (Milestone 1 = ash compliance) and grow toward Bash.
 - **Interop is opt-in**: Python interop features should not alter semantics of pure Bash scripts unless explicitly used.
 - **Minimal Python object exposure**: Python access from Bash is deliberately constrained to avoid a leaky, unsafe object model.
+- **Threaded execution model**: where Bash would fork, this implementation may use threads. We must handle per-thread CWD, per-thread file handles (potentially via `unshare` or equivalent isolation), and per-thread data with shared state carefully.
 
 ## Risks and Unknowns
 - **Bash parsing complexity**: Bash is notoriously tricky (lexer modes, ambiguous constructs, contextual parsing).

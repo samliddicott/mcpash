@@ -20,6 +20,7 @@ Deliver a Python 3 Bash implementation with bidirectional Bash ↔ Python intero
 - Implement a tree interpreter in Python 3 for the initial runtime.
 - Separate evaluation of **commands** vs **expressions** to reduce ambiguity and enable interop.
 - Model file descriptors and process semantics explicitly (pipes, redirections, subshells, status codes).
+- **Threaded execution model**: consider threads in places Bash would fork, with explicit handling for per-thread CWD, per-thread file handles (potentially via `unshare`), and shared vs isolated data.
 
 ### 3) Interop Boundary
 - Provide an **interop layer** that is opt-in and isolated from pure Bash semantics.
