@@ -65,6 +65,7 @@ Deliver a Python 3 Bash implementation with bidirectional Bash ↔ Python intero
 - Avoid direct code reuse from GPL Bash unless explicitly intended.
 - Use the Oil/OSH material as conceptual references, not code sources.
 - Verify licensing of any external test fixtures before inclusion.
+- If we target a permissive license (MIT/BSD/Apache), evaluate permissive shells (e.g., `dash`/`ash` derivatives, `toysh`) for reference or selective reuse under compatible terms.
 
 ## References and Rationale (from Oil Blog)
 - ASDL enables concise, structured AST definitions and serialization workflows.

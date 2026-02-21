@@ -59,6 +59,7 @@ Exit Criteria
 - CI setup with deterministic test runs.
 - Performance profiling of parsing and execution paths.
 - Threading model investigation (threads vs fork), with per-thread CWD and FD isolation requirements.
+- License-aligned research: if MIT/BSD/Apache is chosen, evaluate permissive shell implementations (e.g., `dash`/`ash` derivatives, `toysh`) for reusable components or reference.
 
 ## Open Decisions
 - Exact ash compliance criteria and test suite selection.

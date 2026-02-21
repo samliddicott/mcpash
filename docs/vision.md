@@ -72,6 +72,7 @@ These ideas are foundational for Mctash because **interop and tooling require st
 - **No code copying from Bash** unless we accept GPL obligations. Reimplementation by clean-room design is likely required.
 - **Oil/OSH references** are for ideas, not direct code reuse unless their licenses are compatible and explicitly adopted.
 - **Test fixtures and scripts** must be checked for licensing before inclusion.
+- **Candidate permissive sources**: if we choose MIT/BSD/Apache licensing, evaluate permissive shells (e.g., `dash`/`ash` derivatives, `toysh`) for references or selective reuse under compatible terms.
 
 ## References (Blog Sources)
 - “ASDL Implementation and Use Cases” (2017-01-06): ASDL pipeline, multiple tree representations, and lossless needs.
