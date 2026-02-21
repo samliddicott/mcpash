@@ -128,6 +128,11 @@ class Parser:
         return AndOr(pipelines=pipelines, operators=operators)
 
     def parse_pipeline(self) -> Pipeline:
+        negate = False
+        tok = self._peek()
+        if tok and tok.kind == "WORD" and tok.value == "!":
+            self._advance()
+            negate = True
         commands: List[Command] = [self.parse_command()]
         while True:
             tok = self._peek()
@@ -136,7 +141,7 @@ class Parser:
                 commands.append(self.parse_command())
                 continue
             break
-        return Pipeline(commands=commands, negate=False)
+        return Pipeline(commands=commands, negate=negate)
 
     def parse_command(self) -> Command:
         tok = self._peek()

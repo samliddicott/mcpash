@@ -97,7 +97,8 @@ class Runtime:
 
     def _exec_pipeline(self, node: Pipeline) -> int:
         if len(node.commands) == 1:
-            return self._exec_command(node.commands[0])
+            status = self._exec_command(node.commands[0])
+            return 0 if (node.negate and status != 0) else (1 if node.negate and status == 0 else status)
         procs: List[subprocess.Popen] = []
         prev = None
         for i, cmd in enumerate(node.commands):
@@ -117,6 +118,8 @@ class Runtime:
         status = procs[-1].wait()
         for p in procs[:-1]:
             p.wait()
+        if node.negate:
+            return 0 if status != 0 else 1
         return status
 
     def _exec_command(self, node: Command) -> int:
