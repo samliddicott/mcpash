@@ -12,6 +12,7 @@ from .runtime import Runtime
 def main(argv: List[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="mctash")
     parser.add_argument("script", nargs="?", help="script file to run")
+    parser.add_argument("script_args", nargs=argparse.REMAINDER, help="args passed to the script")
     args = parser.parse_args(argv)
 
     if args.script:
@@ -22,6 +23,7 @@ def main(argv: List[str] | None = None) -> int:
 
     tokens = list(tokenize(source))
     rt = Runtime()
+    rt.set_positional_args(args.script_args)
     try:
         from .parser import Parser
         parser_impl = Parser(tokens)

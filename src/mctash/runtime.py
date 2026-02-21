@@ -33,6 +33,10 @@ class Runtime:
     def __init__(self) -> None:
         self.last_status = 0
         self.env: Dict[str, str] = dict(os.environ)
+        self.positional: List[str] = []
+
+    def set_positional_args(self, args: List[str]) -> None:
+        self.positional = list(args)
 
     def run(self, script: Script) -> int:
         return self._exec_list(script.body)
@@ -346,6 +350,18 @@ class Runtime:
                 out.append(ch)
                 i += 1
                 continue
+            if i + 1 < len(text) and text[i + 1] == "#":
+                out.append(str(len(self.positional)))
+                i += 2
+                continue
+            if i + 1 < len(text) and text[i + 1] == "@":
+                out.append(" ".join(self.positional))
+                i += 2
+                continue
+            if i + 1 < len(text) and text[i + 1].isdigit():
+                out.append(self._get_positional(text[i + 1]))
+                i += 2
+                continue
             if i + 1 < len(text) and text[i + 1] == "{":
                 end = text.find("}", i + 2)
                 if end == -1:
@@ -365,6 +381,14 @@ class Runtime:
             else:
                 out.append("$")
         return "".join(out)
+
+    def _get_positional(self, digit: str) -> str:
+        idx = int(digit)
+        if idx == 0:
+            return ""
+        if idx <= len(self.positional):
+            return self.positional[idx - 1]
+        return ""
 
     def _expand_heredoc(self, redir: Redirect) -> str:
         content = redir.here_doc or ""
