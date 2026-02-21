@@ -1,0 +1,4 @@
+name: ash-demo
+package: local/ash-demo
+default_alias: ash-demo
+test_prefix: Demo
