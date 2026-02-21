@@ -1,4 +1,6 @@
-ROOT="${ROOT:-.}"
+if test -z "$ROOT"; then
+  ROOT="."
+fi
 
 . "$ROOT/scripts/ash-core-stubs.sh"
 . "$ROOT/external/ash-shell-test/lib/util.sh"
