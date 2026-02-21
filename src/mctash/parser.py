@@ -5,9 +5,9 @@ from typing import List, Optional
 from .ast_nodes import (
     AndOr,
     Assignment,
-    Command,
     CaseCommand,
     CaseItem,
+    Command,
     ForCommand,
     FunctionDef,
     GroupCommand,
@@ -21,27 +21,85 @@ from .ast_nodes import (
     WhileCommand,
     Word,
 )
-from .lexer import Token
+from .lexer import LexContext, Token, TokenReader
+from .lst_nodes import (
+    LstAndOr,
+    LstArithSubPart,
+    LstAssignment,
+    LstCaseCommand,
+    LstCaseItem,
+    LstCommandSubPart,
+    LstCommand,
+    LstDoubleQuotedPart,
+    LstForCommand,
+    LstFunctionDef,
+    LstGroupCommand,
+    LstIfCommand,
+    LstListNode,
+    LstLiteralPart,
+    LstPipeline,
+    LstRedirect,
+    LstScript,
+    LstSimpleCommand,
+    LstSubshellCommand,
+    LstWhileCommand,
+    LstWord,
+    LstWordPart,
+    LstTokenPos,
+)
+from .word_parser import parse_word
 
 
 class ParseError(Exception):
     pass
 
 
+RESERVED_WORDS = {
+    "if",
+    "then",
+    "else",
+    "elif",
+    "fi",
+    "for",
+    "in",
+    "do",
+    "done",
+    "case",
+    "esac",
+    "while",
+    "until",
+    "function",
+}
+
+
 class Parser:
-    def __init__(self, tokens: List[Token]):
-        self.tokens = tokens
-        self.pos = 0
+    def __init__(self, source: str):
+        self.reader = TokenReader(source)
+        self.buffer: list[Token] = []
+        self.ctx = LexContext(reserved_words=RESERVED_WORDS, allow_reserved=True, allow_newline=True)
+        self.last_lst: Optional[LstAndOr] = None
 
     def _peek(self) -> Optional[Token]:
-        if self.pos >= len(self.tokens):
-            return None
-        return self.tokens[self.pos]
+        if not self.buffer:
+            tok = self.reader.next(self.ctx)
+            if tok is not None:
+                self.buffer.append(tok)
+        return self.buffer[0] if self.buffer else None
+
+    def _peek_n(self, n: int) -> Optional[Token]:
+        while len(self.buffer) <= n:
+            tok = self.reader.next(self.ctx)
+            if tok is None:
+                break
+            self.buffer.append(tok)
+        if n < len(self.buffer):
+            return self.buffer[n]
+        return None
 
     def _advance(self) -> Optional[Token]:
         tok = self._peek()
         if tok is not None:
-            self.pos += 1
+            self.buffer.pop(0)
         return tok
 
     def _expect_op(self, op: str) -> Token:
@@ -56,9 +114,13 @@ class Parser:
             return "eof"
         return f"{tok.line}:{tok.col}"
 
+    def _is_word(self, tok: Optional[Token]) -> bool:
+        return tok is not None and tok.kind in ["WORD", "RESERVED"]
+
     def parse_script(self) -> Script:
-        body = self.parse_list()
-        return Script(body=body)
+        body, lst_body = self.parse_list()
+        lst_script = LstScript(body=lst_body)
+        return Script(body=body, lst=lst_script)
 
     def parse_next(self) -> Optional[AndOr]:
         while True:
@@ -69,89 +131,114 @@ class Parser:
                 self._advance()
                 continue
             break
-        node = self.parse_and_or()
+        node, lst_node = self.parse_and_or()
+        self.last_lst = lst_node
         tok = self._peek()
         if tok and tok.kind == "OP" and tok.value in ["\n", ";"]:
             self._advance()
         return node
 
-    def parse_list(self) -> ListNode:
+    def parse_list(self) -> tuple[ListNode, LstListNode]:
         items: List[AndOr] = []
+        lst_items: List[LstAndOr] = []
         while True:
             if self._peek() is None:
                 break
             if self._peek().kind == "OP" and self._peek().value == "\n":
                 self._advance()
                 continue
-            items.append(self.parse_and_or())
+            item, lst_item = self.parse_and_or()
+            items.append(item)
+            lst_items.append(lst_item)
             tok = self._peek()
             if tok is None:
                 break
             if tok.kind == "OP" and tok.value in [";", "\n"]:
                 self._advance()
                 continue
-        return ListNode(items=items)
+        return ListNode(items=items), LstListNode(items=lst_items)
 
-    def parse_compound_list(self, stop_words: set[str]) -> ListNode:
+    def parse_compound_list(self, stop_words: set[str]) -> tuple[ListNode, LstListNode]:
         items: List[AndOr] = []
+        lst_items: List[LstAndOr] = []
         while True:
             tok = self._peek()
             if tok is None:
                 break
-            if tok.kind == "WORD" and tok.value in stop_words:
+            if self._is_word(tok) and tok.value in stop_words:
                 break
             if tok.kind == "OP" and tok.value in stop_words:
                 break
             if tok.kind == "OP" and tok.value in ["\n", ";"]:
                 self._advance()
                 continue
-            items.append(self.parse_and_or())
+            item, lst_item = self.parse_and_or()
+            items.append(item)
+            lst_items.append(lst_item)
             tok = self._peek()
             if tok is None:
                 break
             if tok.kind == "OP" and tok.value in [";", "\n"]:
                 self._advance()
                 continue
-        return ListNode(items=items)
+        return ListNode(items=items), LstListNode(items=lst_items)
 
-    def parse_and_or(self) -> AndOr:
-        pipelines: List[Pipeline] = [self.parse_pipeline()]
+    def parse_and_or(self) -> tuple[AndOr, LstAndOr]:
+        pipeline, lst_pipeline = self.parse_pipeline()
+        pipelines: List[Pipeline] = [pipeline]
+        lst_pipelines: List[LstPipeline] = [lst_pipeline]
         operators: List[str] = []
+        op_positions: List[LstTokenPos] = []
         while True:
             tok = self._peek()
             if tok and tok.kind == "OP" and tok.value in ["&&", "||"]:
                 operators.append(tok.value)
+                op_positions.append(self._tok_pos(tok))
                 self._advance()
-                pipelines.append(self.parse_pipeline())
+                pipeline, lst_pipeline = self.parse_pipeline()
+                pipelines.append(pipeline)
+                lst_pipelines.append(lst_pipeline)
                 continue
             break
-        return AndOr(pipelines=pipelines, operators=operators)
+        return (
+            AndOr(pipelines=pipelines, operators=operators),
+            LstAndOr(pipelines=lst_pipelines, operators=operators, op_positions=op_positions),
+        )
 
-    def parse_pipeline(self) -> Pipeline:
+    def parse_pipeline(self) -> tuple[Pipeline, LstPipeline]:
         negate = False
         tok = self._peek()
-        if tok and tok.kind == "WORD" and tok.value == "!":
+        if self._is_word(tok) and tok.value == "!":
             self._advance()
             negate = True
-        commands: List[Command] = [self.parse_command()]
+        command, lst_command = self.parse_command()
+        commands: List[Command] = [command]
+        lst_commands: List[LstCommand] = [lst_command]
+        op_positions: List[LstTokenPos] = []
         while True:
             tok = self._peek()
             if tok and tok.kind == "OP" and tok.value == "|":
+                op_positions.append(self._tok_pos(tok))
                 self._advance()
-                commands.append(self.parse_command())
+                command, lst_command = self.parse_command()
+                commands.append(command)
+                lst_commands.append(lst_command)
                 continue
             break
-        return Pipeline(commands=commands, negate=negate)
+        return (
+            Pipeline(commands=commands, negate=negate),
+            LstPipeline(commands=lst_commands, negate=negate, op_positions=op_positions),
+        )
 
-    def parse_command(self) -> Command:
+    def parse_command(self) -> tuple[Command, LstCommand]:
         tok = self._peek()
-        if tok and tok.kind == "WORD" and tok.value == "if":
+        if self._is_word(tok) and tok.value == "if":
             return self.parse_if()
-        if tok and tok.kind == "WORD" and tok.value in ["while", "until"]:
+        if self._is_word(tok) and tok.value in ["while", "until"]:
             return self.parse_while()
-        if tok and tok.kind == "WORD" and tok.value == "for":
+        if self._is_word(tok) and tok.value == "for":
             return self.parse_for()
-        if tok and tok.kind == "WORD" and tok.value == "case":
+        if self._is_word(tok) and tok.value == "case":
             return self.parse_case()
         if tok and tok.kind == "OP" and tok.value == "{":
             return self.parse_group()
@@ -159,64 +246,87 @@ class Parser:
             return self.parse_subshell()
         if self._looks_like_function_def():
             return self.parse_function_def()
+
         argv: List[Word] = []
+        lst_argv: List = []
         assignments: List[Assignment] = []
+        lst_assignments: List[LstAssignment] = []
         redirects: List[Redirect] = []
+        lst_redirects: List[LstRedirect] = []
         while True:
             tok = self._peek()
             if tok is None:
                 break
-            # IO number before redirection
-            if tok.kind == "WORD" and tok.value.isdigit():
-                next_tok = self.tokens[self.pos + 1] if self.pos + 1 < len(self.tokens) else None
+            if self._is_word(tok) and tok.value.isdigit():
+                next_tok = self._peek_n(1)
                 if next_tok and next_tok.kind == "OP" and next_tok.value in ["<", ">", ">>", "<<", "<<-", ">&", "<&"]:
                     fd = int(tok.value)
                     self._advance()
                     op_tok = self._advance()
                     target_tok = self._peek()
-                    if target_tok is None or target_tok.kind != "WORD":
+                    if target_tok is None or not self._is_word(target_tok):
                         raise ParseError(f"expected redirection target at {self._where(target_tok)}")
                     redir = self._make_redirect(op_tok.value, target_tok.value, fd)
+                    lst_redir = self._make_lst_redirect(op_tok, target_tok, fd)
                     self._advance()
                     if redir.op == "<<":
                         here_tok = self._peek()
                         if here_tok and here_tok.kind == "HEREDOC":
-                            self._apply_heredoc_token(redir, here_tok.value)
+                            self._apply_heredoc_token(redir, lst_redir, here_tok.value)
                             self._advance()
                     if redir.op == "<<-":
                         here_tok = self._peek()
                         if here_tok and here_tok.kind == "HEREDOC":
-                            self._apply_heredoc_token(redir, here_tok.value)
+                            self._apply_heredoc_token(redir, lst_redir, here_tok.value)
                             self._advance()
                     redirects.append(redir)
+                    lst_redirects.append(lst_redir)
                     continue
             if tok.kind == "OP" and tok.value in ["<", ">", ">>", "<<", "<<-", ">&", "<&"]:
                 op = tok.value
                 self._advance()
                 target_tok = self._peek()
-                if target_tok is None or target_tok.kind != "WORD":
+                if target_tok is None or not self._is_word(target_tok):
                     raise ParseError(f"expected redirection target at {self._where(target_tok)}")
                 redir = self._make_redirect(op, target_tok.value, None)
+                lst_redir = self._make_lst_redirect(tok, target_tok, None)
                 self._advance()
                 if redir.op in ["<<", "<<-"]:
                     here_tok = self._peek()
                     if here_tok and here_tok.kind == "HEREDOC":
-                        self._apply_heredoc_token(redir, here_tok.value)
+                        self._apply_heredoc_token(redir, lst_redir, here_tok.value)
                         self._advance()
                 redirects.append(redir)
+                lst_redirects.append(lst_redir)
                 continue
-            if tok.kind == "WORD":
+            if self._is_word(tok):
                 if self._is_assignment(tok.value) and not argv:
                     name, value = tok.value.split("=", 1)
                     assignments.append(Assignment(name=name, value=value))
+                    lst_assignments.append(
+                        LstAssignment(
+                            name=name,
+                            value=self._resolve_word(
+                                parse_word(value, line=tok.line, col=tok.col, index=tok.index)
+                            ),
+                        )
+                    )
                 else:
                     argv.append(Word(tok.value))
+                    lst_argv.append(
+                        self._resolve_word(
+                            parse_word(tok.value, line=tok.line, col=tok.col, index=tok.index)
+                        )
+                    )
                 self._advance()
                 continue
             break
         if not argv and not assignments and not redirects:
             raise ParseError(f"expected command at {self._where(tok)}")
-        return SimpleCommand(argv=argv, assignments=assignments, redirects=redirects)
+        return (
+            SimpleCommand(argv=argv, assignments=assignments, redirects=redirects),
+            LstSimpleCommand(argv=lst_argv, assignments=lst_assignments, redirects=lst_redirects),
+        )
 
     def _is_assignment(self, text: str) -> bool:
         if "=" not in text:
@@ -233,93 +343,141 @@ class Parser:
             return Redirect(op="<<", target=target, fd=fd, here_doc_strip_tabs=True)
         return Redirect(op=op, target=target, fd=fd)
 
-    def _apply_heredoc_token(self, redir: Redirect, token_value: str) -> None:
+    def _make_lst_redirect(self, op_tok: Token, target_tok: Token, fd: int | None) -> LstRedirect:
+        if op_tok.value == "<<-":
+            return LstRedirect(
+                op="<<",
+                target=self._resolve_word(
+                    parse_word(
+                        target_tok.value,
+                        line=target_tok.line,
+                        col=target_tok.col,
+                        index=target_tok.index,
+                    )
+                ),
+                fd=fd,
+                here_doc_strip_tabs=True,
+                op_pos=self._tok_pos(op_tok),
+            )
+        return LstRedirect(
+            op=op_tok.value,
+            target=self._resolve_word(
+                parse_word(
+                    target_tok.value,
+                    line=target_tok.line,
+                    col=target_tok.col,
+                    index=target_tok.index,
+                )
+            ),
+            fd=fd,
+            op_pos=self._tok_pos(op_tok),
+        )
+
+    def _apply_heredoc_token(self, redir: Redirect, lst_redir: LstRedirect, token_value: str) -> None:
         parts = token_value.split(":", 2)
         if len(parts) == 3:
             expand_flag, strip_flag, content = parts
             redir.here_doc_expand = expand_flag == "E"
             redir.here_doc_strip_tabs = strip_flag == "T"
             redir.here_doc = content
+            lst_redir.here_doc_expand = expand_flag == "E"
+            lst_redir.here_doc_strip_tabs = strip_flag == "T"
+            lst_redir.here_doc = content
         else:
             redir.here_doc = token_value
+            lst_redir.here_doc = token_value
 
-    def parse_group(self) -> GroupCommand:
+    def parse_group(self) -> tuple[GroupCommand, LstGroupCommand]:
         self._expect_op("{")
-        body = self.parse_compound_list({"}"})
+        body, lst_body = self.parse_compound_list({"}"})
         self._expect_op("}")
-        return GroupCommand(body=body)
+        return GroupCommand(body=body), LstGroupCommand(body=lst_body)
 
-    def parse_function_def(self) -> FunctionDef:
+    def parse_function_def(self) -> tuple[FunctionDef, LstFunctionDef]:
         name_tok = self._advance()
-        if name_tok is None or name_tok.kind != "WORD":
+        if name_tok is None or not self._is_word(name_tok):
             raise ParseError(f"expected function name at {self._where(name_tok)}")
         self._expect_op("(")
         self._expect_op(")")
-        body_cmd = self.parse_group()
-        return FunctionDef(name=name_tok.value, body=body_cmd.body)
+        body_cmd, lst_body_cmd = self.parse_group()
+        return FunctionDef(name=name_tok.value, body=body_cmd.body), LstFunctionDef(
+            name=name_tok.value,
+            body=lst_body_cmd.body,
+        )
 
-    def parse_subshell(self) -> SubshellCommand:
+    def parse_subshell(self) -> tuple[SubshellCommand, LstSubshellCommand]:
         self._expect_op("(")
-        body = self.parse_compound_list({")"})
+        body, lst_body = self.parse_compound_list({")"})
         self._expect_op(")")
-        return SubshellCommand(body=body)
+        return SubshellCommand(body=body), LstSubshellCommand(body=lst_body)
 
-    def parse_for(self) -> ForCommand:
+    def parse_for(self) -> tuple[ForCommand, LstForCommand]:
         tok = self._advance()
-        if tok is None or tok.kind != "WORD" or tok.value != "for":
+        if tok is None or not self._is_word(tok) or tok.value != "for":
             raise ParseError(f"expected for at {self._where(tok)}")
         name_tok = self._advance()
-        if name_tok is None or name_tok.kind != "WORD":
+        if name_tok is None or not self._is_word(name_tok):
             raise ParseError(f"expected name at {self._where(name_tok)}")
         items: List[Word] = []
+        lst_items: List = []
         tok = self._peek()
-        if tok and tok.kind == "WORD" and tok.value == "in":
+        if tok and self._is_word(tok) and tok.value == "in":
             self._advance()
             while True:
                 tok = self._peek()
                 if tok is None:
                     break
-                if tok.kind == "WORD" and tok.value == "do":
+                if self._is_word(tok) and tok.value == "do":
                     break
                 if tok.kind == "OP" and tok.value in [";", "\n"]:
                     self._advance()
                     continue
-                if tok.kind == "WORD":
+                if self._is_word(tok):
                     items.append(Word(tok.value))
+                    lst_items.append(
+                        self._resolve_word(
+                            parse_word(tok.value, line=tok.line, col=tok.col, index=tok.index)
+                        )
+                    )
                     self._advance()
                     continue
                 break
         do_tok = self._advance()
-        if do_tok is None or do_tok.kind != "WORD" or do_tok.value != "do":
+        if do_tok is None or not self._is_word(do_tok) or do_tok.value != "do":
             raise ParseError(f"expected do at {self._where(do_tok)}")
-        body = self.parse_compound_list({"done"})
+        body, lst_body = self.parse_compound_list({"done"})
         done_tok = self._advance()
-        if done_tok is None or done_tok.kind != "WORD" or done_tok.value != "done":
+        if done_tok is None or not self._is_word(done_tok) or done_tok.value != "done":
             raise ParseError(f"expected done at {self._where(done_tok)}")
-        return ForCommand(name=name_tok.value, items=items, body=body)
+        return (
+            ForCommand(name=name_tok.value, items=items, body=body),
+            LstForCommand(name=name_tok.value, items=lst_items, body=lst_body),
+        )
 
-    def parse_case(self) -> CaseCommand:
+    def parse_case(self) -> tuple[CaseCommand, LstCaseCommand]:
         tok = self._advance()
-        if tok is None or tok.kind != "WORD" or tok.value != "case":
+        if tok is None or not self._is_word(tok) or tok.value != "case":
             raise ParseError(f"expected case at {self._where(tok)}")
         word_tok = self._advance()
-        if word_tok is None or word_tok.kind != "WORD":
+        if word_tok is None or not self._is_word(word_tok):
             raise ParseError(f"expected case word at {self._where(word_tok)}")
         in_tok = self._advance()
-        if in_tok is None or in_tok.kind != "WORD" or in_tok.value != "in":
+        if in_tok is None or not self._is_word(in_tok) or in_tok.value != "in":
             raise ParseError(f"expected in at {self._where(in_tok)}")
         items: List[CaseItem] = []
+        lst_items: List[LstCaseItem] = []
         while True:
             tok = self._peek()
             if tok is None:
                 break
-            if tok.kind == "WORD" and tok.value == "esac":
+            if self._is_word(tok) and tok.value == "esac":
                 self._advance()
                 break
             if tok.kind == "OP" and tok.value in ["\n", ";"]:
                 self._advance()
                 continue
             patterns: List[str] = []
+            lst_patterns: List = []
             while True:
                 tok = self._peek()
                 if tok is None:
@@ -327,14 +485,16 @@ class Parser:
                 if tok.kind == "OP" and tok.value == ")":
                     self._advance()
                     break
-                if tok.kind == "WORD":
+                if self._is_word(tok):
                     part = tok.value
                     self._advance()
                     if part.endswith("|"):
                         part = part[:-1]
                         patterns.append(part)
+                        lst_patterns.append(self._resolve_word(parse_word(part)))
                         continue
                     patterns.append(part)
+                    lst_patterns.append(self._resolve_word(parse_word(part)))
                     tok2 = self._peek()
                     if tok2 and tok2.kind == "OP" and tok2.value == "|":
                         self._advance()
@@ -344,72 +504,121 @@ class Parser:
                     self._advance()
                     continue
                 break
-            body = self.parse_compound_list({";;", "esac"})
+            body, lst_body = self.parse_compound_list({";;", "esac"})
             tok = self._peek()
             if tok and tok.kind == "OP" and tok.value == ";;":
                 self._advance()
             items.append(CaseItem(patterns=patterns, body=body))
-        return CaseCommand(value=Word(word_tok.value), items=items)
+            lst_items.append(LstCaseItem(patterns=lst_patterns, body=lst_body))
+        return (
+            CaseCommand(value=Word(word_tok.value), items=items),
+            LstCaseCommand(
+                value=self._resolve_word(
+                    parse_word(word_tok.value, line=word_tok.line, col=word_tok.col, index=word_tok.index)
+                ),
+                items=lst_items,
+            ),
+        )
 
-    def parse_if(self) -> IfCommand:
+    def parse_if(self) -> tuple[IfCommand, LstIfCommand]:
         tok = self._advance()
         if tok is None or tok.value != "if":
             raise ParseError(f"expected if at {self._where(tok)}")
-        cond = self.parse_compound_list({"then"})
+        cond, lst_cond = self.parse_compound_list({"then"})
         then_tok = self._advance()
-        if then_tok is None or then_tok.kind != "WORD" or then_tok.value != "then":
+        if then_tok is None or not self._is_word(then_tok) or then_tok.value != "then":
             raise ParseError(f"expected then at {self._where(then_tok)}")
-        then_body = self.parse_compound_list({"else", "elif", "fi"})
+        then_body, lst_then_body = self.parse_compound_list({"else", "elif", "fi"})
         elifs: List[tuple[ListNode, ListNode]] = []
+        lst_elifs: List[tuple[LstListNode, LstListNode]] = []
         else_body = None
+        lst_else_body = None
         while True:
             tok = self._peek()
-            if tok and tok.kind == "WORD" and tok.value == "elif":
+            if tok and self._is_word(tok) and tok.value == "elif":
                 self._advance()
-                elif_cond = self.parse_compound_list({"then"})
+                elif_cond, lst_elif_cond = self.parse_compound_list({"then"})
                 then_tok = self._advance()
-                if then_tok is None or then_tok.kind != "WORD" or then_tok.value != "then":
+                if then_tok is None or not self._is_word(then_tok) or then_tok.value != "then":
                     raise ParseError(f"expected then at {self._where(then_tok)}")
-                elif_body = self.parse_compound_list({"else", "elif", "fi"})
+                elif_body, lst_elif_body = self.parse_compound_list({"else", "elif", "fi"})
                 elifs.append((elif_cond, elif_body))
+                lst_elifs.append((lst_elif_cond, lst_elif_body))
                 continue
             break
         tok = self._peek()
-        if tok and tok.kind == "WORD" and tok.value == "else":
+        if tok and self._is_word(tok) and tok.value == "else":
             self._advance()
-            else_body = self.parse_compound_list({"fi"})
+            else_body, lst_else_body = self.parse_compound_list({"fi"})
         end_tok = self._advance()
-        if end_tok is None or end_tok.kind != "WORD" or end_tok.value != "fi":
+        if end_tok is None or not self._is_word(end_tok) or end_tok.value != "fi":
             raise ParseError(f"expected fi at {self._where(end_tok)}")
-        return IfCommand(cond=cond, then_body=then_body, elifs=elifs, else_body=else_body)
+        return (
+            IfCommand(cond=cond, then_body=then_body, elifs=elifs, else_body=else_body),
+            LstIfCommand(
+                cond=lst_cond,
+                then_body=lst_then_body,
+                elifs=lst_elifs,
+                else_body=lst_else_body,
+            ),
+        )
 
-    def parse_while(self) -> WhileCommand:
+    def parse_while(self) -> tuple[WhileCommand, LstWhileCommand]:
         tok = self._advance()
-        if tok is None or tok.kind != "WORD" or tok.value not in ["while", "until"]:
+        if tok is None or not self._is_word(tok) or tok.value not in ["while", "until"]:
             raise ParseError(f"expected while/until at {self._where(tok)}")
         until = tok.value == "until"
-        cond = self.parse_compound_list({"do"})
+        cond, lst_cond = self.parse_compound_list({"do"})
         do_tok = self._advance()
-        if do_tok is None or do_tok.kind != "WORD" or do_tok.value != "do":
+        if do_tok is None or not self._is_word(do_tok) or do_tok.value != "do":
             raise ParseError(f"expected do at {self._where(do_tok)}")
-        body = self.parse_compound_list({"done"})
+        body, lst_body = self.parse_compound_list({"done"})
         done_tok = self._advance()
-        if done_tok is None or done_tok.kind != "WORD" or done_tok.value != "done":
+        if done_tok is None or not self._is_word(done_tok) or done_tok.value != "done":
             raise ParseError(f"expected done at {self._where(done_tok)}")
-        return WhileCommand(cond=cond, body=body, until=until)
+        return (
+            WhileCommand(cond=cond, body=body, until=until),
+            LstWhileCommand(cond=lst_cond, body=lst_body, until=until),
+        )
 
     def _looks_like_function_def(self) -> bool:
         tok = self._peek()
-        if tok is None or tok.kind != "WORD":
+        if tok is None or not self._is_word(tok):
             return False
-        if self.pos + 2 >= len(self.tokens):
-            return False
-        tok1 = self.tokens[self.pos + 1]
-        tok2 = self.tokens[self.pos + 2]
-        if tok1.kind == "OP" and tok1.value == "(" and tok2.kind == "OP" and tok2.value == ")":
+        tok1 = self._peek_n(1)
+        tok2 = self._peek_n(2)
+        if tok1 and tok1.kind == "OP" and tok1.value == "(" and tok2 and tok2.kind == "OP" and tok2.value == ")":
             return True
         return False
 
+    def _resolve_word(self, word: LstWord) -> LstWord:
+        word.parts = [self._resolve_part(part) for part in word.parts]
+        return word
 
-def parse(tokens: List[Token]) -> Script:
-    return Parser(tokens).parse_script()
+    def _resolve_part(self, part: LstWordPart) -> LstWordPart:
+        if isinstance(part, LstCommandSubPart):
+            if part.child is None:
+                try:
+                    part.child = Parser(part.source).parse_script().lst
+                except ParseError:
+                    part.child = None
+            return part
+        if isinstance(part, LstDoubleQuotedPart):
+            part.parts = [self._resolve_part(p) for p in part.parts]
+            return part
+        if isinstance(part, LstLiteralPart) or isinstance(part, LstArithSubPart):
+            return part
+        return part
+
+    def _tok_pos(self, tok: Token) -> LstTokenPos:
+        return LstTokenPos(
+            value=tok.value,
+            line=tok.line,
+            col=tok.col,
+            length=len(tok.value),
+            index=tok.index,
+        )
+
+
+def parse(source: str) -> Script:
+    return Parser(source).parse_script()

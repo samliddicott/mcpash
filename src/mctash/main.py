@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import shlex
 import sys
 from typing import List, Tuple
 
-from .lexer import tokenize
-from .parser import ParseError, parse
+from .parser import ParseError, Parser
+from .asdl_map import lst_script_to_asdl
 from .runtime import Runtime
 
 
@@ -26,17 +27,22 @@ def main(argv: List[str] | None = None) -> int:
     full_argv = cli_opts + shebang_args + ([script] if script else []) + script_args
 
     parser = argparse.ArgumentParser(prog="mctash")
+    parser.add_argument("--dump-lst", action="store_true", help="print LST as ASDL-like JSON and exit")
     parser.add_argument("script", nargs="?", help="script file to run")
     parser.add_argument("script_args", nargs=argparse.REMAINDER, help="args passed to the script")
     args = parser.parse_args(full_argv)
 
-    tokens = list(tokenize(source))
+    if args.dump_lst:
+        script = Parser(source).parse_script()
+        payload = lst_script_to_asdl(script.lst) if script.lst else {}
+        print(json.dumps(payload, indent=2, sort_keys=True))
+        return 0
+
     rt = Runtime()
     rt.set_script_name(args.script or "")
     rt.set_positional_args(args.script_args)
     try:
-        from .parser import Parser
-        parser_impl = Parser(tokens)
+        parser_impl = Parser(source)
         while True:
             node = parser_impl.parse_next()
             if node is None:

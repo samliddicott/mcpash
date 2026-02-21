@@ -3,6 +3,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import List, Optional, Union
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .lst_nodes import LstScript
+
 
 @dataclass
 class Word:
@@ -114,3 +119,4 @@ class ListNode:
 @dataclass
 class Script:
     body: ListNode
+    lst: Optional["LstScript"] = None

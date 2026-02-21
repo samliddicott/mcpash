@@ -31,7 +31,6 @@ from .ast_nodes import (
     Word,
 )
 from .expand import expand_word
-from .lexer import tokenize
 from .parser import Parser
 
 
@@ -302,8 +301,7 @@ class Runtime:
                 source = f.read()
         except OSError:
             return 1
-        tokens = list(tokenize(source))
-        parser_impl = Parser(tokens)
+        parser_impl = Parser(source)
         saved_positional = list(self.positional)
         self.set_positional_args(args)
         status = 0
@@ -432,6 +430,7 @@ class Runtime:
                 expand_word(
                     w.text,
                     self._expand_param,
+                    self._expand_braced_param,
                     self._expand_command_subst_text,
                     self._expand_arith,
                     self._split_ifs,
@@ -444,6 +443,7 @@ class Runtime:
         fields = expand_word(
             text,
             self._expand_param,
+            self._expand_braced_param,
             self._expand_command_subst_text,
             self._expand_arith,
             self._split_ifs,
@@ -475,18 +475,45 @@ class Runtime:
         return [text]
 
     def _expand_param(self, name: str, quoted: bool):
-        if name == "#":
-            return str(len(self.positional))
         if name == "@":
             return list(self.positional)
-        if name == "*":
-            sep = " "
-            return sep.join(self.positional)
-        if name.isdigit():
-            return self._get_positional(name)
-        value = self._get_var(name)
-        if value == "" and self.options.get("u", False) and name not in ["@", "*", "#"]:
+        value, is_set = self._get_param_state(name)
+        if (not is_set or value == "") and self.options.get("u", False) and name not in ["@", "*", "#"]:
             raise RuntimeError(f"unbound variable: {name}")
+        return value
+
+    def _expand_braced_param(
+        self, name: str, op: str | None, arg: str | None, quoted: bool
+    ) -> str | List[str]:
+        if name == "@" and op is None:
+            return list(self.positional)
+        value, is_set = self._get_param_state(name)
+        arg_text = arg or ""
+        if op is None:
+            return value
+        if op in ["-", ":-"]:
+            if not is_set or (op == ":-" and value == ""):
+                return self._expand_word(arg_text)
+            return value
+        if op in ["+", ":+"]:
+            if is_set and (op == "+" or value != ""):
+                return self._expand_word(arg_text)
+            return ""
+        if op in ["=", ":="]:
+            if not is_set or (op == ":=" and value == ""):
+                replacement = self._expand_word(arg_text)
+                self._set_local(name, replacement)
+                return replacement
+            return value
+        if op in ["?", ":?"]:
+            if not is_set or (op == ":?" and value == ""):
+                msg = self._expand_word(arg_text) if arg_text else "parameter null or not set"
+                raise RuntimeError(f"{name}: {msg}")
+            return value
+        if op in ["#", "##"]:
+            return self._remove_prefix(value, arg_text, longest=(op == "##"))
+        if op in ["%", "%%"]:
+            return self._remove_suffix(value, arg_text, longest=(op == "%%"))
         return value
 
     def _get_positional(self, digit: str) -> str:
@@ -504,6 +531,7 @@ class Runtime:
         parts = expand_word(
             expr,
             self._expand_param,
+            self._expand_braced_param,
             self._expand_command_subst_text,
             lambda s: s,
             self._split_ifs,
@@ -523,6 +551,7 @@ class Runtime:
         fields = expand_word(
             content,
             self._expand_param,
+            self._expand_braced_param,
             self._expand_command_subst_text,
             self._expand_arith,
             self._split_ifs,
@@ -549,6 +578,49 @@ class Runtime:
             if name in scope:
                 return scope[name]
         return self.env.get(name, "")
+
+    def _get_var_with_state(self, name: str) -> tuple[str, bool]:
+        for scope in reversed(self.local_stack):
+            if name in scope:
+                return scope[name], True
+        if name in self.env:
+            return self.env[name], True
+        return "", False
+
+    def _get_param_state(self, name: str) -> tuple[str, bool]:
+        if name == "#":
+            return str(len(self.positional)), True
+        if name == "@":
+            return " ".join(self.positional), True
+        if name == "*":
+            return " ".join(self.positional), True
+        if name.isdigit():
+            value = self._get_positional(name)
+            idx = int(name)
+            if idx == 0:
+                return value, True
+            return value, idx <= len(self.positional)
+        return self._get_var_with_state(name)
+
+    def _remove_prefix(self, value: str, pattern: str, longest: bool) -> str:
+        if pattern == "":
+            return value
+        indices = range(len(value), -1, -1) if longest else range(0, len(value) + 1)
+        for i in indices:
+            prefix = value[:i]
+            if fnmatch.fnmatchcase(prefix, pattern):
+                return value[i:]
+        return value
+
+    def _remove_suffix(self, value: str, pattern: str, longest: bool) -> str:
+        if pattern == "":
+            return value
+        indices = range(0, len(value) + 1) if longest else range(len(value), -1, -1)
+        for i in indices:
+            suffix = value[i:]
+            if fnmatch.fnmatchcase(suffix, pattern):
+                return value[:i]
+        return value
 
     def _set_local(self, name: str, value: str) -> None:
         if not self.local_stack:
@@ -708,8 +780,7 @@ class Runtime:
         return 0 if (result ^ negate) else 1
 
     def _eval_source(self, source: str) -> int:
-        tokens = list(tokenize(source))
-        parser_impl = Parser(tokens)
+        parser_impl = Parser(source)
         status = 0
         try:
             while True:

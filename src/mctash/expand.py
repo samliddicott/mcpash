@@ -6,9 +6,11 @@ from typing import Callable, List, Tuple, Union
 
 @dataclass
 class WordPart:
-    kind: str  # LIT, PARAM, CMD, ARITH
+    kind: str  # LIT, PARAM, CMD, ARITH, BRACED
     value: str
     quoted: bool
+    op: str | None = None
+    arg: str | None = None
 
 
 def parse_word_parts(text: str) -> List[WordPart]:
@@ -93,7 +95,11 @@ def _parse_dollar(text: str, i: int, quoted: bool) -> Tuple[WordPart, int]:
         end = text.find("}", i + 2)
         if end == -1:
             return WordPart("LIT", "$", quoted), i + 1
-        return WordPart("PARAM", text[i + 2 : end], quoted), end + 1
+        inner = text[i + 2 : end]
+        name, op, arg = _split_braced(inner)
+        if name is None:
+            return WordPart("LIT", "$", quoted), i + 1
+        return WordPart("BRACED", name, quoted, op=op, arg=arg), end + 1
     if i + 1 < len(text):
         ch = text[i + 1]
         if ch in "#@*":
@@ -130,9 +136,33 @@ def _extract_balanced(text: str, start: int, closing: str) -> Tuple[str, int]:
     return text[start:], len(text)
 
 
+def _split_braced(inner: str) -> Tuple[str | None, str | None, str | None]:
+    if not inner:
+        return None, None, None
+    i = 0
+    name_chars: List[str] = []
+    while i < len(inner) and (inner[i].isalnum() or inner[i] == "_"):
+        name_chars.append(inner[i])
+        i += 1
+    if not name_chars:
+        return None, None, None
+    name = "".join(name_chars)
+    if i >= len(inner):
+        return name, None, None
+    two_char_ops = {":-", ":=", ":?", ":+", "##", "%%"}
+    if i + 1 < len(inner) and inner[i : i + 2] in two_char_ops:
+        op = inner[i : i + 2]
+        return name, op, inner[i + 2 :]
+    if inner[i] in ["-", "=", "?", "#", "%", "+"]:
+        op = inner[i]
+        return name, op, inner[i + 1 :]
+    return name, None, None
+
+
 def expand_word(
     text: str,
     get_param: Callable[[str, bool], Union[str, List[str]]],
+    get_param_braced: Callable[[str, str | None, str | None, bool], Union[str, List[str]]],
     eval_cmd: Callable[[str], str],
     eval_arith: Callable[[str], str],
     split_ifs: Callable[[str], List[str]],
@@ -145,6 +175,8 @@ def expand_word(
             value: Union[str, List[str]] = part.value
         elif part.kind == "PARAM":
             value = get_param(part.value, part.quoted)
+        elif part.kind == "BRACED":
+            value = get_param_braced(part.value, part.op, part.arg, part.quoted)
         elif part.kind == "CMD":
             value = eval_cmd(part.value)
         elif part.kind == "ARITH":
