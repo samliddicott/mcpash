@@ -140,6 +140,26 @@ def tokenize(source: str) -> Iterator[Token]:
                     buf.append('"')
                     advance()
                 continue
+            if ch == "$" and peek(1) == "(":
+                buf.append("$(")
+                advance(2)
+                depth = 1
+                while i < len(source) and depth > 0:
+                    if peek() == "(":
+                        depth += 1
+                        buf.append(peek())
+                        advance()
+                        continue
+                    if peek() == ")":
+                        depth -= 1
+                        buf.append(")")
+                        advance()
+                        if depth == 0:
+                            break
+                        continue
+                    buf.append(peek())
+                    advance()
+                continue
             buf.append(ch)
             advance()
         word = "".join(buf)
