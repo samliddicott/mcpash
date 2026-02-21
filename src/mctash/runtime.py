@@ -45,9 +45,13 @@ class Runtime:
         self.positional: List[str] = []
         self.functions: Dict[str, ListNode] = {}
         self.local_stack: List[Dict[str, str]] = []
+        self.script_name: str = ""
 
     def set_positional_args(self, args: List[str]) -> None:
         self.positional = list(args)
+
+    def set_script_name(self, name: str) -> None:
+        self.script_name = name
 
     def run(self, script: Script) -> int:
         return self._exec_list(script.body)
@@ -461,7 +465,7 @@ class Runtime:
     def _get_positional(self, digit: str) -> str:
         idx = int(digit)
         if idx == 0:
-            return ""
+            return self.script_name
         if idx <= len(self.positional):
             return self.positional[idx - 1]
         return ""

@@ -32,6 +32,7 @@ def main(argv: List[str] | None = None) -> int:
 
     tokens = list(tokenize(source))
     rt = Runtime()
+    rt.set_script_name(args.script or "")
     rt.set_positional_args(args.script_args)
     try:
         from .parser import Parser
