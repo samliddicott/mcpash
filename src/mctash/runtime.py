@@ -141,7 +141,7 @@ class Runtime:
                 self.env.update(local_env)
                 return 0
             name = argv[0]
-            if name in ["cd", "exit", ":", "return", ".", "source", "local", "eval", "declare", "[", "[[", "test", "set"]:
+            if name in ["cd", "exit", ":", "return", ".", "source", "local", "eval", "declare", "[", "[[", "test", "set", "export", "unset", "shift", "printf", "read"]:
                 try:
                     with self._redirected_fds(node.redirects):
                         status = self._run_builtin(name, argv)
@@ -211,6 +211,16 @@ class Runtime:
             return self._run_declare(argv[1:])
         if name == "set":
             return self._run_set(argv[1:])
+        if name == "export":
+            return self._run_export(argv[1:])
+        if name == "unset":
+            return self._run_unset(argv[1:])
+        if name == "shift":
+            return self._run_shift(argv[1:])
+        if name == "printf":
+            return self._run_printf(argv[1:])
+        if name == "read":
+            return self._run_read(argv[1:])
         if name in ["[", "[[", "test"]:
             return self._run_test(name, argv[1:])
         if name == "exit":
@@ -520,6 +530,79 @@ class Runtime:
                         self.options[ch] = False
             return 0
         self.set_positional_args(args)
+        return 0
+
+    def _run_export(self, args: List[str]) -> int:
+        for arg in args:
+            if "=" in arg:
+                name, value = arg.split("=", 1)
+                self.env[name] = self._expand_word(value)
+            else:
+                self.env[arg] = self.env.get(arg, "")
+        return 0
+
+    def _run_unset(self, args: List[str]) -> int:
+        for name in args:
+            if name in self.env:
+                del self.env[name]
+            for scope in self.local_stack:
+                scope.pop(name, None)
+        return 0
+
+    def _run_shift(self, args: List[str]) -> int:
+        n = 1
+        if args:
+            try:
+                n = int(args[0])
+            except ValueError:
+                return 1
+        if n < 0 or n > len(self.positional):
+            return 1
+        self.positional = self.positional[n:]
+        return 0
+
+    def _run_printf(self, args: List[str]) -> int:
+        if not args:
+            return 0
+        fmt = args[0]
+        vals = args[1:]
+        out = []
+        i = 0
+        vi = 0
+        while i < len(fmt):
+            if fmt[i] == "%" and i + 1 < len(fmt):
+                spec = fmt[i + 1]
+                if spec == "%":
+                    out.append("%")
+                else:
+                    val = vals[vi] if vi < len(vals) else ""
+                    vi += 1
+                    if spec == "s":
+                        out.append(val)
+                    elif spec in ["d", "i"]:
+                        try:
+                            out.append(str(int(val)))
+                        except ValueError:
+                            out.append("0")
+                    else:
+                        out.append(val)
+                i += 2
+                continue
+            out.append(fmt[i])
+            i += 1
+        sys.stdout.write("".join(out))
+        return 0
+
+    def _run_read(self, args: List[str]) -> int:
+        if not args:
+            return 1
+        line = sys.stdin.readline()
+        if line == "":
+            return 1
+        parts = line.rstrip("\n").split()
+        for i, name in enumerate(args):
+            value = parts[i] if i < len(parts) else ""
+            self.env[name] = value
         return 0
 
     def _run_test(self, name: str, args: List[str]) -> int:
