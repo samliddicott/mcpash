@@ -146,7 +146,7 @@ class Runtime:
                 self.env.update(local_env)
                 return 0
             name = argv[0]
-            if name in ["cd", "exit", ":", "return", ".", "source", "local", "eval", "declare", "[", "[[", "test", "set", "export", "unset", "shift", "printf", "read"]:
+            if name in ["cd", "exit", ":", "return", ".", "source", "local", "eval", "declare", "[", "[[", "test", "set", "export", "unset", "shift", "printf", "read", "true", "false"]:
                 try:
                     with self._redirected_fds(node.redirects):
                         status = self._run_builtin(name, argv)
@@ -235,6 +235,10 @@ class Runtime:
             return self._run_printf(argv[1:])
         if name == "read":
             return self._run_read(argv[1:])
+        if name == "true":
+            return 0
+        if name == "false":
+            return 1
         if name in ["[", "[[", "test"]:
             return self._run_test(name, argv[1:])
         if name == "exit":
