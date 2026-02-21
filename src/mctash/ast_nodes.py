@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import List, Optional
+from typing import List, Optional, Union
 
 
 @dataclass
@@ -21,13 +21,37 @@ class Redirect:
     target: str
     fd: Optional[int] = None
     here_doc: Optional[str] = None
+    here_doc_expand: bool = True
+    here_doc_strip_tabs: bool = False
 
 
 @dataclass
-class Command:
+class SimpleCommand:
     argv: List[Word]
     assignments: List[Assignment]
     redirects: List[Redirect]
+
+
+@dataclass
+class GroupCommand:
+    body: "ListNode"
+
+
+@dataclass
+class IfCommand:
+    cond: "ListNode"
+    then_body: "ListNode"
+    else_body: Optional["ListNode"]
+
+
+@dataclass
+class WhileCommand:
+    cond: "ListNode"
+    body: "ListNode"
+    until: bool = False
+
+
+Command = Union[SimpleCommand, GroupCommand, IfCommand, WhileCommand]
 
 
 @dataclass

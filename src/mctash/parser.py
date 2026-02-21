@@ -2,7 +2,20 @@ from __future__ import annotations
 
 from typing import List, Optional
 
-from .ast_nodes import AndOr, Assignment, Command, ListNode, Pipeline, Redirect, Script, Word
+from .ast_nodes import (
+    AndOr,
+    Assignment,
+    Command,
+    GroupCommand,
+    IfCommand,
+    ListNode,
+    Pipeline,
+    Redirect,
+    Script,
+    SimpleCommand,
+    WhileCommand,
+    Word,
+)
 from .lexer import Token
 
 
@@ -74,6 +87,28 @@ class Parser:
                 continue
         return ListNode(items=items)
 
+    def parse_compound_list(self, stop_words: set[str]) -> ListNode:
+        items: List[AndOr] = []
+        while True:
+            tok = self._peek()
+            if tok is None:
+                break
+            if tok.kind == "WORD" and tok.value in stop_words:
+                break
+            if tok.kind == "OP" and tok.value in stop_words:
+                break
+            if tok.kind == "OP" and tok.value in ["\n", ";"]:
+                self._advance()
+                continue
+            items.append(self.parse_and_or())
+            tok = self._peek()
+            if tok is None:
+                break
+            if tok.kind == "OP" and tok.value in [";", "\n"]:
+                self._advance()
+                continue
+        return ListNode(items=items)
+
     def parse_and_or(self) -> AndOr:
         pipelines: List[Pipeline] = [self.parse_pipeline()]
         operators: List[str] = []
@@ -99,6 +134,13 @@ class Parser:
         return Pipeline(commands=commands, negate=False)
 
     def parse_command(self) -> Command:
+        tok = self._peek()
+        if tok and tok.kind == "WORD" and tok.value == "if":
+            return self.parse_if()
+        if tok and tok.kind == "WORD" and tok.value in ["while", "until"]:
+            return self.parse_while()
+        if tok and tok.kind == "OP" and tok.value == "{":
+            return self.parse_group()
         argv: List[Word] = []
         assignments: List[Assignment] = []
         redirects: List[Redirect] = []
@@ -109,34 +151,39 @@ class Parser:
             # IO number before redirection
             if tok.kind == "WORD" and tok.value.isdigit():
                 next_tok = self.tokens[self.pos + 1] if self.pos + 1 < len(self.tokens) else None
-                if next_tok and next_tok.kind == "OP" and next_tok.value in ["<", ">", ">>", "<<"]:
+                if next_tok and next_tok.kind == "OP" and next_tok.value in ["<", ">", ">>", "<<", "<<-", ">&", "<&"]:
                     fd = int(tok.value)
                     self._advance()
                     op_tok = self._advance()
                     target_tok = self._peek()
                     if target_tok is None or target_tok.kind != "WORD":
                         raise ParseError(f"expected redirection target at {self._where(target_tok)}")
-                    redir = Redirect(op=op_tok.value, target=target_tok.value, fd=fd)
+                    redir = self._make_redirect(op_tok.value, target_tok.value, fd)
                     self._advance()
                     if redir.op == "<<":
                         here_tok = self._peek()
                         if here_tok and here_tok.kind == "HEREDOC":
-                            redir.here_doc = here_tok.value
+                            self._apply_heredoc_token(redir, here_tok.value)
+                            self._advance()
+                    if redir.op == "<<-":
+                        here_tok = self._peek()
+                        if here_tok and here_tok.kind == "HEREDOC":
+                            self._apply_heredoc_token(redir, here_tok.value)
                             self._advance()
                     redirects.append(redir)
                     continue
-            if tok.kind == "OP" and tok.value in ["<", ">", ">>", "<<"]:
+            if tok.kind == "OP" and tok.value in ["<", ">", ">>", "<<", "<<-", ">&", "<&"]:
                 op = tok.value
                 self._advance()
                 target_tok = self._peek()
                 if target_tok is None or target_tok.kind != "WORD":
                     raise ParseError(f"expected redirection target at {self._where(target_tok)}")
-                redir = Redirect(op=op, target=target_tok.value)
+                redir = self._make_redirect(op, target_tok.value, None)
                 self._advance()
-                if redir.op == "<<":
+                if redir.op in ["<<", "<<-"]:
                     here_tok = self._peek()
                     if here_tok and here_tok.kind == "HEREDOC":
-                        redir.here_doc = here_tok.value
+                        self._apply_heredoc_token(redir, here_tok.value)
                         self._advance()
                 redirects.append(redir)
                 continue
@@ -151,7 +198,7 @@ class Parser:
             break
         if not argv and not assignments and not redirects:
             raise ParseError(f"expected command at {self._where(tok)}")
-        return Command(argv=argv, assignments=assignments, redirects=redirects)
+        return SimpleCommand(argv=argv, assignments=assignments, redirects=redirects)
 
     def _is_assignment(self, text: str) -> bool:
         if "=" not in text:
@@ -162,6 +209,61 @@ class Parser:
         if not (name[0].isalpha() or name[0] == "_"):
             return False
         return all(ch.isalnum() or ch == "_" for ch in name)
+
+    def _make_redirect(self, op: str, target: str, fd: int | None) -> Redirect:
+        if op == "<<-":
+            return Redirect(op="<<", target=target, fd=fd, here_doc_strip_tabs=True)
+        return Redirect(op=op, target=target, fd=fd)
+
+    def _apply_heredoc_token(self, redir: Redirect, token_value: str) -> None:
+        parts = token_value.split(":", 2)
+        if len(parts) == 3:
+            expand_flag, strip_flag, content = parts
+            redir.here_doc_expand = expand_flag == "E"
+            redir.here_doc_strip_tabs = strip_flag == "T"
+            redir.here_doc = content
+        else:
+            redir.here_doc = token_value
+
+    def parse_group(self) -> GroupCommand:
+        self._expect_op("{")
+        body = self.parse_compound_list({"}"})
+        self._expect_op("}")
+        return GroupCommand(body=body)
+
+    def parse_if(self) -> IfCommand:
+        tok = self._advance()
+        if tok is None or tok.value != "if":
+            raise ParseError(f"expected if at {self._where(tok)}")
+        cond = self.parse_compound_list({"then"})
+        then_tok = self._advance()
+        if then_tok is None or then_tok.kind != "WORD" or then_tok.value != "then":
+            raise ParseError(f"expected then at {self._where(then_tok)}")
+        then_body = self.parse_compound_list({"else", "fi"})
+        else_body = None
+        tok = self._peek()
+        if tok and tok.kind == "WORD" and tok.value == "else":
+            self._advance()
+            else_body = self.parse_compound_list({"fi"})
+        end_tok = self._advance()
+        if end_tok is None or end_tok.kind != "WORD" or end_tok.value != "fi":
+            raise ParseError(f"expected fi at {self._where(end_tok)}")
+        return IfCommand(cond=cond, then_body=then_body, else_body=else_body)
+
+    def parse_while(self) -> WhileCommand:
+        tok = self._advance()
+        if tok is None or tok.kind != "WORD" or tok.value not in ["while", "until"]:
+            raise ParseError(f"expected while/until at {self._where(tok)}")
+        until = tok.value == "until"
+        cond = self.parse_compound_list({"do"})
+        do_tok = self._advance()
+        if do_tok is None or do_tok.kind != "WORD" or do_tok.value != "do":
+            raise ParseError(f"expected do at {self._where(do_tok)}")
+        body = self.parse_compound_list({"done"})
+        done_tok = self._advance()
+        if done_tok is None or done_tok.kind != "WORD" or done_tok.value != "done":
+            raise ParseError(f"expected done at {self._where(done_tok)}")
+        return WhileCommand(cond=cond, body=body, until=until)
 
 
 def parse(tokens: List[Token]) -> Script:

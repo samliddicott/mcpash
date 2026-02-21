@@ -9,7 +9,20 @@ import tempfile
 from contextlib import contextmanager
 from typing import Dict, Iterable, List, Optional, Tuple
 
-from .ast_nodes import AndOr, Assignment, Command, ListNode, Pipeline, Redirect, Script, Word
+from .ast_nodes import (
+    AndOr,
+    Assignment,
+    Command,
+    GroupCommand,
+    IfCommand,
+    ListNode,
+    Pipeline,
+    Redirect,
+    Script,
+    SimpleCommand,
+    WhileCommand,
+    Word,
+)
 
 
 class RuntimeError(Exception):
@@ -47,6 +60,8 @@ class Runtime:
         procs: List[subprocess.Popen] = []
         prev = None
         for i, cmd in enumerate(node.commands):
+            if not isinstance(cmd, SimpleCommand):
+                return self._exec_command(cmd)
             argv = self._expand_argv(cmd.argv)
             if not argv:
                 return 2
@@ -64,28 +79,48 @@ class Runtime:
         return status
 
     def _exec_command(self, node: Command) -> int:
-        local_env = dict(self.env)
-        for assign in node.assignments:
-            local_env[assign.name] = self._expand_word(assign.value)
-
-        argv = self._expand_argv(node.argv)
-        if not argv:
-            if node.redirects:
-                with self._redirected_fds(node.redirects):
-                    pass
-            self.env.update(local_env)
-            return 0
-        name = argv[0]
-        if name in ["cd", "exit", ":"]:
-            try:
-                with self._redirected_fds(node.redirects):
-                    status = self._run_builtin(name, argv)
-            finally:
-                self.env.update(local_env)
+        if isinstance(node, GroupCommand):
+            return self._exec_list(node.body)
+        if isinstance(node, IfCommand):
+            status = self._exec_list(node.cond)
+            if status == 0:
+                return self._exec_list(node.then_body)
+            if node.else_body is not None:
+                return self._exec_list(node.else_body)
             return status
-        status = self._run_external(argv, local_env, node.redirects)
-        self.env.update(local_env)
-        return status
+        if isinstance(node, WhileCommand):
+            last = 0
+            while True:
+                cond_status = self._exec_list(node.cond)
+                should_run = cond_status != 0 if node.until else cond_status == 0
+                if not should_run:
+                    break
+                last = self._exec_list(node.body)
+            return last
+        if isinstance(node, SimpleCommand):
+            local_env = dict(self.env)
+            for assign in node.assignments:
+                local_env[assign.name] = self._expand_word(assign.value)
+
+            argv = self._expand_argv(node.argv)
+            if not argv:
+                if node.redirects:
+                    with self._redirected_fds(node.redirects):
+                        pass
+                self.env.update(local_env)
+                return 0
+            name = argv[0]
+            if name in ["cd", "exit", ":"]:
+                try:
+                    with self._redirected_fds(node.redirects):
+                        status = self._run_builtin(name, argv)
+                finally:
+                    self.env.update(local_env)
+                return status
+            status = self._run_external(argv, local_env, node.redirects)
+            self.env.update(local_env)
+            return status
+        return 2
 
     def _run_builtin(self, name: str, argv: List[str]) -> int:
         if name == "cd":
@@ -140,7 +175,7 @@ class Runtime:
                 else:
                     os.dup2(f.fileno(), target_fd)
             elif redir.op == "<<":
-                content = redir.here_doc if redir.here_doc is not None else ""
+                content = self._expand_heredoc(redir)
                 f = tempfile.TemporaryFile()
                 f.write(content.encode("utf-8"))
                 f.seek(0)
@@ -148,6 +183,10 @@ class Runtime:
                     stdin = f
                 else:
                     os.dup2(f.fileno(), target_fd)
+            elif redir.op == ">&":
+                self._dup_fd(redir, is_output=True)
+            elif redir.op == "<&":
+                self._dup_fd(redir, is_output=False)
         return stdin, stdout
 
     @contextmanager
@@ -171,12 +210,16 @@ class Runtime:
                     os.dup2(f.fileno(), fd)
                     f.close()
                 elif redir.op == "<<":
-                    content = redir.here_doc if redir.here_doc is not None else ""
+                    content = self._expand_heredoc(redir)
                     f = tempfile.TemporaryFile()
                     f.write(content.encode("utf-8"))
                     f.seek(0)
                     os.dup2(f.fileno(), fd)
                     f.close()
+                elif redir.op == ">&":
+                    self._dup_fd(redir, is_output=True, default_fd=fd)
+                elif redir.op == "<&":
+                    self._dup_fd(redir, is_output=False, default_fd=fd)
             yield
         finally:
             for fd, saved_fd in saved:
@@ -322,6 +365,26 @@ class Runtime:
             else:
                 out.append("$")
         return "".join(out)
+
+    def _expand_heredoc(self, redir: Redirect) -> str:
+        content = redir.here_doc or ""
+        if not redir.here_doc_expand:
+            return content
+        return self._expand_command_subst(self._expand_params(content))
+
+    def _dup_fd(self, redir: Redirect, is_output: bool, default_fd: int | None = None) -> None:
+        fd = redir.fd if redir.fd is not None else (1 if is_output else 0)
+        target = redir.target
+        if target == "-":
+            os.close(fd)
+            return
+        if target.isdigit():
+            os.dup2(int(target), fd)
+            return
+        mode = "wb" if is_output else "rb"
+        f = open(target, mode)
+        os.dup2(f.fileno(), fd)
+        f.close()
 
     def _expand_command_subst(self, text: str) -> str:
         result: List[str] = []
