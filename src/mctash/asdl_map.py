@@ -102,7 +102,7 @@ def _lst_command_to_command(node) -> Dict[str, Any]:
     if isinstance(node, LstShAssignmentCommand):
         return {
             "type": "command.ShAssignment",
-            "pairs": [_env_pair(a) for a in node.assignments],
+            "pairs": [_assign_pair(a) for a in node.assignments],
         }
     return {"type": "command.NoOp"}
 
@@ -134,6 +134,15 @@ def _env_pair(assign: LstAssignment) -> Dict[str, Any]:
     }
 
 
+def _assign_pair(assign: LstAssignment) -> Dict[str, Any]:
+    return {
+        "type": "AssignPair",
+        "name": assign.name,
+        "op": assign.op,
+        "rhs": {"type": "rhs_word.Compound", "word": word(assign.value)},
+    }
+
+
 def _redir(redir: LstRedirect) -> Dict[str, Any]:
     if redir.here_doc is not None:
         arg = {
@@ -146,7 +155,7 @@ def _redir(redir: LstRedirect) -> Dict[str, Any]:
     return {
         "type": "Redir",
         "op": token_pos(redir.op_pos) if redir.op_pos else token(redir.op),
-        "loc": {"fd": redir.fd},
+        "loc": {"type": "redir_loc.Fd", "fd": redir.fd},
         "arg": arg,
     }
 

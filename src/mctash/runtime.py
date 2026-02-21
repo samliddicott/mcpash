@@ -164,7 +164,11 @@ class Runtime:
         if isinstance(node, SimpleCommand):
             local_env = dict(self.env)
             for assign in node.assignments:
-                local_env[assign.name] = self._expand_word(assign.value)
+                value = self._expand_word(assign.value)
+                if assign.op == "+=":
+                    local_env[assign.name] = local_env.get(assign.name, "") + value
+                else:
+                    local_env[assign.name] = value
 
             argv = self._expand_argv(node.argv)
             if not argv:
@@ -636,7 +640,16 @@ class Runtime:
         for arg in args:
             if "=" in arg:
                 name, value = arg.split("=", 1)
-                self._set_local(name, self._expand_word(value))
+                op = "="
+                if name.endswith("+"):
+                    op = "+="
+                    name = name[:-1]
+                expanded = self._expand_word(value)
+                if op == "+=":
+                    current = self._get_var(name)
+                    self._set_local(name, current + expanded)
+                else:
+                    self._set_local(name, expanded)
             else:
                 self._set_local(arg, "")
         return 0
@@ -678,7 +691,15 @@ class Runtime:
         for arg in args:
             if "=" in arg:
                 name, value = arg.split("=", 1)
-                self.env[name] = self._expand_word(value)
+                op = "="
+                if name.endswith("+"):
+                    op = "+="
+                    name = name[:-1]
+                expanded = self._expand_word(value)
+                if op == "+=":
+                    self.env[name] = self.env.get(name, "") + expanded
+                else:
+                    self.env[name] = expanded
             else:
                 self.env[arg] = self.env.get(arg, "")
         return 0

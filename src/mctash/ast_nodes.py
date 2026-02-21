@@ -18,6 +18,7 @@ class Word:
 class Assignment:
     name: str
     value: str
+    op: str = "="
 
 
 @dataclass

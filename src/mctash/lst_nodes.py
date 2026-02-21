@@ -69,6 +69,7 @@ class LstWord:
 class LstAssignment:
     name: str
     value: LstWord
+    op: str = "="
 
 
 @dataclass

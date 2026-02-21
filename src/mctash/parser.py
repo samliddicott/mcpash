@@ -312,14 +312,15 @@ class Parser:
                 continue
             if self._is_word(tok):
                 if self._is_assignment(tok.value) and not argv:
-                    name, value = tok.value.split("=", 1)
-                    assignments.append(Assignment(name=name, value=value))
+                    name, op, value = self._split_assignment(tok.value)
+                    assignments.append(Assignment(name=name, value=value, op=op))
                     lst_assignments.append(
                         LstAssignment(
                             name=name,
                             value=self._resolve_word(
                                 parse_word(value, line=tok.line, col=tok.col, index=tok.index)
                             ),
+                            op=op,
                         )
                     )
                 else:
@@ -351,7 +352,19 @@ class Parser:
             return False
         if not (name[0].isalpha() or name[0] == "_"):
             return False
+        if name.endswith("+"):
+            name = name[:-1]
+            if not name:
+                return False
         return all(ch.isalnum() or ch == "_" for ch in name)
+
+    def _split_assignment(self, text: str) -> tuple[str, str, str]:
+        name, value = text.split("=", 1)
+        op = "="
+        if name.endswith("+"):
+            op = "+="
+            name = name[:-1]
+        return name, op, value
 
     def _make_redirect(self, op: str, target: str, fd: int | None) -> Redirect:
         if op == "<<-":
