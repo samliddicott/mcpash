@@ -120,8 +120,14 @@ class AndOr:
 
 
 @dataclass
+class ListItem:
+    node: AndOr
+    background: bool = False
+
+
+@dataclass
 class ListNode:
-    items: List[AndOr]
+    items: List[ListItem]
 
 
 @dataclass

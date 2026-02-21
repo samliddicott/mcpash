@@ -13,6 +13,7 @@ from .ast_nodes import (
     GroupCommand,
     IfCommand,
     ListNode,
+    ListItem,
     Pipeline,
     Redirect,
     RedirectCommand,
@@ -37,6 +38,7 @@ from .lst_nodes import (
     LstFunctionDef,
     LstGroupCommand,
     LstIfCommand,
+    LstListItem,
     LstListNode,
     LstLiteralPart,
     LstPipeline,
@@ -126,7 +128,7 @@ class Parser:
         lst_script = LstScript(body=lst_body)
         return Script(body=body, lst=lst_script)
 
-    def parse_next(self) -> Optional[AndOr]:
+    def parse_next(self) -> Optional[ListItem]:
         while True:
             tok = self._peek()
             if tok is None:
@@ -138,13 +140,15 @@ class Parser:
         node, lst_node = self.parse_and_or()
         self.last_lst = lst_node
         tok = self._peek()
-        if tok and tok.kind == "OP" and tok.value in ["\n", ";"]:
+        background = False
+        if tok and tok.kind == "OP" and tok.value in ["\n", ";", "&"]:
+            background = tok.value == "&"
             self._advance()
-        return node
+        return ListItem(node=node, background=background)
 
     def parse_list(self) -> tuple[ListNode, LstListNode]:
-        items: List[AndOr] = []
-        lst_items: List[LstAndOr] = []
+        items: List[ListItem] = []
+        lst_items: List[LstListItem] = []
         while True:
             if self._peek() is None:
                 break
@@ -152,19 +156,24 @@ class Parser:
                 self._advance()
                 continue
             item, lst_item = self.parse_and_or()
-            items.append(item)
-            lst_items.append(lst_item)
+            terminator = None
             tok = self._peek()
             if tok is None:
+                items.append(ListItem(node=item))
+                lst_items.append(LstListItem(node=lst_item))
                 break
-            if tok.kind == "OP" and tok.value in [";", "\n"]:
+            if tok.kind == "OP" and tok.value in [";", "\n", "&"]:
+                terminator = tok.value
                 self._advance()
-                continue
+            items.append(ListItem(node=item, background=(terminator == "&")))
+            lst_items.append(LstListItem(node=lst_item, terminator=terminator))
+            if terminator is None:
+                break
         return ListNode(items=items), LstListNode(items=lst_items)
 
     def parse_compound_list(self, stop_words: set[str]) -> tuple[ListNode, LstListNode]:
-        items: List[AndOr] = []
-        lst_items: List[LstAndOr] = []
+        items: List[ListItem] = []
+        lst_items: List[LstListItem] = []
         while True:
             tok = self._peek()
             if tok is None:
@@ -177,14 +186,19 @@ class Parser:
                 self._advance()
                 continue
             item, lst_item = self.parse_and_or()
-            items.append(item)
-            lst_items.append(lst_item)
+            terminator = None
             tok = self._peek()
             if tok is None:
+                items.append(ListItem(node=item))
+                lst_items.append(LstListItem(node=lst_item))
                 break
-            if tok.kind == "OP" and tok.value in [";", "\n"]:
+            if tok.kind == "OP" and tok.value in [";", "\n", "&"]:
+                terminator = tok.value
                 self._advance()
-                continue
+            items.append(ListItem(node=item, background=(terminator == "&")))
+            lst_items.append(LstListItem(node=lst_item, terminator=terminator))
+            if terminator is None:
+                break
         return ListNode(items=items), LstListNode(items=lst_items)
 
     def parse_and_or(self) -> tuple[AndOr, LstAndOr]:

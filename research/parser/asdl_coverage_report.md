@@ -28,7 +28,7 @@ Source: `research/parser/osh_syntax/frontend.syntax.asdl`
 - `Redirect`: implemented
 - `Simple`: implemented
 - `ExpandedAlias`: missing
-- `Sentence`: missing
+- `Sentence`: implemented
 - `ShAssignment`: implemented
 - `ControlFlow`: implemented
 - `Pipeline`: implemented

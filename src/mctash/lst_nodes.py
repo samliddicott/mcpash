@@ -187,8 +187,14 @@ class LstAndOr:
 
 
 @dataclass
+class LstListItem:
+    node: LstAndOr
+    terminator: str | None = None
+
+
+@dataclass
 class LstListNode:
-    items: List[LstAndOr]
+    items: List[LstListItem]
 
 
 @dataclass

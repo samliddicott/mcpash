@@ -49,6 +49,7 @@ def main() -> None:
             "Redirect",
             "ShAssignment",
             "ControlFlow",
+            "Sentence",
         },
         "redir_param": {"Word", "HereDoc"},
         "redir_loc": {"Fd"},

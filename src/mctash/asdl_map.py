@@ -16,6 +16,7 @@ from .lst_nodes import (
     LstFunctionDef,
     LstGroupCommand,
     LstIfCommand,
+    LstListItem,
     LstListNode,
     LstLiteralPart,
     LstParamPart,
@@ -37,7 +38,7 @@ from .lst_nodes import (
 def lst_script_to_asdl(script: LstScript) -> Dict[str, Any]:
     return {
         "type": "command.CommandList",
-        "children": [_lst_andor_to_command(node) for node in script.body.items],
+        "children": [_lst_list_item_to_command(node) for node in script.body.items],
         "note": "partial mapping to Oil/OSH ASDL",
     }
 
@@ -110,8 +111,19 @@ def _lst_command_to_command(node) -> Dict[str, Any]:
 def _lst_andor_list(node: LstListNode) -> Dict[str, Any]:
     return {
         "type": "command.CommandList",
-        "children": [_lst_andor_to_command(n) for n in node.items],
+        "children": [_lst_list_item_to_command(n) for n in node.items],
     }
+
+
+def _lst_list_item_to_command(item: LstListItem) -> Dict[str, Any]:
+    cmd = _lst_andor_to_command(item.node)
+    if item.terminator:
+        return {
+            "type": "command.Sentence",
+            "child": cmd,
+            "terminator": token(item.terminator),
+        }
+    return cmd
 
 
 def _simple_command(node: LstSimpleCommand) -> Dict[str, Any]:

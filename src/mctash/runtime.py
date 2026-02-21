@@ -79,10 +79,18 @@ class Runtime:
     def _exec_list(self, node: ListNode) -> int:
         status = 0
         for item in node.items:
-            status = self._exec_and_or(item)
+            status = self._exec_list_item(item)
             if status != 0 and self.options.get("e", False):
                 raise SystemExit(status)
         return status
+
+    def _exec_list_item(self, item) -> int:
+        if getattr(item, "background", False):
+            thread = threading.Thread(target=self._exec_and_or, args=(item.node,))
+            thread.daemon = True
+            thread.start()
+            return 0
+        return self._exec_and_or(item.node)
 
     def _exec_and_or(self, node: AndOr) -> int:
         status = self._exec_pipeline(node.pipelines[0])
@@ -318,7 +326,7 @@ class Runtime:
                 node = parser_impl.parse_next()
                 if node is None:
                     break
-                status = self._exec_and_or(node)
+                status = self._exec_list_item(node)
         except ReturnFromFunction as e:
             status = e.code
         finally:
@@ -837,7 +845,7 @@ class Runtime:
                 node = parser_impl.parse_next()
                 if node is None:
                     break
-                status = self._exec_and_or(node)
+                status = self._exec_list_item(node)
         except ReturnFromFunction as e:
             status = e.code
         return status

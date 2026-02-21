@@ -44,10 +44,10 @@ def main(argv: List[str] | None = None) -> int:
     try:
         parser_impl = Parser(source)
         while True:
-            node = parser_impl.parse_next()
-            if node is None:
+            item = parser_impl.parse_next()
+            if item is None:
                 break
-            rt.last_status = rt._exec_and_or(node)
+            rt.last_status = rt._exec_list_item(item)
         return rt.last_status
     except ParseError as e:
         print(f"parse error: {e}", file=sys.stderr)
