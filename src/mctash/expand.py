@@ -117,7 +117,33 @@ def _parse_dollar(text: str, i: int, quoted: bool) -> Tuple[WordPart, int]:
 def _extract_balanced(text: str, start: int, closing: str) -> Tuple[str, int]:
     depth = 1
     i = start
+    in_single = False
+    in_double = False
     while i < len(text):
+        ch = text[i]
+        if in_single:
+            if ch == "'":
+                in_single = False
+            i += 1
+            continue
+        if in_double:
+            if ch == "\\" and i + 1 < len(text):
+                i += 2
+                continue
+            if ch == '"':
+                in_double = False
+                i += 1
+                continue
+            i += 1
+            continue
+        if ch == "'":
+            in_single = True
+            i += 1
+            continue
+        if ch == '"':
+            in_double = True
+            i += 1
+            continue
         if text.startswith("$((", i):
             depth += 1
             i += 3

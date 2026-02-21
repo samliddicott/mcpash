@@ -115,6 +115,18 @@ class Parser:
         self._advance()
         return tok
 
+    def _expect_group_token(self, value: str) -> Token:
+        tok = self._peek()
+        if tok is None:
+            raise ParseError(f"expected {value!r} at {self._where(tok)}")
+        if tok.kind == "OP" and tok.value == value:
+            self._advance()
+            return tok
+        if self._is_word(tok) and tok.value == value:
+            self._advance()
+            return tok
+        raise ParseError(f"expected {value!r} at {self._where(tok)}")
+
     def _where(self, tok: Optional[Token]) -> str:
         if tok is None:
             return "eof"
@@ -262,10 +274,10 @@ class Parser:
         if self._is_word(tok) and tok.value == "case":
             command, lst_command = self.parse_case()
             return self._maybe_wrap_redirects(command, lst_command)
-        if tok and tok.kind == "OP" and tok.value == "{":
+        if tok and ((tok.kind == "OP" and tok.value == "{") or (self._is_word(tok) and tok.value == "{")):
             command, lst_command = self.parse_group()
             return self._maybe_wrap_redirects(command, lst_command)
-        if tok and tok.kind == "OP" and tok.value == "(":
+        if tok and ((tok.kind == "OP" and tok.value == "(") or (self._is_word(tok) and tok.value == "(")):
             command, lst_command = self.parse_subshell()
             return self._maybe_wrap_redirects(command, lst_command)
         if self._looks_like_function_def():
@@ -430,27 +442,28 @@ class Parser:
             lst_redir.here_doc = token_value
 
     def parse_group(self) -> tuple[GroupCommand, LstGroupCommand]:
-        self._expect_op("{")
+        self._expect_group_token("{")
         body, lst_body = self.parse_compound_list({"}"})
-        self._expect_op("}")
+        self._expect_group_token("}")
         return GroupCommand(body=body), LstGroupCommand(body=lst_body)
 
     def parse_function_def(self) -> tuple[FunctionDef, LstFunctionDef]:
         name_tok = self._advance()
         if name_tok is None or not self._is_word(name_tok):
             raise ParseError(f"expected function name at {self._where(name_tok)}")
-        self._expect_op("(")
-        self._expect_op(")")
+        name = name_tok.value
+        if name.endswith("()"):
+            name = name[:-2]
+        else:
+            self._expect_group_token("(")
+            self._expect_group_token(")")
         body_cmd, lst_body_cmd = self.parse_group()
-        return FunctionDef(name=name_tok.value, body=body_cmd.body), LstFunctionDef(
-            name=name_tok.value,
-            body=lst_body_cmd.body,
-        )
+        return FunctionDef(name=name, body=body_cmd.body), LstFunctionDef(name=name, body=lst_body_cmd.body)
 
     def parse_subshell(self) -> tuple[SubshellCommand, LstSubshellCommand]:
-        self._expect_op("(")
+        self._expect_group_token("(")
         body, lst_body = self.parse_compound_list({")"})
-        self._expect_op(")")
+        self._expect_group_token(")")
         return SubshellCommand(body=body), LstSubshellCommand(body=lst_body)
 
     def parse_for(self) -> tuple[ForCommand, LstForCommand]:
@@ -524,7 +537,7 @@ class Parser:
                 tok = self._peek()
                 if tok is None:
                     break
-                if tok.kind == "OP" and tok.value == ")":
+                if (tok.kind == "OP" and tok.value == ")") or (self._is_word(tok) and tok.value == ")"):
                     self._advance()
                     break
                 if self._is_word(tok):
@@ -627,9 +640,11 @@ class Parser:
         tok = self._peek()
         if tok is None or not self._is_word(tok):
             return False
+        if tok.value.endswith("()"):
+            return True
         tok1 = self._peek_n(1)
         tok2 = self._peek_n(2)
-        if tok1 and tok1.kind == "OP" and tok1.value == "(" and tok2 and tok2.kind == "OP" and tok2.value == ")":
+        if tok1 and self._is_word(tok1) and tok1.value == "(" and tok2 and self._is_word(tok2) and tok2.value == ")":
             return True
         return False
 

@@ -25,10 +25,6 @@ OPERATORS = {
     ";",
     "|",
     "&",
-    "(",
-    ")",
-    "{",
-    "}",
     "<",
     ">",
     "\n",
@@ -118,6 +114,11 @@ class TokenReader:
                     buf.append('"')
                     self._advance()
                     while self.i < len(self.source) and self._peek() != '"':
+                        if self._peek() == "$" and self._peek(1) == "(":
+                            chunk, new_i = _scan_command_sub(self.source, self.i)
+                            buf.append(chunk)
+                            self._advance_to(new_i)
+                            continue
                         if self._peek() == "\\" and self._peek(1) in ['"', "\\", "$", "`"]:
                             buf.append("\\")
                             self._advance()
@@ -131,24 +132,9 @@ class TokenReader:
                         self._advance()
                     continue
                 if ch == "$" and self._peek(1) == "(":
-                    buf.append("$(")
-                    self._advance(2)
-                    depth = 1
-                    while self.i < len(self.source) and depth > 0:
-                        if self._peek() == "(":
-                            depth += 1
-                            buf.append(self._peek())
-                            self._advance()
-                            continue
-                        if self._peek() == ")":
-                            depth -= 1
-                            buf.append(")")
-                            self._advance()
-                            if depth == 0:
-                                break
-                            continue
-                        buf.append(self._peek())
-                        self._advance()
+                    chunk, new_i = _scan_command_sub(self.source, self.i)
+                    buf.append(chunk)
+                    self._advance_to(new_i)
                     continue
                 buf.append(ch)
                 self._advance()
@@ -233,3 +219,50 @@ def _strip_quotes(text: str) -> str:
 
 def _is_quoted(text: str) -> bool:
     return len(text) >= 2 and ((text[0] == text[-1] == "'") or (text[0] == text[-1] == '"'))
+
+
+def _scan_command_sub(source: str, start: int) -> tuple[str, int]:
+    i = start
+    if not source.startswith("$(", start):
+        return source[start:start + 1], start + 1
+    i += 2
+    depth = 1
+    in_single = False
+    in_double = False
+    while i < len(source):
+        ch = source[i]
+        if in_single:
+            if ch == "'":
+                in_single = False
+            i += 1
+            continue
+        if in_double:
+            if ch == "\\" and i + 1 < len(source):
+                i += 2
+                continue
+            if ch == '"':
+                in_double = False
+                i += 1
+                continue
+            i += 1
+            continue
+        if ch == "'":
+            in_single = True
+            i += 1
+            continue
+        if ch == '"':
+            in_double = True
+            i += 1
+            continue
+        if source.startswith("$(", i):
+            depth += 1
+            i += 2
+            continue
+        if ch == ")":
+            depth -= 1
+            i += 1
+            if depth == 0:
+                return source[start:i], i
+            continue
+        i += 1
+    return source[start:i], i

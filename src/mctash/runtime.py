@@ -82,6 +82,8 @@ class Runtime:
         self.local_stack: List[Dict[str, str]] = []
         self.script_name: str = ""
         self.options: Dict[str, bool] = {}
+        self._cmd_sub_used: bool = False
+        self._cmd_sub_status: int = 0
 
     def set_positional_args(self, args: List[str]) -> None:
         self.positional = list(args)
@@ -96,6 +98,7 @@ class Runtime:
         status = 0
         for item in node.items:
             status = self._exec_list_item(item)
+            self.last_status = status
             if status != 0 and self.options.get("e", False):
                 raise SystemExit(status)
         return status
@@ -123,6 +126,11 @@ class Runtime:
         if len(node.commands) == 1:
             status = self._exec_command(node.commands[0])
             return 0 if (node.negate and status != 0) else (1 if node.negate and status == 0 else status)
+
+        if any(self._pipeline_needs_shell(cmd) for cmd in node.commands):
+            status = self._exec_pipeline_inprocess(node)
+            return 0 if (node.negate and status != 0) else (1 if node.negate and status == 0 else status)
+
         procs: List[subprocess.Popen] = []
         prev = None
         for i, cmd in enumerate(node.commands):
@@ -145,6 +153,117 @@ class Runtime:
         if node.negate:
             return 0 if status != 0 else 1
         return status
+
+    def _pipeline_needs_shell(self, cmd: Command) -> bool:
+        if not isinstance(cmd, SimpleCommand):
+            return True
+        argv = self._expand_argv(cmd.argv)
+        if not argv:
+            return False
+        name = argv[0]
+        return name in [
+            "cd",
+            "exit",
+            ":",
+            "return",
+            ".",
+            "source",
+            "local",
+            "eval",
+            "declare",
+            "[",
+            "[[",
+            "test",
+            "set",
+            "export",
+            "unset",
+            "shift",
+            "printf",
+            "read",
+            "true",
+            "false",
+            "command",
+            "break",
+            "continue",
+            "trap",
+        ] or name in self.functions
+
+    def _exec_pipeline_inprocess(self, node: Pipeline) -> int:
+        data: bytes | None = None
+        status = 0
+        for i, cmd in enumerate(node.commands):
+            if not isinstance(cmd, SimpleCommand):
+                status = self._exec_command(cmd)
+                data = None
+                continue
+            argv = self._expand_argv(cmd.argv)
+            if not argv:
+                status = 2
+                data = None
+                continue
+            last = i == len(node.commands) - 1
+            status, data = self._exec_simple_capture(cmd, argv, data, capture=not last)
+            if last and data is not None:
+                sys.stdout.write(data.decode("utf-8", errors="ignore"))
+                sys.stdout.flush()
+        return status
+
+    def _exec_simple_capture(self, cmd: SimpleCommand, argv: List[str], data: bytes | None, capture: bool) -> tuple[int, bytes | None]:
+        name = argv[0]
+        input_text = data.decode("utf-8", errors="ignore") if data is not None else None
+        if name in self.functions or name in [
+            "cd",
+            "exit",
+            ":",
+            "return",
+            ".",
+            "source",
+            "local",
+            "eval",
+            "declare",
+            "[",
+            "[[",
+            "test",
+            "set",
+            "export",
+            "unset",
+            "shift",
+            "printf",
+            "read",
+            "true",
+            "false",
+            "command",
+            "break",
+            "continue",
+            "trap",
+        ]:
+            saved_stdin = sys.stdin
+            saved_stdout = sys.stdout
+            try:
+                if input_text is None:
+                    sys.stdin = saved_stdin
+                else:
+                    sys.stdin = io.StringIO(input_text)
+                output = io.StringIO()
+                sys.stdout = output if capture else saved_stdout
+                if name in self.functions:
+                    status = self._run_function(name, argv[1:])
+                else:
+                    status = self._run_builtin(name, argv)
+                out_text = output.getvalue()
+                return status, out_text.encode("utf-8")
+            finally:
+                sys.stdin = saved_stdin
+                sys.stdout = saved_stdout
+
+        proc = subprocess.run(
+            argv,
+            input=data,
+            stdout=subprocess.PIPE if capture else None,
+            stderr=None,
+            env=self.env,
+        )
+        return proc.returncode, proc.stdout
 
     def _exec_command(self, node: Command) -> int:
         if isinstance(node, GroupCommand):
@@ -188,7 +307,7 @@ class Runtime:
         if isinstance(node, SimpleCommand):
             local_env = dict(self.env)
             for assign in node.assignments:
-                value = self._expand_word(assign.value)
+                value = self._expand_assignment_word(assign.value)
                 if assign.op == "+=":
                     local_env[assign.name] = local_env.get(assign.name, "") + value
                 else:
@@ -200,6 +319,10 @@ class Runtime:
                     with self._redirected_fds(node.redirects):
                         pass
                 self.env.update(local_env)
+                if self._cmd_sub_used:
+                    status = self._cmd_sub_status
+                    self._cmd_sub_used = False
+                    return status
                 return 0
             name = argv[0]
             if name in ["cd", "exit", ":", "return", ".", "source", "local", "eval", "declare", "[", "[[", "test", "set", "export", "unset", "shift", "printf", "read", "true", "false", "command", "break", "continue", "trap"]:
@@ -488,6 +611,18 @@ class Runtime:
         )
         return fields[0] if fields else ""
 
+    def _expand_assignment_word(self, text: str) -> str:
+        fields = expand_word(
+            text,
+            self._expand_param,
+            self._expand_braced_param,
+            self._expand_command_subst_text,
+            self._expand_arith,
+            lambda s: [s],
+            lambda s: [s],
+        )
+        return fields[0] if fields else ""
+
     def _split_ifs(self, text: str) -> List[str]:
         if text == "":
             return []
@@ -534,6 +669,8 @@ class Runtime:
     def _expand_param(self, name: str, quoted: bool):
         if name == "@":
             return list(self.positional)
+        if name == "?":
+            return str(self.last_status)
         value, is_set = self._get_param_state(name)
         if (not is_set or value == "") and self.options.get("u", False) and name not in ["@", "*", "#"]:
             raise RuntimeError(f"unbound variable: {name}")
@@ -582,7 +719,10 @@ class Runtime:
         return ""
 
     def _expand_command_subst_text(self, cmd: str) -> str:
-        return self._capture_eval(cmd).rstrip("\n")
+        output, status = self._capture_eval(cmd)
+        self._cmd_sub_used = True
+        self._cmd_sub_status = status
+        return output.rstrip("\n")
 
     def _expand_arith(self, expr: str) -> str:
         parts = expand_word(
@@ -647,6 +787,8 @@ class Runtime:
     def _get_param_state(self, name: str) -> tuple[str, bool]:
         if name == "#":
             return str(len(self.positional)), True
+        if name == "?":
+            return str(self.last_status), True
         if name == "@":
             return " ".join(self.positional), True
         if name == "*":
@@ -698,7 +840,7 @@ class Runtime:
                 if name.endswith("+"):
                     op = "+="
                     name = name[:-1]
-                expanded = self._expand_word(value)
+                expanded = self._expand_assignment_word(value)
                 if op == "+=":
                     current = self._get_var(name)
                     self._set_local(name, current + expanded)
@@ -749,7 +891,7 @@ class Runtime:
                 if name.endswith("+"):
                     op = "+="
                     name = name[:-1]
-                expanded = self._expand_word(value)
+                expanded = self._expand_assignment_word(value)
                 if op == "+=":
                     self.env[name] = self.env.get(name, "") + expanded
                 else:
@@ -854,6 +996,26 @@ class Runtime:
             result = (left == right)
             if tokens[1] == "!=":
                 result = not result
+        elif len(tokens) >= 3 and tokens[1] in ["-eq", "-ne", "-gt", "-ge", "-lt", "-le"]:
+            try:
+                left_num = int(tokens[0])
+                right_num = int(tokens[2])
+            except ValueError:
+                left_num = 0
+                right_num = 0
+            op = tokens[1]
+            if op == "-eq":
+                result = left_num == right_num
+            elif op == "-ne":
+                result = left_num != right_num
+            elif op == "-gt":
+                result = left_num > right_num
+            elif op == "-ge":
+                result = left_num >= right_num
+            elif op == "-lt":
+                result = left_num < right_num
+            elif op == "-le":
+                result = left_num <= right_num
         elif len(tokens) == 1:
             result = tokens[0] != ""
         return 0 if (result ^ negate) else 1
@@ -871,19 +1033,19 @@ class Runtime:
             status = e.code
         return status
 
-    def _capture_eval(self, source: str) -> str:
+    def _capture_eval(self, source: str) -> tuple[str, int]:
         r_fd, w_fd = os.pipe()
         saved_stdout = os.dup(1)
         os.dup2(w_fd, 1)
         os.close(w_fd)
         try:
-            self._eval_source(source)
+            status = self._eval_source(source)
         finally:
             os.dup2(saved_stdout, 1)
             os.close(saved_stdout)
         with os.fdopen(r_fd, "rb") as r:
             data = r.read()
-        return data.decode("utf-8", errors="ignore")
+        return data.decode("utf-8", errors="ignore"), status
 
     def _expand_command_subst(self, text: str) -> str:
         return self._expand_command_subst_text(text)
