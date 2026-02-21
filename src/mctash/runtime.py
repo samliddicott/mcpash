@@ -169,7 +169,7 @@ class Runtime:
                 self.env.update(local_env)
                 return 0
             name = argv[0]
-            if name in ["cd", "exit", ":", "return", ".", "source", "local", "eval", "declare", "[", "[[", "test", "set", "export", "unset", "shift", "printf", "read", "true", "false", "command", "break", "continue"]:
+            if name in ["cd", "exit", ":", "return", ".", "source", "local", "eval", "declare", "[", "[[", "test", "set", "export", "unset", "shift", "printf", "read", "true", "false", "command", "break", "continue", "trap"]:
                 try:
                     with self._redirected_fds(node.redirects):
                         status = self._run_builtin(name, argv)
@@ -271,6 +271,8 @@ class Runtime:
             return 1
         if name == "command":
             return self._run_command_builtin(argv[1:])
+        if name == "trap":
+            return self._run_trap(argv[1:])
         if name in ["[", "[[", "test"]:
             return self._run_test(name, argv[1:])
         if name == "exit":
@@ -665,6 +667,10 @@ class Runtime:
         if not args:
             return 0
         return self._run_external(args, dict(self.env), [])
+
+    def _run_trap(self, args: List[str]) -> int:
+        # Minimal stub: accept and ignore for now.
+        return 0
 
     def _run_test(self, name: str, args: List[str]) -> int:
         tokens = list(args)
