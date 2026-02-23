@@ -175,6 +175,7 @@ class Runtime:
         self._last_bg_pid: int | None = None
         self._bg_pids: Dict[int, int] = {}
         self._bg_pid_to_job: Dict[int, int] = {}
+        self._bg_started_at: Dict[int, float] = {}
         self._thread_ctx = threading.local()
         self._fd_redirect_depth: int = 0
         self._force_broken_pipe: bool = False
@@ -416,6 +417,7 @@ class Runtime:
                         self._bg_jobs[job_id] = th
                         self._bg_pids[job_id] = proc.pid
                         self._bg_pid_to_job[proc.pid] = job_id
+                        self._bg_started_at[job_id] = time.monotonic()
                         self._last_bg_job = job_id
                         self._last_bg_pid = proc.pid
                         th.start()
@@ -439,6 +441,7 @@ class Runtime:
             thread = threading.Thread(target=_run_bg)
             thread.daemon = True
             self._bg_jobs[job_id] = thread
+            self._bg_started_at[job_id] = time.monotonic()
             self._last_bg_job = job_id
             thread.start()
             # Best-effort: wait briefly for background job leader PID so $! is
@@ -1312,6 +1315,7 @@ class Runtime:
                     if isinstance(job_id, int):
                         self._bg_pids[job_id] = proc.pid
                         self._bg_pid_to_job[proc.pid] = job_id
+                        self._bg_started_at.setdefault(job_id, time.monotonic())
                         if job_id == self._last_bg_job:
                             self._last_bg_pid = proc.pid
                     return proc.wait()
@@ -1457,19 +1461,32 @@ class Runtime:
         for token in targets:
             pid: int | None = None
             from_job = False
+            job_id_for_target: int | None = None
             if token == "%%":
                 if self._last_bg_job is not None:
-                    pid = self._bg_pids.get(self._last_bg_job)
+                    job_id_for_target = self._last_bg_job
+                    pid = self._bg_pids.get(job_id_for_target)
                     from_job = True
             elif token.startswith("%") and token[1:].isdigit():
                 job_id = int(token[1:])
                 pid = self._bg_pids.get(job_id)
+                job_id_for_target = job_id
                 from_job = True
             elif token.isdigit():
                 pid = int(token)
+                job_id_for_target = self._bg_pid_to_job.get(pid)
             if pid is None:
                 status = 1
                 continue
+            if (
+                job_id_for_target is not None
+                and sig_num in [getattr(signal, "SIGHUP", -1), getattr(signal, "SIGTERM", -1)]
+            ):
+                started = self._bg_started_at.get(job_id_for_target)
+                if started is not None:
+                    age = time.monotonic() - started
+                    if age < 0.15:
+                        time.sleep(0.15 - age)
             try:
                 if from_job:
                     try:
