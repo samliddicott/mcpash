@@ -573,15 +573,22 @@ class Runtime:
                 self.env = saved_env
 
         try:
-            proc = subprocess.run(
-                argv,
-                input=data,
-                stdout=subprocess.PIPE if capture else None,
-                stderr=None,
-                env=cmd_env,
-                check=False,
-            )
-            return proc.returncode, proc.stdout
+            stdin = subprocess.PIPE if data is not None else None
+            stdout = subprocess.PIPE if capture else None
+            stdin, stdout, stderr, to_close = self._apply_redirects(cmd.redirects, stdin, stdout, None)
+            try:
+                proc = subprocess.Popen(argv, stdin=stdin, stdout=stdout, stderr=stderr, env=cmd_env)
+                if stdin == subprocess.PIPE:
+                    out, _ = proc.communicate(data if data is not None else b"")
+                else:
+                    out, _ = proc.communicate()
+                return proc.returncode, out
+            finally:
+                for f in to_close:
+                    try:
+                        f.close()
+                    except Exception:
+                        pass
         except FileNotFoundError:
             print(f"{argv[0]}: not found", file=sys.stderr)
             return 127, b""
