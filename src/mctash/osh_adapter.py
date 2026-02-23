@@ -228,6 +228,8 @@ def _word_part_to_text(node: Dict[str, Any]) -> str:
     if t == "word_part.BracedVarSub":
         name = node.get("name", "")
         op = node.get("op")
+        if op == "__len__":
+            return "${#" + name + "}"
         if op:
             arg = node.get("arg")
             arg_s = _word_to_text(arg) if isinstance(arg, dict) else ""

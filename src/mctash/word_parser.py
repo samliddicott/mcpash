@@ -246,6 +246,10 @@ def _split_braced_var(inner: str) -> tuple[str | None, str | None, str | None]:
     i = 0
     if not inner:
         return None, None, None
+    if inner.startswith("#") and len(inner) > 1:
+        name = inner[1:]
+        if _valid_param_name(name):
+            return name, "__len__", None
     if inner[0] in "@*#?$!-" and len(inner) >= 1:
         name = inner[0]
         i = 1

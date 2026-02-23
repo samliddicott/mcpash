@@ -33,6 +33,10 @@ def main(argv: List[str] | None = None) -> int:
                 if item is None:
                     break
                 rt.current_line = parser_impl.last_line
+                if rt.options.get("n", False):
+                    rt.last_status = 0
+                    rt._trap_status_hint = 0
+                    continue
                 if parser_impl.last_lst_item is None:
                     raise ParseError("internal parse error: missing LST list item")
                 asdl_item = lst_list_item_to_asdl(parser_impl.last_lst_item, strict=True)
@@ -100,6 +104,10 @@ def main(argv: List[str] | None = None) -> int:
             if item is None:
                 break
             rt.current_line = parser_impl.last_line
+            if rt.options.get("n", False):
+                rt.last_status = 0
+                rt._trap_status_hint = 0
+                continue
             if parser_impl.last_lst_item is None:
                 raise ParseError("internal parse error: missing LST list item")
             asdl_item = lst_list_item_to_asdl(parser_impl.last_lst_item, strict=True)

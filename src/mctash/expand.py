@@ -128,6 +128,9 @@ def _parse_dollar(text: str, i: int, quoted: bool) -> Tuple[WordPart, int]:
         if end == -1:
             return WordPart("LIT", "$", quoted), i + 1
         inner = text[i + 2 : end]
+        if inner.startswith("#") and len(inner) > 1:
+            name = inner[1:]
+            return WordPart("BRACED", name, quoted, op="__len__", arg=None), end + 1
         name, op, arg = _split_braced(inner)
         if name is None:
             return WordPart("LIT", "$", quoted), i + 1

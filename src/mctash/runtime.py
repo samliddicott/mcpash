@@ -223,6 +223,11 @@ class Runtime:
     def _exec_list(self, node: ListNode) -> int:
         status = 0
         for item in node.items:
+            if self.options.get("n", False):
+                status = 0
+                self.last_status = status
+                self._trap_status_hint = status
+                continue
             status = self._exec_list_item(item)
             self.last_status = status
             if status != 0:
@@ -681,6 +686,9 @@ class Runtime:
                 if node is None:
                     break
                 self.current_line = parser_impl.last_line
+                if self.options.get("n", False):
+                    status = 0
+                    continue
                 if parser_impl.last_lst_item is None:
                     raise ParseError("internal parse error: missing LST list item")
                 asdl_item = lst_list_item_to_asdl(parser_impl.last_lst_item, strict=True)
@@ -1018,6 +1026,9 @@ class Runtime:
     def _expand_braced_param(
         self, name: str, op: str | None, arg: str | None, quoted: bool
     ) -> str | List[str]:
+        if op == "__len__":
+            value, _ = self._get_param_state(name)
+            return str(len(value))
         if name == "@" and op is None:
             return list(self.positional)
         if name.isdigit():
@@ -1345,7 +1356,8 @@ class Runtime:
                 continue
             out.append(fmt[i])
             i += 1
-        data = "".join(out).encode("utf-8", errors="ignore")
+        # Use latin-1 to preserve byte-oriented escapes like \\xHH.
+        data = "".join(out).encode("latin-1", errors="ignore")
         try:
             os.write(1, data)
             return 0
@@ -1380,6 +1392,17 @@ class Runtime:
                         i += 1
                 out.append(chr(int(digits, 8)))
                 continue
+            if esc == "x":
+                i += 1
+                hex_digits = ""
+                while i < len(text) and len(hex_digits) < 2 and text[i] in "0123456789abcdefABCDEF":
+                    hex_digits += text[i]
+                    i += 1
+                if hex_digits:
+                    out.append(chr(int(hex_digits, 16)))
+                else:
+                    out.append("x")
+                continue
             mapping = {
                 "n": "\n",
                 "t": "\t",
@@ -1413,7 +1436,7 @@ class Runtime:
 
     def _run_read(self, args: List[str]) -> int:
         if not args:
-            return 1
+            args = ["REPLY"]
         line = self._readline_fd0()
         if line is None:
             return 1
@@ -1589,6 +1612,9 @@ class Runtime:
                 if node is None:
                     break
                 self.current_line = parser_impl.last_line
+                if self.options.get("n", False):
+                    status = 0
+                    continue
                 if parser_impl.last_lst_item is None:
                     raise ParseError("internal parse error: missing LST list item")
                 asdl_item = lst_list_item_to_asdl(parser_impl.last_lst_item, strict=True)
