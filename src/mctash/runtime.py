@@ -372,8 +372,6 @@ class Runtime:
             if not isinstance(cmd, SimpleCommand):
                 return self._exec_command(cmd)
             cmd_env = dict(self.env)
-            for scope in self.local_stack:
-                cmd_env.update(scope)
             for assign in cmd.assignments:
                 value = self._expand_assignment_word(assign.value)
                 if assign.op == "+=":
@@ -649,8 +647,6 @@ class Runtime:
 
             if argv and argv[0] == "exec" and len(argv) <= 1 and node.redirects:
                 local_env = dict(self.env)
-                for scope in self.local_stack:
-                    local_env.update(scope)
                 saved_env = self.env
                 try:
                     self.env = local_env
@@ -669,15 +665,18 @@ class Runtime:
                             self.env[name] = self.env.get(name, "") + value
                         else:
                             self.env[name] = value
-                    saved_env.clear()
-                    saved_env.update(self.env)
+                    should_persist_env = any(
+                        not (r.op == ">&" and (r.fd is None or r.fd == 1) and r.target == "1")
+                        for r in node.redirects
+                    )
+                    if should_persist_env:
+                        saved_env.clear()
+                        saved_env.update(self.env)
                     return 0
                 finally:
                     self.env = saved_env
 
             local_env = dict(self.env)
-            for scope in self.local_stack:
-                local_env.update(scope)
             saved_env = self.env
             try:
                 self.env = local_env
@@ -2253,10 +2252,16 @@ class Runtime:
             if not mode_vars:
                 self.functions.pop(name, None)
                 continue
+            removed_local = False
+            for scope in reversed(self.local_stack):
+                if name in scope:
+                    scope[name] = ""
+                    removed_local = True
+                    break
+            if removed_local:
+                continue
             if name in self.env:
                 del self.env[name]
-            for scope in self.local_stack:
-                scope.pop(name, None)
             if name == "OPTIND":
                 self._getopts_state = None
         return status

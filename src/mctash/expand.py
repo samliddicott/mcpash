@@ -489,19 +489,36 @@ def expand_word(
                     if not active:
                         new_fields.append((f, q, active, gm))
                         continue
+                    all_parts: List[str] = []
+                    saw_delim_only = False
                     for v in value:
                         pieces = split_ifs(v)
                         if not pieces:
                             if v != "":
-                                # Delimiter-only text still creates a field boundary.
-                                if f != "" or q:
-                                    new_fields.append((f, q, False, gm))
-                                new_fields.append(("", q, True, False))
-                            else:
-                                new_fields.append((f, q, True, gm))
+                                saw_delim_only = True
+                            continue
+                        all_parts.extend(pieces)
+                    if not all_parts:
+                        if saw_delim_only:
+                            if f != "" or q:
+                                new_fields.append((f, q, False, gm))
+                            new_fields.append(("", q, True, False))
                         else:
-                            for p in pieces:
-                                new_fields.append((f + p, q, True, gm or has_glob_meta(p)))
+                            new_fields.append((f, q, True, gm))
+                        continue
+                    if saw_delim_only and (f != "" or q):
+                        new_fields.append((f, q, False, gm))
+                        f = ""
+                    if len(all_parts) == 1:
+                        p = all_parts[0]
+                        new_fields.append((f + p, q, True, gm or has_glob_meta(p)))
+                    else:
+                        first = all_parts[0]
+                        new_fields.append((f + first, q, False, gm or has_glob_meta(first)))
+                        for p in all_parts[1:-1]:
+                            new_fields.append((p, q, False, has_glob_meta(p)))
+                        last = all_parts[-1]
+                        new_fields.append((last, q, True, has_glob_meta(last)))
             fields = new_fields
             continue
 
@@ -541,7 +558,17 @@ def expand_word(
                         continue
                     if len(pieces) == 1:
                         p = pieces[0]
-                        new_fields.append((f + p, q, True, gm or has_glob_meta(p)))
+                        pos = value.find(p)
+                        lead_delim = pos > 0
+                        trail_delim = (pos + len(p)) < len(value)
+                        if lead_delim and (f != "" or q):
+                            new_fields.append((f, q, False, gm))
+                            f = ""
+                        if trail_delim and idx < len(parts) - 1:
+                            new_fields.append((f + p, q, False, gm or has_glob_meta(p)))
+                            new_fields.append(("", q, True, False))
+                        else:
+                            new_fields.append((f + p, q, True, gm or has_glob_meta(p)))
                     else:
                         first = pieces[0]
                         new_fields.append((f + first, q, False, gm or has_glob_meta(first)))

@@ -203,6 +203,20 @@ class TokenReader:
                             buf.append(chunk)
                             self._advance_to(new_i)
                             continue
+                        if (
+                            self._peek() == "$"
+                            and self._peek(1) == "\\"
+                            and self._peek(2) == "\n"
+                            and self._peek(3) == "("
+                        ):
+                            self._advance(3)
+                            if _looks_like_arith_after_lparen(self.source, self.i):
+                                chunk, new_i = _scan_arith_sub_from_lparen(self.source, self.i)
+                            else:
+                                chunk, new_i = _scan_command_sub_from_lparen(self.source, self.i)
+                            buf.append(chunk)
+                            self._advance_to(new_i)
+                            continue
                         if self._peek() == "$" and self._peek(1) == "{":
                             chunk, new_i = _scan_braced_sub(self.source, self.i)
                             buf.append(chunk)
@@ -251,6 +265,15 @@ class TokenReader:
                         chunk, new_i = _scan_arith_sub(self.source, self.i)
                     else:
                         chunk, new_i = _scan_command_sub(self.source, self.i)
+                    buf.append(chunk)
+                    self._advance_to(new_i)
+                    continue
+                if ch == "$" and self._peek(1) == "\\" and self._peek(2) == "\n" and self._peek(3) == "(":
+                    self._advance(3)
+                    if _looks_like_arith_after_lparen(self.source, self.i):
+                        chunk, new_i = _scan_arith_sub_from_lparen(self.source, self.i)
+                    else:
+                        chunk, new_i = _scan_command_sub_from_lparen(self.source, self.i)
                     buf.append(chunk)
                     self._advance_to(new_i)
                     continue
@@ -497,6 +520,107 @@ def _scan_command_sub(source: str, start: int) -> tuple[str, int]:
             continue
         i += 1
     return source[start:i], i
+
+
+def _scan_command_sub_from_lparen(source: str, lparen_idx: int) -> tuple[str, int]:
+    if lparen_idx >= len(source) or source[lparen_idx] != "(":
+        return "$(", lparen_idx
+    i = lparen_idx + 1
+    depth = 1
+    in_single = False
+    in_double = False
+    while i < len(source):
+        ch = source[i]
+        if in_single:
+            if ch == "'":
+                in_single = False
+            i += 1
+            continue
+        if in_double:
+            if ch == "\\" and i + 1 < len(source):
+                i += 2
+                continue
+            if ch == "`":
+                _, new_i = _scan_backtick_sub(source, i)
+                i = new_i
+                continue
+            if ch == '"':
+                in_double = False
+                i += 1
+                continue
+            i += 1
+            continue
+        if ch == "'":
+            in_single = True
+            i += 1
+            continue
+        if ch == '"':
+            in_double = True
+            i += 1
+            continue
+        if ch == "`":
+            _, new_i = _scan_backtick_sub(source, i)
+            i = new_i
+            continue
+        if ch == "\\" and i + 1 < len(source):
+            i += 2
+            continue
+        if source.startswith("$(", i):
+            _, new_i = _scan_command_sub(source, i)
+            i = new_i
+            continue
+        if ch == "(":
+            depth += 1
+            i += 1
+            continue
+        if ch == ")":
+            depth -= 1
+            i += 1
+            if depth == 0:
+                return "$(" + source[lparen_idx + 1 : i - 1] + ")", i
+            continue
+        i += 1
+    return "$(" + source[lparen_idx + 1 :] + ")", len(source)
+
+
+def _looks_like_arith_after_lparen(source: str, lparen_idx: int) -> bool:
+    if lparen_idx >= len(source) or source[lparen_idx] != "(":
+        return False
+    i = lparen_idx + 1
+    while i + 1 < len(source) and source[i] == "\\" and source[i + 1] == "\n":
+        i += 2
+    return i < len(source) and source[i] == "("
+
+
+def _scan_arith_sub_from_lparen(source: str, lparen_idx: int) -> tuple[str, int]:
+    if not _looks_like_arith_after_lparen(source, lparen_idx):
+        return _scan_command_sub_from_lparen(source, lparen_idx)
+    i = lparen_idx + 1
+    while i + 1 < len(source) and source[i] == "\\" and source[i + 1] == "\n":
+        i += 2
+    i += 1  # second '('
+    depth = 1
+    expr: list[str] = []
+    while i < len(source):
+        if i + 1 < len(source) and source[i] == "\\" and source[i + 1] == "\n":
+            i += 2
+            continue
+        if source.startswith("((", i):
+            depth += 1
+            expr.append("((")
+            i += 2
+            continue
+        if source.startswith("))", i):
+            depth -= 1
+            if depth == 0:
+                i += 2
+                return "$((" + "".join(expr) + "))", i
+            expr.append("))")
+            i += 2
+            continue
+        expr.append(source[i])
+        i += 1
+    return "$((" + "".join(expr) + "))", len(source)
 
 
 def _scan_arith_sub(source: str, start: int) -> tuple[str, int]:
