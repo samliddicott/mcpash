@@ -45,9 +45,9 @@ def parse_word_parts(text: str) -> List[WordPart]:
                 if text[i + 1] == "\n":
                     i += 2
                     continue
-                i += 1
-                buf.append(text[i])
-                i += 1
+                flush(False)
+                parts.append(WordPart("LIT", text[i + 1], quoted=True))
+                i += 2
                 continue
             if ch == "`":
                 flush(False)
@@ -260,9 +260,12 @@ def expand_word(
     glob_field: Callable[[str], List[str]],
 ) -> List[str]:
     parts = parse_word_parts(text)
-    # field tuple: (text, quoted, active)
+    # field tuple: (text, quoted_for_split, active, has_unquoted_glob_meta)
     # active=False means later word parts shouldn't be appended to this field.
-    fields: List[Tuple[str, bool, bool]] = [("", False, True)]
+    fields: List[Tuple[str, bool, bool, bool]] = [("", False, True, False)]
+
+    def has_glob_meta(s: str) -> bool:
+        return any(ch in s for ch in ["*", "?", "["])
     for idx, part in enumerate(parts):
         if part.kind == "LIT":
             value: Union[str, List[str]] = part.value
@@ -278,70 +281,73 @@ def expand_word(
             value = part.value
 
         if part.kind == "PARAM" and part.value == "@" and part.quoted and isinstance(value, list):
-            new_fields: List[Tuple[str, bool, bool]] = []
-            for f, q, active in fields:
+            new_fields: List[Tuple[str, bool, bool, bool]] = []
+            for f, q, active, gm in fields:
                 if not active:
-                    new_fields.append((f, q, active))
+                    new_fields.append((f, q, active, gm))
                     continue
                 if not value:
                     if f == "" and idx == len(parts) - 1 and not q:
                         continue
-                    new_fields.append((f, True or q, True))
+                    new_fields.append((f, True or q, True, gm))
                     continue
                 if len(value) == 1:
-                    new_fields.append((f + value[0], True or q, True))
+                    new_fields.append((f + value[0], True or q, True, gm))
                     continue
-                new_fields.append((f + value[0], True or q, False))
+                new_fields.append((f + value[0], True or q, False, gm))
                 for v in value[1:-1]:
-                    new_fields.append((v, True, False))
-                new_fields.append((value[-1], True, True))
+                    new_fields.append((v, True, False, False))
+                new_fields.append((value[-1], True, True, False))
             fields = new_fields
             continue
 
         if isinstance(value, list):
-            new_fields: List[Tuple[str, bool, bool]] = []
+            new_fields = []
             if part.quoted:
-                for f, q, active in fields:
+                for f, q, active, gm in fields:
                     if not active:
-                        new_fields.append((f, q, active))
+                        new_fields.append((f, q, active, gm))
                         continue
                     for v in value:
-                        new_fields.append((f + v, True or q, True))
+                        new_fields.append((f + v, True or q, True, gm))
             else:
-                for f, q, active in fields:
+                for f, q, active, gm in fields:
                     if not active:
-                        new_fields.append((f, q, active))
+                        new_fields.append((f, q, active, gm))
                         continue
                     for v in value:
                         pieces = split_ifs(v)
                         if not pieces:
-                            new_fields.append((f, q, True))
+                            new_fields.append((f, q, True, gm))
                         else:
                             for p in pieces:
-                                new_fields.append((f + p, q, True))
+                                new_fields.append((f + p, q, True, gm or has_glob_meta(p)))
             fields = new_fields
             continue
 
         if part.quoted:
-            fields = [(f + value, True or q, active) if active else (f, True or q, active) for f, q, active in fields]
+            fields = [
+                (f + value, True or q, active, gm) if active else (f, True or q, active, gm)
+                for f, q, active, gm in fields
+            ]
         else:
             pieces = split_ifs(value)
             if not pieces:
-                fields = [(f, q, active) for f, q, active in fields]
+                fields = [(f, q, active, gm) for f, q, active, gm in fields]
             else:
-                new_fields: List[Tuple[str, bool, bool]] = []
-                for f, q, active in fields:
+                new_fields = []
+                for f, q, active, gm in fields:
                     if not active:
-                        new_fields.append((f, q, active))
+                        new_fields.append((f, q, active, gm))
                         continue
                     for p in pieces:
-                        new_fields.append((f + p, q, True))
+                        new_fields.append((f + p, q, True, gm or has_glob_meta(p)))
                 fields = new_fields
 
     expanded: List[str] = []
-    for f, quoted, _ in fields:
-        if quoted:
-            expanded.append(f)
-        else:
+    for f, quoted, _, has_meta in fields:
+        if has_meta:
             expanded.extend(glob_field(f))
+        else:
+            expanded.append(f)
     return expanded

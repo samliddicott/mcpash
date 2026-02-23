@@ -35,7 +35,7 @@ from .ast_nodes import (
     WhileCommand,
     Word,
 )
-from .expand import expand_word, _extract_balanced, _split_braced
+from .expand import expand_word, parse_word_parts, _extract_balanced, _split_braced
 from .parser import ParseError, Parser
 from .asdl_map import AsdlMappingError, lst_list_item_to_asdl
 from .osh_adapter import OshAdapterError, asdl_item_to_list_item
@@ -1270,7 +1270,8 @@ class Runtime:
                 self._glob_field,
             )
             # Unquoted empty expansions are elided (e.g. $1 when unset).
-            if not any(ch in w.text for ch in ["'", '"', "\\"]):
+            parts = parse_word_parts(w.text)
+            if not any(p.quoted for p in parts):
                 fields = [f for f in fields if f != ""]
             argv.extend(fields)
         return argv
@@ -1365,6 +1366,12 @@ class Runtime:
     def _expand_braced_param(
         self, name: str, op: str | None, arg: str | None, quoted: bool
     ) -> str | List[str]:
+        def _expand_alt_word() -> str:
+            expanded = self._expand_assignment_word(arg_text)
+            if any(ch in arg_text for ch in ["'", '"', "\\"]):
+                expanded = expanded.replace("[", "[[]").replace("*", "[*]").replace("?", "[?]")
+            return expanded
+
         if op == "__len__":
             value, _ = self._get_param_state(name)
             return str(len(value))
@@ -1379,11 +1386,11 @@ class Runtime:
             arg_text = arg or ""
             if op in ["-", ":-"]:
                 if not is_set or (op == ":-" and value == ""):
-                    return self._expand_word(arg_text)
+                    return _expand_alt_word()
                 return value
             if op in ["+", ":+"]:
                 if is_set and (op == "+" or value != ""):
-                    return self._expand_word(arg_text)
+                    return _expand_alt_word()
                 return ""
             return value
         value, is_set = self._get_param_state(name)
@@ -1392,11 +1399,11 @@ class Runtime:
             return value
         if op in ["-", ":-"]:
             if not is_set or (op == ":-" and value == ""):
-                return self._expand_word(arg_text)
+                return _expand_alt_word()
             return value
         if op in ["+", ":+"]:
             if is_set and (op == "+" or value != ""):
-                return self._expand_word(arg_text)
+                return _expand_alt_word()
             return ""
         if op in ["=", ":="]:
             if not is_set or (op == ":=" and value == ""):
