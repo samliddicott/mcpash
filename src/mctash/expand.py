@@ -600,7 +600,10 @@ def expand_word(
                         # Delimiter-only text still creates a field boundary.
                         if f != "" or q:
                             new_fields.append((f, q, False, gm))
-                        new_fields.append(("", q, True, False))
+                        # Trailing IFS-whitespace delimiter should not force an
+                        # extra empty field at end-of-word.
+                        if idx < len(parts) - 1 or (f != "" or not q):
+                            new_fields.append(("", q, True, False))
                     fields = new_fields
                 else:
                     fields = [(f, q, active, gm) for f, q, active, gm in fields]
@@ -634,8 +637,11 @@ def expand_word(
 
     expanded: List[str] = []
     for f, quoted, _, has_meta in fields:
-        if quoted:
-            expanded.append(_unprotect_glob_meta(f) if unprotect_literals else f)
+        rendered = _unprotect_glob_meta(f) if unprotect_literals else f
+        # Globbing is driven by unquoted meta presence, not by whether any
+        # quoted fragments contributed to the same output field.
+        if has_meta:
+            expanded.extend(glob_field(f if unprotect_literals else rendered))
         else:
-            expanded.extend(glob_field(_unprotect_glob_meta(f) if unprotect_literals else f))
+            expanded.append(rendered)
     return expanded

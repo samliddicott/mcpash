@@ -2333,20 +2333,24 @@ class Runtime:
             if arg == "--":
                 idx += 1
                 break
-            if arg == "-v":
-                mode_vars = True
-                idx += 1
-                continue
-            if arg == "-f":
-                mode_vars = False
-                idx += 1
-                continue
             if arg.startswith("-"):
                 if arg == "-":
                     self._report_error("-: bad variable name", line=self.current_line, context="unset")
-                else:
+                    return 2
+                valid = True
+                for ch in arg[1:]:
+                    if ch == "v":
+                        mode_vars = True
+                    elif ch == "f":
+                        mode_vars = False
+                    else:
+                        valid = False
+                        break
+                if not valid:
                     self._report_error(f"illegal option {arg}", line=self.current_line, context="unset")
-                return 2
+                    return 2
+                idx += 1
+                continue
             break
         status = 0
         for name in args[idx:]:
