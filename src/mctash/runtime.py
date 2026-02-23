@@ -109,6 +109,8 @@ class Runtime:
         "type",
         "alias",
         "unalias",
+        "wait",
+        "kill",
     }
 
     def __init__(self) -> None:
@@ -133,6 +135,12 @@ class Runtime:
         self._subshell_depth: int = 0
         self.c_string_mode: bool = False
         self._trap_status_hint: int = 0
+        self._next_job_id: int = 1
+        self._bg_jobs: Dict[int, threading.Thread] = {}
+        self._bg_status: Dict[int, int] = {}
+        self._last_bg_job: int | None = None
+        self._bg_pids: Dict[int, int] = {}
+        self._thread_ctx = threading.local()
         self._install_signal_handlers()
 
     def set_positional_args(self, args: List[str]) -> None:
@@ -242,8 +250,22 @@ class Runtime:
 
     def _exec_list_item(self, item) -> int:
         if getattr(item, "background", False):
-            thread = threading.Thread(target=self._exec_and_or, args=(item.node, False))
+            job_id = self._next_job_id
+            self._next_job_id += 1
+
+            def _run_bg() -> None:
+                self._thread_ctx.job_id = job_id
+                try:
+                    status = self._exec_and_or(item.node, False)
+                    self._bg_status[job_id] = status
+                finally:
+                    self._bg_pids.pop(job_id, None)
+                    self._thread_ctx.job_id = None
+
+            thread = threading.Thread(target=_run_bg)
             thread.daemon = True
+            self._bg_jobs[job_id] = thread
+            self._last_bg_job = job_id
             thread.start()
             return 0
         return self._exec_and_or(item.node)
@@ -469,6 +491,14 @@ class Runtime:
                 finally:
                     self.env = saved_env
             if name in self.BUILTINS:
+                if name == "exec" and len(argv) <= 1:
+                    saved_env = self.env
+                    try:
+                        self.env = local_env
+                        self._apply_persistent_redirects(node.redirects)
+                        return 0
+                    finally:
+                        self.env = saved_env
                 is_special = name in self.SPECIAL_BUILTINS
                 if is_special:
                     self.env = local_env
@@ -622,6 +652,10 @@ class Runtime:
             return self._run_alias(argv[1:])
         if name == "unalias":
             return self._run_unalias(argv[1:])
+        if name == "wait":
+            return self._run_wait(argv[1:])
+        if name == "kill":
+            return self._run_kill(argv[1:])
         if name in ["[", "[[", "test"]:
             return self._run_test(name, argv[1:])
         if name == "exit":
@@ -744,8 +778,11 @@ class Runtime:
         stdin, stdout = self._apply_redirects(redirects, None, None)
         try:
             try:
-                proc = subprocess.run(argv, env=env, stdin=stdin, stdout=stdout)
-                return proc.returncode
+                proc = subprocess.Popen(argv, env=env, stdin=stdin, stdout=stdout)
+                job_id = getattr(self._thread_ctx, "job_id", None)
+                if isinstance(job_id, int):
+                    self._bg_pids[job_id] = proc.pid
+                return proc.wait()
             except FileNotFoundError:
                 self._report_error(f"{argv[0]}: not found", line=self.current_line, context=context)
                 return 127
@@ -793,6 +830,50 @@ class Runtime:
                 print(f"unalias: {name}: not found", file=sys.stderr)
                 status = 1
         return status
+
+    def _run_wait(self, args: List[str]) -> int:
+        def wait_job(job_id: int) -> int:
+            th = self._bg_jobs.get(job_id)
+            if th is not None:
+                th.join()
+            return self._bg_status.get(job_id, 0)
+
+        if not args:
+            last = 0
+            for job_id in sorted(self._bg_jobs.keys()):
+                last = wait_job(job_id)
+            return last
+        last = 0
+        for arg in args:
+            token = arg[1:] if arg.startswith("%") else arg
+            if not token.isdigit():
+                return 127
+            job_id = int(token)
+            if job_id not in self._bg_jobs and job_id not in self._bg_status:
+                return 127
+            last = wait_job(job_id)
+        return last
+
+    def _run_kill(self, args: List[str]) -> int:
+        if not args:
+            return 1
+        token = args[-1]
+        job_tok = token[1:] if token.startswith("%") else token
+        if job_tok.isdigit() and int(job_tok) in self._bg_jobs:
+            job_id = int(job_tok)
+            pid = self._bg_pids.get(job_id)
+            if pid is None:
+                return 1
+            try:
+                os.kill(pid, signal.SIGTERM)
+                return 0
+            except Exception:
+                return 1
+        try:
+            proc = subprocess.run(["kill"] + args, env=self.env)
+            return proc.returncode
+        except Exception:
+            return 1
 
     def _expand_aliases(self, argv: List[str]) -> List[str]:
         if not argv:
@@ -874,6 +955,33 @@ class Runtime:
             else:
                 msg = f"{path}: {reason}"
             raise RuntimeError(self._format_error(msg, line=self.current_line))
+
+    def _apply_persistent_redirects(self, redirects: List[Redirect]) -> None:
+        for redir in redirects:
+            fd = redir.fd if redir.fd is not None else (0 if redir.op in ["<", "<<", "<&"] else 1)
+            if redir.op == "<":
+                f = self._open_for_redir(redir.target, "rb", redir.op)
+                os.dup2(f.fileno(), fd)
+                f.close()
+            elif redir.op == ">":
+                f = self._open_for_redir(redir.target, "wb", redir.op)
+                os.dup2(f.fileno(), fd)
+                f.close()
+            elif redir.op == ">>":
+                f = self._open_for_redir(redir.target, "ab", redir.op)
+                os.dup2(f.fileno(), fd)
+                f.close()
+            elif redir.op == "<<":
+                content = self._expand_heredoc(redir)
+                f = tempfile.TemporaryFile()
+                f.write(content.encode("utf-8"))
+                f.seek(0)
+                os.dup2(f.fileno(), fd)
+                f.close()
+            elif redir.op == ">&":
+                self._dup_fd(redir, is_output=True, default_fd=fd)
+            elif redir.op == "<&":
+                self._dup_fd(redir, is_output=False, default_fd=fd)
 
     @contextmanager
     def _redirected_fds(self, redirects: List[Redirect]):
@@ -1015,7 +1123,7 @@ class Runtime:
         if name == "$":
             return str(os.getpid())
         if name == "!":
-            return ""
+            return str(self._last_bg_job) if self._last_bg_job is not None else ""
         if name == "-":
             return "".join(sorted(k for k, v in self.options.items() if v))
         value, is_set = self._get_param_state(name)
@@ -1440,9 +1548,16 @@ class Runtime:
         line = self._readline_fd0()
         if line is None:
             return 1
-        parts = line.rstrip("\n").split()
+        raw = line.rstrip("\n")
+        if len(args) == 1:
+            self.env[args[0]] = raw
+            return 0
+        parts = raw.split()
         for i, name in enumerate(args):
-            value = parts[i] if i < len(parts) else ""
+            if i < len(args) - 1:
+                value = parts[i] if i < len(parts) else ""
+            else:
+                value = " ".join(parts[i:]) if i < len(parts) else ""
             self.env[name] = value
         return 0
 

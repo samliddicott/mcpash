@@ -34,7 +34,7 @@ def asdl_item_to_list_item(node: Dict[str, Any]) -> ListItem:
             raise OshAdapterError("command.Sentence missing child")
         list_item = asdl_item_to_list_item(child)
         term = node.get("terminator")
-        if term == "&":
+        if _token_text(term) == "&":
             list_item.background = True
         return list_item
     if node.get("type") != "command.AndOr":
@@ -237,7 +237,8 @@ def _word_part_to_text(node: Dict[str, Any]) -> str:
         return "${" + name + "}"
     if t == "word_part.CommandSub":
         src = node.get("child_source") or ""
-        return "$(" + src + ")"
+        escaped = src.replace("\\", "\\\\").replace("`", "\\`")
+        return "`" + escaped + "`"
     if t == "word_part.ArithSub":
         return "$((" + (node.get("expr_source") or node.get("code") or "") + "))"
     return ""
