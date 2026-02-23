@@ -96,6 +96,7 @@ class Runtime:
         "unset",
         "shift",
         "printf",
+        "echo",
         "read",
         "true",
         "false",
@@ -111,6 +112,7 @@ class Runtime:
 
     def __init__(self) -> None:
         self.last_status = 0
+        self.last_nonzero_status = 0
         self.env: Dict[str, str] = dict(os.environ)
         self.positional: List[str] = []
         self.functions: Dict[str, ListNode] = {}
@@ -128,6 +130,8 @@ class Runtime:
         self._running_trap: bool = False
         self._trap_entry_status: int | None = None
         self._subshell_depth: int = 0
+        self.c_string_mode: bool = False
+        self._trap_status_hint: int = 0
         self._install_signal_handlers()
 
     def set_positional_args(self, args: List[str]) -> None:
@@ -149,10 +153,22 @@ class Runtime:
             signal.signal(signal.SIGTERM, self._signal_handler)
         except Exception:
             pass
+        try:
+            signal.signal(signal.SIGINT, self._signal_handler)
+        except Exception:
+            pass
 
     def _signal_handler(self, signum, frame) -> None:
         if signum == signal.SIGTERM:
-            self._pending_signals.append("TERM")
+            if "TERM" in self.traps:
+                self._pending_signals.append("TERM")
+            else:
+                raise SystemExit(128 + signum)
+        if signum == signal.SIGINT:
+            if "INT" in self.traps:
+                self._pending_signals.append("INT")
+            else:
+                raise SystemExit(128 + signum)
 
     def _format_error(self, msg: str, line: int | None = None, context: str | None = None) -> str:
         if self.source_stack:
@@ -164,6 +180,8 @@ class Runtime:
         if context:
             prefix = f"{prefix}: {context}"
         if line is not None:
+            if self.c_string_mode and line > 0 and len(self.source_stack) <= 1:
+                line = line - 1
             prefix = f"{prefix}: line {line}"
         return f"{prefix}: {msg}"
 
@@ -171,22 +189,23 @@ class Runtime:
         print(self._format_error(msg, line=line, context=context), file=sys.stderr)
 
     def _run_pending_traps(self) -> None:
-        if self._running_trap:
-            return
         if self._subshell_depth > 0:
             return
         while self._pending_signals:
             sig = self._pending_signals.pop(0)
             action = self.traps.get(sig)
             if action:
-                self._run_trap_action(action, self.last_status)
+                entry_status = self._trap_status_hint
+                if entry_status == 0:
+                    entry_status = self.last_status if self.last_status != 0 else self.last_nonzero_status
+                self._run_trap_action(action, entry_status)
 
     def _run_trap_action(self, action: str, entry_status: int) -> int:
         self._running_trap = True
         saved = self._trap_entry_status
         self._trap_entry_status = entry_status
         try:
-            return self._eval_source(action, propagate_exit=True)
+            return self._eval_source(action, propagate_exit=True, propagate_return=True)
         finally:
             self._trap_entry_status = saved
             self._running_trap = False
@@ -196,16 +215,21 @@ class Runtime:
         if not action:
             return status
         try:
-            trap_status = self._run_trap_action(action, status)
-            return trap_status
+            self._run_trap_action(action, status)
+            return status
         except SystemExit as e:
             return int(e.code) if e.code is not None else 0
+        except ReturnFromFunction:
+            return status
 
     def _exec_list(self, node: ListNode) -> int:
         status = 0
         for item in node.items:
             status = self._exec_list_item(item)
             self.last_status = status
+            if status != 0:
+                self.last_nonzero_status = status
+            self._trap_status_hint = status
             if not getattr(item, "background", False):
                 self._run_pending_traps()
             if status != 0 and self.options.get("e", False):
@@ -215,24 +239,36 @@ class Runtime:
 
     def _exec_list_item(self, item) -> int:
         if getattr(item, "background", False):
-            thread = threading.Thread(target=self._exec_and_or, args=(item.node,))
+            thread = threading.Thread(target=self._exec_and_or, args=(item.node, False))
             thread.daemon = True
             thread.start()
             return 0
         return self._exec_and_or(item.node)
 
-    def _exec_and_or(self, node: AndOr) -> int:
+    def _exec_and_or(self, node: AndOr, track_status: bool = True) -> int:
         status = self._exec_pipeline(node.pipelines[0])
-        self.last_status = status
+        if track_status:
+            self.last_status = status
+            if status != 0:
+                self.last_nonzero_status = status
+            self._trap_status_hint = status
         for op, pipeline in zip(node.operators, node.pipelines[1:]):
             if op == "&&":
                 if status == 0:
                     status = self._exec_pipeline(pipeline)
-                    self.last_status = status
+                    if track_status:
+                        self.last_status = status
+                        if status != 0:
+                            self.last_nonzero_status = status
+                        self._trap_status_hint = status
             elif op == "||":
                 if status != 0:
                     status = self._exec_pipeline(pipeline)
-                    self.last_status = status
+                    if track_status:
+                        self.last_status = status
+                        if status != 0:
+                            self.last_nonzero_status = status
+                        self._trap_status_hint = status
         return status
 
     def _exec_pipeline(self, node: Pipeline) -> int:
@@ -371,6 +407,7 @@ class Runtime:
                         break
                     try:
                         last = self._exec_list(node.body)
+                        self._run_pending_traps()
                     except ContinueLoop as e:
                         if e.count > 1:
                             raise ContinueLoop(e.count - 1)
@@ -457,6 +494,9 @@ class Runtime:
             except RuntimeError as e:
                 print(str(e), file=sys.stderr)
                 status = 1
+            if status != 0:
+                self.last_nonzero_status = status
+            self._trap_status_hint = status
             return self._run_exit_trap(status)
         finally:
             self._subshell_depth -= 1
@@ -483,6 +523,7 @@ class Runtime:
                 self.env[node.name] = item
                 try:
                     status = self._exec_list(node.body)
+                    self._run_pending_traps()
                 except ContinueLoop as e:
                     if e.count > 1:
                         raise ContinueLoop(e.count - 1)
@@ -534,6 +575,8 @@ class Runtime:
             return self._run_shift(argv[1:])
         if name == "printf":
             return self._run_printf(argv[1:])
+        if name == "echo":
+            return self._run_echo(argv[1:])
         if name == "read":
             return self._run_read(argv[1:])
         if name == "true":
@@ -569,6 +612,8 @@ class Runtime:
                 code = int(argv[1])
             elif self._trap_entry_status is not None:
                 code = self._trap_entry_status
+                if code == 0 and self.last_nonzero_status != 0:
+                    code = self.last_nonzero_status
             else:
                 code = self.last_status
             raise SystemExit(code)
@@ -577,6 +622,8 @@ class Runtime:
                 code = int(argv[1])
             elif self._trap_entry_status is not None:
                 code = self._trap_entry_status
+                if code == 0 and self.last_nonzero_status != 0:
+                    code = self.last_nonzero_status
             else:
                 code = self.last_status
             raise ReturnFromFunction(code)
@@ -622,8 +669,13 @@ class Runtime:
                 asdl_item = lst_list_item_to_asdl(parser_impl.last_lst_item, strict=True)
                 status = self._exec_list_item(asdl_item_to_list_item(asdl_item))
                 self.last_status = status
+                if status != 0:
+                    self.last_nonzero_status = status
+                self._trap_status_hint = status
                 if not getattr(node, "background", False):
                     self._run_pending_traps()
+                if status != 0 and self.options.get("e", False):
+                    raise SystemExit(status)
         except ReturnFromFunction as e:
             status = e.code
         except (AsdlMappingError, OshAdapterError):
@@ -675,6 +727,8 @@ class Runtime:
             except PermissionError:
                 self._report_error(f"{argv[0]}: Permission denied", line=self.current_line, context=context)
                 return 126
+            except KeyboardInterrupt:
+                return 130
         finally:
             if stdin not in (None, sys.stdin):
                 stdin.close()
@@ -1191,7 +1245,7 @@ class Runtime:
     def _run_printf(self, args: List[str]) -> int:
         if not args:
             return 0
-        fmt = args[0]
+        fmt = self._decode_backslash_escapes(args[0])
         vals = args[1:]
         out = []
         i = 0
@@ -1217,8 +1271,65 @@ class Runtime:
                 continue
             out.append(fmt[i])
             i += 1
-        sys.stdout.write("".join(out))
-        return 0
+        data = "".join(out).encode("utf-8", errors="ignore")
+        try:
+            os.write(1, data)
+            return 0
+        except OSError as e:
+            if getattr(e, "errno", None) == 32:
+                print("ash: write error: Broken pipe", file=sys.stderr)
+                return 1
+            raise
+
+    def _decode_backslash_escapes(self, text: str) -> str:
+        out: List[str] = []
+        i = 0
+        while i < len(text):
+            ch = text[i]
+            if ch != "\\":
+                out.append(ch)
+                i += 1
+                continue
+            i += 1
+            if i >= len(text):
+                out.append("\\")
+                break
+            esc = text[i]
+            if esc in "01234567":
+                digits = esc
+                i += 1
+                if i < len(text) and text[i] in "01234567":
+                    digits += text[i]
+                    i += 1
+                    if i < len(text) and text[i] in "01234567":
+                        digits += text[i]
+                        i += 1
+                out.append(chr(int(digits, 8)))
+                continue
+            mapping = {
+                "n": "\n",
+                "t": "\t",
+                "r": "\r",
+                "b": "\b",
+                "a": "\a",
+                "f": "\f",
+                "v": "\v",
+                "\\": "\\",
+            }
+            out.append(mapping.get(esc, esc))
+            i += 1
+        return "".join(out)
+
+    def _run_echo(self, args: List[str]) -> int:
+        data = " ".join(args) + "\n"
+        try:
+            os.write(1, data.encode("utf-8", errors="ignore"))
+            return 0
+        except OSError as e:
+            if getattr(e, "errno", None) == 32:
+                print("ash: write error: Broken pipe", file=sys.stderr)
+                return 1
+            raise
 
     def _run_read(self, args: List[str]) -> int:
         if not args:
@@ -1384,7 +1495,12 @@ class Runtime:
             result = tokens[0] != ""
         return 0 if (result ^ negate) else 1
 
-    def _eval_source(self, source: str, propagate_exit: bool = False) -> int:
+    def _eval_source(
+        self,
+        source: str,
+        propagate_exit: bool = False,
+        propagate_return: bool = False,
+    ) -> int:
         parser_impl = Parser(source)
         status = 0
         try:
@@ -1398,10 +1514,17 @@ class Runtime:
                 asdl_item = lst_list_item_to_asdl(parser_impl.last_lst_item, strict=True)
                 status = self._exec_list_item(asdl_item_to_list_item(asdl_item))
                 self.last_status = status
+                if status != 0:
+                    self.last_nonzero_status = status
+                self._trap_status_hint = status
                 if not getattr(node, "background", False):
                     self._run_pending_traps()
+                if status != 0 and self.options.get("e", False):
+                    raise SystemExit(status)
         except ReturnFromFunction as e:
             status = e.code
+            if propagate_return:
+                raise
         except SystemExit as e:
             status = int(e.code) if e.code is not None else 0
             if propagate_exit:

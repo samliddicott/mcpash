@@ -23,6 +23,7 @@ def main(argv: List[str] | None = None) -> int:
         script_name = argv[2] if len(argv) > 2 else ""
         script_args = argv[3:] if len(argv) > 3 else []
         rt = Runtime()
+        rt.c_string_mode = True
         rt.set_script_name(script_name)
         rt.set_positional_args(script_args)
         try:
@@ -36,8 +37,13 @@ def main(argv: List[str] | None = None) -> int:
                     raise ParseError("internal parse error: missing LST list item")
                 asdl_item = lst_list_item_to_asdl(parser_impl.last_lst_item, strict=True)
                 rt.last_status = rt._exec_list_item(asdl_item_to_list_item(asdl_item))
+                if rt.last_status != 0:
+                    rt.last_nonzero_status = rt.last_status
+                rt._trap_status_hint = rt.last_status
                 if not getattr(item, "background", False):
                     rt._run_pending_traps()
+                if rt.last_status != 0 and rt.options.get("e", False):
+                    raise SystemExit(rt.last_status)
             return rt._run_exit_trap(rt.last_status)
         except ParseError as e:
             msg = str(e)
@@ -49,13 +55,15 @@ def main(argv: List[str] | None = None) -> int:
                 print(f"parse error: {msg}", file=sys.stderr)
             return 2
         except RuntimeError as e:
-            print(f"runtime error: {e}", file=sys.stderr)
+            print(str(e), file=sys.stderr)
             return 1
         except (BreakLoop, ContinueLoop):
             return 1
         except SystemExit as e:
             code = int(e.code) if e.code is not None else 0
             return rt._run_exit_trap(code)
+        except KeyboardInterrupt:
+            return 130
 
     cli_opts, script, script_args = _split_cli_argv(argv)
     shebang_args: List[str] = []
@@ -82,6 +90,7 @@ def main(argv: List[str] | None = None) -> int:
         return 0
 
     rt = Runtime()
+    rt.c_string_mode = False
     rt.set_script_name(args.script or "")
     rt.set_positional_args(args.script_args)
     try:
@@ -95,8 +104,13 @@ def main(argv: List[str] | None = None) -> int:
                 raise ParseError("internal parse error: missing LST list item")
             asdl_item = lst_list_item_to_asdl(parser_impl.last_lst_item, strict=True)
             rt.last_status = rt._exec_list_item(asdl_item_to_list_item(asdl_item))
+            if rt.last_status != 0:
+                rt.last_nonzero_status = rt.last_status
+            rt._trap_status_hint = rt.last_status
             if not getattr(item, "background", False):
                 rt._run_pending_traps()
+            if rt.last_status != 0 and rt.options.get("e", False):
+                raise SystemExit(rt.last_status)
         return rt._run_exit_trap(rt.last_status)
     except ParseError as e:
         msg = str(e)
@@ -114,13 +128,15 @@ def main(argv: List[str] | None = None) -> int:
         print(f"asdl error: {e}", file=sys.stderr)
         return 2
     except RuntimeError as e:
-        print(f"runtime error: {e}", file=sys.stderr)
+        print(str(e), file=sys.stderr)
         return 1
     except (BreakLoop, ContinueLoop):
         return 1
     except SystemExit as e:
         code = int(e.code) if e.code is not None else 0
         return rt._run_exit_trap(code)
+    except KeyboardInterrupt:
+        return 130
 
 
 if __name__ == "__main__":
