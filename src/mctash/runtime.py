@@ -25,6 +25,7 @@ from .ast_nodes import (
     GroupCommand,
     IfCommand,
     ListNode,
+    ListItem,
     Pipeline,
     Redirect,
     RedirectCommand,
@@ -261,7 +262,8 @@ class Runtime:
             def _run_bg() -> None:
                 self._thread_ctx.job_id = job_id
                 try:
-                    status = self._exec_and_or(item.node, False)
+                    bg_body = ListNode(items=[ListItem(node=item.node, background=False)])
+                    status = self._run_subshell(bg_body)
                     self._bg_status[job_id] = status
                 finally:
                     self._bg_pids.pop(job_id, None)
@@ -337,7 +339,7 @@ class Runtime:
                 print(f"{argv[0]}: not found", file=sys.stderr)
                 return 127
             procs.append(proc)
-            if prev is not None:
+            if prev is not None and prev.stdout is not None:
                 prev.stdout.close()
             prev = proc
         status = procs[-1].wait()
@@ -377,9 +379,9 @@ class Runtime:
                 continue
             argv = self._expand_argv(cmd.argv)
             if not argv:
-                status = 2
+                status = self._run_subshell(ListNode(items=[ListItem(node=AndOr(pipelines=[Pipeline(commands=[cmd], negate=False)], operators=[]), background=False)]))
                 statuses.append(status)
-                data = None
+                data = b""
                 continue
             last = i == len(node.commands) - 1
             status, data = self._exec_simple_capture(cmd, argv, data, capture=not last)
@@ -756,7 +758,7 @@ class Runtime:
                     path = candidate
                     break
         try:
-            with open(path, "r", encoding="utf-8") as f:
+            with open(path, "r", encoding="utf-8", errors="surrogateescape") as f:
                 source = f.read()
         except OSError:
             return 1
@@ -827,27 +829,25 @@ class Runtime:
         if argv[0] == "":
             self._report_error(": Permission denied", line=self.current_line, context=context)
             return 127
-        stdin, stdout = self._apply_redirects(redirects, None, None)
         try:
-            try:
-                proc = subprocess.Popen(argv, env=env, stdin=stdin, stdout=stdout)
-                job_id = getattr(self._thread_ctx, "job_id", None)
-                if isinstance(job_id, int):
-                    self._bg_pids[job_id] = proc.pid
-                return proc.wait()
-            except FileNotFoundError:
-                self._report_error(f"{argv[0]}: not found", line=self.current_line, context=context)
-                return 127
-            except PermissionError:
-                self._report_error(f"{argv[0]}: Permission denied", line=self.current_line, context=context)
-                return 126
-            except KeyboardInterrupt:
-                return 130
-        finally:
-            if stdin not in (None, sys.stdin):
-                stdin.close()
-            if stdout not in (None, sys.stdout):
-                stdout.close()
+            with self._redirected_fds(redirects):
+                try:
+                    proc = subprocess.Popen(argv, env=env)
+                    job_id = getattr(self._thread_ctx, "job_id", None)
+                    if isinstance(job_id, int):
+                        self._bg_pids[job_id] = proc.pid
+                    return proc.wait()
+                except FileNotFoundError:
+                    self._report_error(f"{argv[0]}: not found", line=self.current_line, context=context)
+                    return 127
+                except PermissionError:
+                    self._report_error(f"{argv[0]}: Permission denied", line=self.current_line, context=context)
+                    return 126
+                except KeyboardInterrupt:
+                    return 130
+        except RuntimeError as e:
+            print(str(e), file=sys.stderr)
+            return 1
 
     def _run_alias(self, args: List[str]) -> int:
         status = 0
@@ -965,25 +965,32 @@ class Runtime:
         for redir in redirects:
             target_fd = redir.fd
             if target_fd is None:
-                target_fd = 0 if redir.op in ["<", "<<", "<&"] else 1
+                target_fd = 0 if redir.op in ["<", "<<", "<&", "<>"] else 1
+            target = self._expand_assignment_word(redir.target) if redir.target else redir.target
             if redir.op == "<":
-                f = self._open_for_redir(redir.target, "rb", redir.op)
+                f = self._open_for_redir(target, "rb", redir.op)
                 if target_fd in (None, 0):
                     stdin = f
                 else:
-                    os.dup2(f.fileno(), target_fd)
+                    self._dup2_file(f, target_fd)
+            elif redir.op == "<>":
+                f = self._open_for_redir_readwrite(target)
+                if target_fd in (None, 0):
+                    stdin = f
+                else:
+                    self._dup2_file(f, target_fd)
             elif redir.op == ">":
-                f = self._open_for_redir(redir.target, "wb", redir.op)
+                f = self._open_for_redir(target, "wb", redir.op)
                 if target_fd in (None, 1):
                     stdout = f
                 else:
-                    os.dup2(f.fileno(), target_fd)
+                    self._dup2_file(f, target_fd)
             elif redir.op == ">>":
-                f = self._open_for_redir(redir.target, "ab", redir.op)
+                f = self._open_for_redir(target, "ab", redir.op)
                 if target_fd in (None, 1):
                     stdout = f
                 else:
-                    os.dup2(f.fileno(), target_fd)
+                    self._dup2_file(f, target_fd)
             elif redir.op == "<<":
                 content = self._expand_heredoc(redir)
                 f = tempfile.TemporaryFile()
@@ -992,7 +999,7 @@ class Runtime:
                 if target_fd in (None, 0):
                     stdin = f
                 else:
-                    os.dup2(f.fileno(), target_fd)
+                    self._dup2_file(f, target_fd)
             elif redir.op == ">&":
                 self._dup_fd(redir, is_output=True)
             elif redir.op == "<&":
@@ -1005,6 +1012,9 @@ class Runtime:
         except OSError as e:
             reason = (e.strerror or "error").lower()
             if e.errno == 2:
+                if op in [">", ">>", "<>"]:
+                    msg = f"can't create {path}: nonexistent directory"
+                    raise RuntimeError(self._format_error(msg, line=self.current_line))
                 reason = "no such file"
             if op == "<":
                 msg = f"can't open {path}: {reason}"
@@ -1012,28 +1022,47 @@ class Runtime:
                 msg = f"{path}: {reason}"
             raise RuntimeError(self._format_error(msg, line=self.current_line))
 
+    def _open_for_redir_readwrite(self, path: str) -> object:
+        try:
+            return open(path, "r+b")
+        except FileNotFoundError:
+            try:
+                return open(path, "w+b")
+            except OSError as e:
+                reason = (e.strerror or "error").lower()
+                raise RuntimeError(self._format_error(f"can't create {path}: {reason}", line=self.current_line))
+        except OSError as e:
+            reason = (e.strerror or "error").lower()
+            raise RuntimeError(self._format_error(f"can't open {path}: {reason}", line=self.current_line))
+
+    def _dup2_file(self, f: object, fd: int) -> None:
+        src = f.fileno()
+        if src != fd:
+            os.dup2(src, fd)
+            f.close()
+
     def _apply_persistent_redirects(self, redirects: List[Redirect]) -> None:
         for redir in redirects:
-            fd = redir.fd if redir.fd is not None else (0 if redir.op in ["<", "<<", "<&"] else 1)
+            fd = redir.fd if redir.fd is not None else (0 if redir.op in ["<", "<<", "<&", "<>"] else 1)
+            target = self._expand_assignment_word(redir.target) if redir.target else redir.target
             if redir.op == "<":
-                f = self._open_for_redir(redir.target, "rb", redir.op)
-                os.dup2(f.fileno(), fd)
-                f.close()
+                f = self._open_for_redir(target, "rb", redir.op)
+                self._dup2_file(f, fd)
+            elif redir.op == "<>":
+                f = self._open_for_redir_readwrite(target)
+                self._dup2_file(f, fd)
             elif redir.op == ">":
-                f = self._open_for_redir(redir.target, "wb", redir.op)
-                os.dup2(f.fileno(), fd)
-                f.close()
+                f = self._open_for_redir(target, "wb", redir.op)
+                self._dup2_file(f, fd)
             elif redir.op == ">>":
-                f = self._open_for_redir(redir.target, "ab", redir.op)
-                os.dup2(f.fileno(), fd)
-                f.close()
+                f = self._open_for_redir(target, "ab", redir.op)
+                self._dup2_file(f, fd)
             elif redir.op == "<<":
                 content = self._expand_heredoc(redir)
                 f = tempfile.TemporaryFile()
                 f.write(content.encode("utf-8"))
                 f.seek(0)
-                os.dup2(f.fileno(), fd)
-                f.close()
+                self._dup2_file(f, fd)
             elif redir.op == ">&":
                 self._dup_fd(redir, is_output=True, default_fd=fd)
             elif redir.op == "<&":
@@ -1048,7 +1077,8 @@ class Runtime:
         self._fd_redirect_depth += 1
         try:
             for redir in redirects:
-                fd = redir.fd if redir.fd is not None else (0 if redir.op in ["<", "<<", "<&"] else 1)
+                fd = redir.fd if redir.fd is not None else (0 if redir.op in ["<", "<<", "<&", "<>"] else 1)
+                target = self._expand_assignment_word(redir.target) if redir.target else redir.target
                 try:
                     saved_fd = os.dup(fd)
                 except OSError:
@@ -1056,24 +1086,23 @@ class Runtime:
                     saved_fd = -1
                 saved.append((fd, saved_fd))
                 if redir.op == "<":
-                    f = self._open_for_redir(redir.target, "rb", redir.op)
-                    os.dup2(f.fileno(), fd)
-                    f.close()
+                    f = self._open_for_redir(target, "rb", redir.op)
+                    self._dup2_file(f, fd)
+                elif redir.op == "<>":
+                    f = self._open_for_redir_readwrite(target)
+                    self._dup2_file(f, fd)
                 elif redir.op == ">":
-                    f = self._open_for_redir(redir.target, "wb", redir.op)
-                    os.dup2(f.fileno(), fd)
-                    f.close()
+                    f = self._open_for_redir(target, "wb", redir.op)
+                    self._dup2_file(f, fd)
                 elif redir.op == ">>":
-                    f = self._open_for_redir(redir.target, "ab", redir.op)
-                    os.dup2(f.fileno(), fd)
-                    f.close()
+                    f = self._open_for_redir(target, "ab", redir.op)
+                    self._dup2_file(f, fd)
                 elif redir.op == "<<":
                     content = self._expand_heredoc(redir)
                     f = tempfile.TemporaryFile()
                     f.write(content.encode("utf-8"))
                     f.seek(0)
-                    os.dup2(f.fileno(), fd)
-                    f.close()
+                    self._dup2_file(f, fd)
                 elif redir.op == ">&":
                     self._dup_fd(redir, is_output=True, default_fd=fd)
                 elif redir.op == "<&":
@@ -1333,16 +1362,24 @@ class Runtime:
     def _dup_fd(self, redir: Redirect, is_output: bool, default_fd: int | None = None) -> None:
         fd = redir.fd if redir.fd is not None else (1 if is_output else 0)
         target = redir.target
-        if target == "-":
-            os.close(fd)
-            return
-        if target.isdigit():
-            os.dup2(int(target), fd)
-            return
-        mode = "wb" if is_output else "rb"
-        f = open(target, mode)
-        os.dup2(f.fileno(), fd)
-        f.close()
+        try:
+            if target == "-":
+                try:
+                    os.close(fd)
+                except OSError:
+                    pass
+                return
+            if target.isdigit():
+                os.dup2(int(target), fd)
+                return
+            mode = "wb" if is_output else "rb"
+            f = open(target, mode)
+            os.dup2(f.fileno(), fd)
+            f.close()
+        except OSError as e:
+            if target.isdigit():
+                raise RuntimeError(self._format_error(f"dup2({target},{fd}): {e.strerror}", line=self.current_line))
+            raise RuntimeError(self._format_error(f"{target}: {e.strerror}", line=self.current_line))
 
     def _get_var(self, name: str) -> str:
         for scope in reversed(self.local_stack):
@@ -1577,7 +1614,8 @@ class Runtime:
             if getattr(e, "errno", None) == 32:
                 print("ash: write error: Broken pipe", file=sys.stderr)
                 return 1
-            raise
+            print(f"ash: write error: {e.strerror}", file=sys.stderr)
+            return 1
 
     def _decode_backslash_escapes(self, text: str) -> str:
         out: List[str] = []
@@ -1650,7 +1688,8 @@ class Runtime:
             if getattr(e, "errno", None) == 32:
                 print("ash: write error: Broken pipe", file=sys.stderr)
                 return 1
-            raise
+            print(f"ash: write error: {e.strerror}", file=sys.stderr)
+            return 1
 
     def _run_read(self, args: List[str]) -> int:
         if not args:

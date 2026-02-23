@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import List, Optional, Union
 
 
@@ -155,6 +155,7 @@ class LstControlFlowCommand:
 @dataclass
 class LstShAssignmentCommand:
     assignments: List[LstAssignment]
+    redirects: List[LstRedirect] = field(default_factory=list)
 
 
 LstCommand = Union[

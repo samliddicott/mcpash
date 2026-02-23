@@ -329,7 +329,7 @@ class Parser:
                 break
             if self._is_word(tok) and tok.value.isdigit():
                 next_tok = self._peek_n(1)
-                if next_tok and next_tok.kind == "OP" and next_tok.value in ["<", ">", ">>", "<<", "<<-", ">&", "<&"]:
+                if next_tok and next_tok.kind == "OP" and next_tok.value in ["<", ">", ">>", "<>", "<<", "<<-", ">&", "<&"]:
                     fd = int(tok.value)
                     self._advance()
                     op_tok = self._advance()
@@ -344,7 +344,7 @@ class Parser:
                     redirects.append(redir)
                     lst_redirects.append(lst_redir)
                     continue
-            if tok.kind == "OP" and tok.value in ["<", ">", ">>", "<<", "<<-", ">&", "<&"]:
+            if tok.kind == "OP" and tok.value in ["<", ">", ">>", "<>", "<<", "<<-", ">&", "<&"]:
                 op = tok.value
                 self._advance()
                 target_tok = self._peek()
@@ -388,7 +388,7 @@ class Parser:
         simple_cmd = SimpleCommand(argv=argv, assignments=assignments, redirects=redirects)
         lst_simple_cmd = LstSimpleCommand(argv=lst_argv, assignments=lst_assignments, redirects=lst_redirects)
         if not argv and assignments:
-            return simple_cmd, LstShAssignmentCommand(assignments=lst_assignments)
+            return simple_cmd, LstShAssignmentCommand(assignments=lst_assignments, redirects=lst_redirects)
         if argv and argv[0].text in ["break", "continue", "return", "exit"]:
             arg = lst_argv[1] if len(lst_argv) > 1 else None
             return simple_cmd, LstControlFlowCommand(keyword=argv[0].text, arg=arg)
@@ -779,7 +779,7 @@ class Parser:
                 break
             if self._is_word(tok) and tok.value.isdigit():
                 next_tok = self._peek_n(1)
-                if next_tok and next_tok.kind == "OP" and next_tok.value in ["<", ">", ">>", "<<", "<<-", ">&", "<&"]:
+                if next_tok and next_tok.kind == "OP" and next_tok.value in ["<", ">", ">>", "<>", "<<", "<<-", ">&", "<&"]:
                     fd = int(tok.value)
                     self._advance()
                     op_tok = self._advance()
@@ -794,7 +794,7 @@ class Parser:
                     redirects.append(redir)
                     lst_redirects.append(lst_redir)
                     continue
-            if tok.kind == "OP" and tok.value in ["<", ">", ">>", "<<", "<<-", ">&", "<&"]:
+            if tok.kind == "OP" and tok.value in ["<", ">", ">>", "<>", "<<", "<<-", ">&", "<&"]:
                 op_tok = tok
                 self._advance()
                 target_tok = self._peek()

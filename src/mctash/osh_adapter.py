@@ -150,7 +150,8 @@ def _asdl_command(node: Dict[str, Any]):
                     op=pair.get("op", "="),
                 )
             )
-        return SimpleCommand(argv=[], assignments=assignments, redirects=[])
+        redirects = [_asdl_redirect(r) for r in node.get("redirects") or []]
+        return SimpleCommand(argv=[], assignments=assignments, redirects=redirects)
     raise OshAdapterError(f"unsupported ASDL command node {t}")
 
 

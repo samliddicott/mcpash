@@ -119,6 +119,7 @@ def _lst_command_to_command(node) -> Dict[str, Any]:
         return {
             "type": "command.ShAssignment",
             "pairs": [_assign_pair(a) for a in node.assignments],
+            "redirects": [_redir(r) for r in node.redirects] or None,
         }
     return {"type": "command.NoOp"}
 
