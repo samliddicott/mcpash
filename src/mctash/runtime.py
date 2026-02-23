@@ -372,6 +372,10 @@ class Runtime:
             if not isinstance(cmd, SimpleCommand):
                 return self._exec_command(cmd)
             cmd_env = dict(self.env)
+            for scope in self.local_stack:
+                for k, v in scope.items():
+                    if k in self.env:
+                        cmd_env[k] = v
             for assign in cmd.assignments:
                 value = self._expand_assignment_word(assign.value)
                 if assign.op == "+=":
@@ -776,7 +780,14 @@ class Runtime:
                 finally:
                     self.env = saved_env
             try:
-                return self._run_external(argv, local_env, node.redirects)
+                exec_env = dict(local_env)
+                # Local variables should shadow exported globals for external
+                # commands, but only when that name is already exported.
+                for scope in self.local_stack:
+                    for k, v in scope.items():
+                        if k in self.env:
+                            exec_env[k] = v
+                return self._run_external(argv, exec_env, node.redirects)
             except RuntimeError as e:
                 print(str(e), file=sys.stderr)
                 return 1
@@ -1433,8 +1444,8 @@ class Runtime:
             parts = parse_word_parts(w.text)
             if not any(p.quoted for p in parts):
                 keep_split_empties = False
-                has_cmd_subst = any(p.kind in {"CMD", "CMD_BQ"} for p in parts)
-                if not has_cmd_subst:
+                has_side_effect_expansion = any(p.kind in {"CMD", "CMD_BQ", "ARITH"} for p in parts)
+                if not has_side_effect_expansion:
                     raw = self._expand_assignment_word(w.text)
                     if raw != "":
                         ifs = self.env.get("IFS", " \t\n")
