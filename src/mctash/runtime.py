@@ -1341,10 +1341,20 @@ class Runtime:
     def _expand_assignment_word(self, text: str) -> str:
         if self._is_process_subst(text):
             return self._process_substitute(text)
+        def _assign_param(name: str, quoted: bool):
+            if name in ["@", "*"]:
+                return self._ifs_join(self.positional)
+            return self._expand_param(name, quoted)
+
+        def _assign_braced(name: str, op: str | None, arg: str | None, quoted: bool):
+            if name in ["@", "*"] and op is None:
+                return self._ifs_join(self.positional)
+            return self._expand_braced_param(name, op, arg, quoted)
+
         fields = expand_word(
             text,
-            self._expand_param,
-            self._expand_braced_param,
+            _assign_param,
+            _assign_braced,
             self._expand_command_subst_text,
             self._expand_arith,
             lambda s: [s],
@@ -1353,10 +1363,20 @@ class Runtime:
         return fields[0] if fields else ""
 
     def _expand_assignment_word_protected(self, text: str) -> str:
+        def _assign_param(name: str, quoted: bool):
+            if name in ["@", "*"]:
+                return self._ifs_join(self.positional)
+            return self._expand_param(name, quoted)
+
+        def _assign_braced(name: str, op: str | None, arg: str | None, quoted: bool):
+            if name in ["@", "*"] and op is None:
+                return self._ifs_join(self.positional)
+            return self._expand_braced_param(name, op, arg, quoted)
+
         fields = expand_word(
             text,
-            self._expand_param,
-            self._expand_braced_param,
+            _assign_param,
+            _assign_braced,
             self._expand_command_subst_text,
             self._expand_arith,
             lambda s: [s],
@@ -1461,7 +1481,9 @@ class Runtime:
         if name == "@":
             return list(self.positional)
         if name == "*":
-            return self._ifs_join(self.positional)
+            if quoted:
+                return self._ifs_join(self.positional)
+            return list(self.positional)
         if name == "#":
             return str(len(self.positional))
         if name == "?":
@@ -1494,6 +1516,10 @@ class Runtime:
             value, _ = self._get_param_state(name)
             return str(len(value))
         if name == "@" and op is None:
+            return list(self.positional)
+        if name == "*" and op is None:
+            if quoted:
+                return self._ifs_join(self.positional)
             return list(self.positional)
         if name.isdigit():
             value, is_set = self._get_param_state(name)
