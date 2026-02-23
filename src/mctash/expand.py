@@ -539,14 +539,22 @@ def expand_word(
                     if not active:
                         new_fields.append((f, q, active, gm))
                         continue
-                    for p in pieces:
+                    if len(pieces) == 1:
+                        p = pieces[0]
                         new_fields.append((f + p, q, True, gm or has_glob_meta(p)))
+                    else:
+                        first = pieces[0]
+                        new_fields.append((f + first, q, False, gm or has_glob_meta(first)))
+                        for p in pieces[1:-1]:
+                            new_fields.append((p, q, False, has_glob_meta(p)))
+                        last = pieces[-1]
+                        new_fields.append((last, q, True, has_glob_meta(last)))
                 fields = new_fields
 
     expanded: List[str] = []
     for f, quoted, _, has_meta in fields:
-        if has_meta:
-            expanded.extend(glob_field(f))
-        else:
+        if quoted:
             expanded.append(_unprotect_glob_meta(f) if unprotect_literals else f)
+        else:
+            expanded.extend(glob_field(_unprotect_glob_meta(f) if unprotect_literals else f))
     return expanded

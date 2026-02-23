@@ -1466,15 +1466,20 @@ class Runtime:
         )
 
     def _tilde_expand(self, text: str) -> str:
-        if not text.startswith("~"):
-            return text
-        if text == "~" or text.startswith("~/"):
-            home = self.env.get("HOME", "")
-            return home + text[1:]
-        if "/" in text:
-            user, rest = text[1:].split("/", 1)
-            return self._user_home(user) + "/" + rest
-        return self._user_home(text[1:])
+        def expand_one(seg: str) -> str:
+            if not seg.startswith("~"):
+                return seg
+            if seg == "~" or seg.startswith("~/"):
+                home = self.env.get("HOME", "")
+                return home + seg[1:]
+            if "/" in seg:
+                user, rest = seg[1:].split("/", 1)
+                return self._user_home(user) + "/" + rest
+            return self._user_home(seg[1:])
+
+        if ":" not in text:
+            return expand_one(text)
+        return ":".join(expand_one(seg) for seg in text.split(":"))
 
     def _user_home(self, user: str) -> str:
         try:
@@ -1591,14 +1596,10 @@ class Runtime:
                 raise RuntimeError(self._format_error(f"{name}: {msg}", line=self.current_line))
             return value
         if op in ["#", "##"]:
-            pattern = self._expand_assignment_word(arg_text)
-            if any(ch in arg_text for ch in ["'", '"', "\\"]):
-                pattern = pattern.replace("[", "[[]").replace("*", "[*]").replace("?", "[?]")
+            pattern = self._pattern_from_word(arg_text)
             return self._remove_prefix(value, pattern, longest=(op == "##"))
         if op in ["%", "%%"]:
-            pattern = self._expand_assignment_word(arg_text)
-            if any(ch in arg_text for ch in ["'", '"', "\\"]):
-                pattern = pattern.replace("[", "[[]").replace("*", "[*]").replace("?", "[?]")
+            pattern = self._pattern_from_word(arg_text)
             return self._remove_suffix(value, pattern, longest=(op == "%%"))
         if op == ":substr":
             return self._substring(value, arg_text)
@@ -1935,6 +1936,39 @@ class Runtime:
             if fnmatch.fnmatchcase(suffix, pattern):
                 return value[:i]
         return value
+
+    def _pattern_from_word(self, text: str) -> str:
+        raw = self._expand_assignment_word_protected(text)
+        raw = (
+            raw.replace("\ue001", "[*]")
+            .replace("\ue002", "[?]")
+            .replace("\ue003", "[[]")
+            .replace("\ue004", "[]]")
+            .replace("\ue005", "[\\\\]")
+        )
+        out: List[str] = []
+        i = 0
+        while i < len(raw):
+            ch = raw[i]
+            if ch == "\\" and i + 1 < len(raw):
+                nxt = raw[i + 1]
+                if nxt == "*":
+                    out.append("[*]")
+                elif nxt == "?":
+                    out.append("[?]")
+                elif nxt == "[":
+                    out.append("[[]")
+                elif nxt == "]":
+                    out.append("[]]")
+                elif nxt == "\\":
+                    out.append("[\\\\]")
+                else:
+                    out.append(nxt)
+                i += 2
+                continue
+            out.append(ch)
+            i += 1
+        return "".join(out)
 
     def _set_local(self, name: str, value: str) -> None:
         if not self.local_stack:
