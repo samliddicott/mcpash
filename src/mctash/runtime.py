@@ -402,7 +402,7 @@ class Runtime:
                     return self._exec_list(elif_body)
             if node.else_body is not None:
                 return self._exec_list(node.else_body)
-            return status
+            return 0
         if isinstance(node, WhileCommand):
             self._loop_depth += 1
             last = 0
@@ -658,17 +658,22 @@ class Runtime:
         return 2
 
     def _run_source(self, path: str, args: List[str]) -> int:
+        if "/" not in path:
+            for d in self.env.get("PATH", os.defpath).split(os.pathsep):
+                candidate = os.path.join(d, path)
+                if os.path.isfile(candidate):
+                    path = candidate
+                    break
         try:
             with open(path, "r", encoding="utf-8") as f:
                 source = f.read()
         except OSError:
             return 1
         parser_impl = Parser(source)
-        saved_positional = list(self.positional)
-        saved_script_name = self.script_name
+        saved_positional = list(self.positional) if args else None
         self.source_stack.append(path)
-        self.script_name = path
-        self.set_positional_args(args)
+        if args:
+            self.set_positional_args(args)
         status = 0
         try:
             while True:
@@ -693,8 +698,8 @@ class Runtime:
         except (AsdlMappingError, OshAdapterError):
             status = 2
         finally:
-            self.set_positional_args(saved_positional)
-            self.script_name = saved_script_name
+            if saved_positional is not None:
+                self.set_positional_args(saved_positional)
             if self.source_stack:
                 self.source_stack.pop()
         return status
@@ -1301,8 +1306,12 @@ class Runtime:
             try:
                 n = int(args[0])
             except ValueError:
-                return 1
-        if n < 0 or n > len(self.positional):
+                self._report_error(f"Illegal number: {args[0]}", line=self.current_line, context="shift")
+                raise SystemExit(2)
+        if n < 0:
+            self._report_error(f"Illegal number: {n}", line=self.current_line, context="shift")
+            raise SystemExit(2)
+        if n > len(self.positional):
             return 1
         self.positional = self.positional[n:]
         return 0

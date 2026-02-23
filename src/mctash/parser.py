@@ -483,6 +483,17 @@ class Parser:
             name = name[:-2]
         elif self._peek() and self._is_word(self._peek()) and self._peek().value == "()":
             self._advance()
+        elif (
+            self._peek()
+            and self._peek().kind == "OP"
+            and self._peek().value == "("
+            and self._peek_n(1)
+            and self._peek_n(1).kind == "OP"
+            and self._peek_n(1).value == ")"
+        ):
+            # bash extension: optional () after function name even with `function` keyword
+            self._advance()
+            self._advance()
         elif not saw_function_kw:
             self._expect_group_token("(")
             self._expect_group_token(")")

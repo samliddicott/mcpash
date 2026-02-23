@@ -29,12 +29,17 @@ def parse_word(
 def _parse_param(text: str, start: int) -> tuple[str | None, int]:
     if start + 1 >= len(text):
         return None, 1
+    nxt = text[start + 1]
+    if nxt in "@*#?$!-":
+        return nxt, 2
+    if nxt.isdigit():
+        return nxt, 2
     if text[start + 1] == "{":
         end = text.find("}", start + 2)
         if end == -1:
             return None, 1
         name = text[start + 2 : end]
-        if not _valid_name(name):
+        if not _valid_param_name(name):
             return None, 1
         return name, end - start + 1
     i = start + 1
@@ -53,6 +58,16 @@ def _valid_name(name: str) -> bool:
     if not (name[0].isalpha() or name[0] == "_"):
         return False
     return all(ch.isalnum() or ch == "_" for ch in name)
+
+
+def _valid_param_name(name: str) -> bool:
+    if not name:
+        return False
+    if len(name) == 1 and name in "@*#?$!-":
+        return True
+    if name.isdigit():
+        return True
+    return _valid_name(name)
 
 
 def _parse_parts(text: str, in_double: bool) -> list[LstWordPart]:
@@ -231,6 +246,19 @@ def _split_braced_var(inner: str) -> tuple[str | None, str | None, str | None]:
     i = 0
     if not inner:
         return None, None, None
+    if inner[0] in "@*#?$!-" and len(inner) >= 1:
+        name = inner[0]
+        i = 1
+        if i >= len(inner):
+            return name, None, None
+        two_char_ops = {":-", ":=", ":?", ":+", "##", "%%"}
+        if i + 1 < len(inner) and inner[i : i + 2] in two_char_ops:
+            op = inner[i : i + 2]
+            return name, op, inner[i + 2 :]
+        if inner[i] in ["-", "=", "?", "#", "%", "+"]:
+            op = inner[i]
+            return name, op, inner[i + 1 :]
+        return name, None, None
     name_chars: list[str] = []
     while i < len(inner) and (inner[i].isalnum() or inner[i] == "_"):
         name_chars.append(inner[i])
