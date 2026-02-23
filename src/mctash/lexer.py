@@ -267,13 +267,55 @@ def _consume_heredoc(source: str, start: int, delimiter: str, strip_tabs: bool) 
 
 
 def _strip_quotes(text: str) -> str:
-    if len(text) >= 2 and ((text[0] == text[-1] == "'") or (text[0] == text[-1] == '"')):
-        return text[1:-1]
-    return text
+    out: list[str] = []
+    i = 0
+    in_single = False
+    in_double = False
+    while i < len(text):
+        ch = text[i]
+        if in_single:
+            if ch == "'":
+                in_single = False
+            else:
+                out.append(ch)
+            i += 1
+            continue
+        if in_double:
+            if ch == '"':
+                in_double = False
+                i += 1
+                continue
+            if ch == "\\" and i + 1 < len(text):
+                nxt = text[i + 1]
+                if nxt in ['"', "\\", "$", "`", "\n"]:
+                    out.append(nxt)
+                else:
+                    out.append("\\")
+                    out.append(nxt)
+                i += 2
+                continue
+            out.append(ch)
+            i += 1
+            continue
+        if ch == "'":
+            in_single = True
+            i += 1
+            continue
+        if ch == '"':
+            in_double = True
+            i += 1
+            continue
+        if ch == "\\" and i + 1 < len(text):
+            out.append(text[i + 1])
+            i += 2
+            continue
+        out.append(ch)
+        i += 1
+    return "".join(out)
 
 
 def _is_quoted(text: str) -> bool:
-    return len(text) >= 2 and ((text[0] == text[-1] == "'") or (text[0] == text[-1] == '"'))
+    return any(ch in text for ch in ["\\", "'", '"'])
 
 
 def _scan_command_sub(source: str, start: int) -> tuple[str, int]:

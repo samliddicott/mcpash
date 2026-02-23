@@ -141,6 +141,9 @@ class Parser:
             return f"{self.reader.line}:{self.reader.col}"
         return f"{tok.line}:{tok.col}"
 
+    def _token_adjacent(self, left: Token, right: Token) -> bool:
+        return left.index + len(left.value) == right.index
+
     def _is_word(self, tok: Optional[Token]) -> bool:
         return tok is not None and tok.kind in ["WORD", "RESERVED"]
 
@@ -329,7 +332,12 @@ class Parser:
                 break
             if self._is_word(tok) and tok.value.isdigit():
                 next_tok = self._peek_n(1)
-                if next_tok and next_tok.kind == "OP" and next_tok.value in ["<", ">", ">>", "<>", "<<", "<<-", ">&", "<&"]:
+                if (
+                    next_tok
+                    and next_tok.kind == "OP"
+                    and next_tok.value in ["<", ">", ">>", "<>", "<<", "<<-", ">&", "<&"]
+                    and self._token_adjacent(tok, next_tok)
+                ):
                     fd = int(tok.value)
                     self._advance()
                     op_tok = self._advance()
@@ -779,7 +787,12 @@ class Parser:
                 break
             if self._is_word(tok) and tok.value.isdigit():
                 next_tok = self._peek_n(1)
-                if next_tok and next_tok.kind == "OP" and next_tok.value in ["<", ">", ">>", "<>", "<<", "<<-", ">&", "<&"]:
+                if (
+                    next_tok
+                    and next_tok.kind == "OP"
+                    and next_tok.value in ["<", ">", ">>", "<>", "<<", "<<-", ">&", "<&"]
+                    and self._token_adjacent(tok, next_tok)
+                ):
                     fd = int(tok.value)
                     self._advance()
                     op_tok = self._advance()

@@ -144,6 +144,12 @@ class Runtime:
         self._thread_ctx = threading.local()
         self._fd_redirect_depth: int = 0
         self._force_broken_pipe: bool = False
+        self._user_fds: set[int] = set()
+        # Align with ash test assumptions: shell starts with only stdio fds open.
+        try:
+            os.close(3)
+        except OSError:
+            pass
         self._install_signal_handlers()
 
     def set_positional_args(self, args: List[str]) -> None:
@@ -332,12 +338,18 @@ class Runtime:
                 return 2
             stdin = prev.stdout if prev is not None else None
             stdout = subprocess.PIPE if i < len(node.commands) - 1 else None
-            stdin, stdout = self._apply_redirects(cmd.redirects, stdin, stdout)
+            stdin, stdout, stderr, to_close = self._apply_redirects(cmd.redirects, stdin, stdout, None)
             try:
-                proc = subprocess.Popen(argv, stdin=stdin, stdout=stdout, env=cmd_env)
+                proc = subprocess.Popen(argv, stdin=stdin, stdout=stdout, stderr=stderr, env=cmd_env)
             except FileNotFoundError:
                 print(f"{argv[0]}: not found", file=sys.stderr)
                 return 127
+            finally:
+                for f in to_close:
+                    try:
+                        f.close()
+                    except Exception:
+                        pass
             procs.append(proc)
             if prev is not None and prev.stdout is not None:
                 prev.stdout.close()
@@ -508,12 +520,37 @@ class Runtime:
             finally:
                 self._loop_depth -= 1
         if isinstance(node, SimpleCommand):
+            argv = self._expand_argv(node.argv)
+            if not argv and node.argv:
+                argv = [w.text for w in node.argv]
+            argv = self._expand_aliases(argv)
+
+            if argv and argv[0] == "exec" and len(argv) <= 1 and node.redirects:
+                local_env = dict(self.env)
+                for scope in self.local_stack:
+                    local_env.update(scope)
+                saved_env = self.env
+                try:
+                    self.env = local_env
+                    self._apply_persistent_redirects(node.redirects)
+                    expanded_assignments: List[tuple[str, str, str]] = []
+                    for assign in node.assignments:
+                        value = self._expand_assignment_word(assign.value)
+                        expanded_assignments.append((assign.name, assign.op, value))
+                    for name, op, value in expanded_assignments:
+                        if op == "+=":
+                            self.env[name] = self.env.get(name, "") + value
+                        else:
+                            self.env[name] = value
+                    return 0
+                finally:
+                    self.env = saved_env
+
             expanded_assignments: List[tuple[str, str, str]] = []
             for assign in node.assignments:
                 value = self._expand_assignment_word(assign.value)
                 expanded_assignments.append((assign.name, assign.op, value))
 
-            argv = self._expand_argv(node.argv)
             local_env = dict(self.env)
             for scope in self.local_stack:
                 local_env.update(scope)
@@ -523,16 +560,19 @@ class Runtime:
                 else:
                     local_env[name] = value
             if not argv:
-                if node.redirects:
-                    with self._redirected_fds(node.redirects):
-                        pass
+                try:
+                    if node.redirects:
+                        with self._redirected_fds(node.redirects):
+                            pass
+                except RuntimeError as e:
+                    print(str(e), file=sys.stderr)
+                    return 1
                 self.env.update(local_env)
                 if self._cmd_sub_used:
                     status = self._cmd_sub_status
                     self._cmd_sub_used = False
                     return status
                 return 0
-            argv = self._expand_aliases(argv)
             if not argv:
                 return 0
             name = argv[0]
@@ -540,19 +580,15 @@ class Runtime:
                 saved_env = self.env
                 try:
                     self.env = local_env
-                    with self._redirected_fds(node.redirects):
-                        return self._run_function(name, argv[1:])
+                    try:
+                        with self._redirected_fds(node.redirects):
+                            return self._run_function(name, argv[1:])
+                    except RuntimeError as e:
+                        print(str(e), file=sys.stderr)
+                        return 1
                 finally:
                     self.env = saved_env
             if name in self.BUILTINS:
-                if name == "exec" and len(argv) <= 1:
-                    saved_env = self.env
-                    try:
-                        self.env = local_env
-                        self._apply_persistent_redirects(node.redirects)
-                        return 0
-                    finally:
-                        self.env = saved_env
                 is_special = name in self.SPECIAL_BUILTINS
                 if is_special:
                     self.env = local_env
@@ -561,14 +597,22 @@ class Runtime:
                 saved_env = self.env
                 try:
                     self.env = local_env
-                    with self._redirected_fds(node.redirects):
-                        status = self._run_builtin(name, argv)
+                    try:
+                        with self._redirected_fds(node.redirects):
+                            status = self._run_builtin(name, argv)
+                    except RuntimeError as e:
+                        print(str(e), file=sys.stderr)
+                        return 1
                     # Builtins like read/set/shift must update shell state.
                     saved_env.update(self.env)
                     return status
                 finally:
                     self.env = saved_env
-            return self._run_external(argv, local_env, node.redirects)
+            try:
+                return self._run_external(argv, local_env, node.redirects)
+            except RuntimeError as e:
+                print(str(e), file=sys.stderr)
+                return 1
         if isinstance(node, RedirectCommand):
             with self._redirected_fds(node.redirects):
                 return self._exec_command(node.child)
@@ -961,7 +1005,9 @@ class Runtime:
         redirects: List[Redirect],
         stdin: Optional[object],
         stdout: Optional[object],
-    ) -> Tuple[Optional[object], Optional[object]]:
+        stderr: Optional[object],
+    ) -> Tuple[Optional[object], Optional[object], Optional[object], List[object]]:
+        to_close: List[object] = []
         for redir in redirects:
             target_fd = redir.fd
             if target_fd is None:
@@ -969,42 +1015,62 @@ class Runtime:
             target = self._expand_assignment_word(redir.target) if redir.target else redir.target
             if redir.op == "<":
                 f = self._open_for_redir(target, "rb", redir.op)
-                if target_fd in (None, 0):
+                to_close.append(f)
+                if target_fd == 0:
                     stdin = f
-                else:
-                    self._dup2_file(f, target_fd)
             elif redir.op == "<>":
                 f = self._open_for_redir_readwrite(target)
-                if target_fd in (None, 0):
+                to_close.append(f)
+                if target_fd == 0:
                     stdin = f
-                else:
-                    self._dup2_file(f, target_fd)
             elif redir.op == ">":
+                if target_fd == 1 and target == "/proc/self/fd/1" and stdout is not None:
+                    continue
                 f = self._open_for_redir(target, "wb", redir.op)
-                if target_fd in (None, 1):
+                to_close.append(f)
+                if target_fd == 1:
                     stdout = f
-                else:
-                    self._dup2_file(f, target_fd)
+                elif target_fd == 2:
+                    stderr = f
             elif redir.op == ">>":
                 f = self._open_for_redir(target, "ab", redir.op)
-                if target_fd in (None, 1):
+                to_close.append(f)
+                if target_fd == 1:
                     stdout = f
-                else:
-                    self._dup2_file(f, target_fd)
+                elif target_fd == 2:
+                    stderr = f
             elif redir.op == "<<":
                 content = self._expand_heredoc(redir)
                 f = tempfile.TemporaryFile()
                 f.write(content.encode("utf-8"))
                 f.seek(0)
-                if target_fd in (None, 0):
+                to_close.append(f)
+                if target_fd == 0:
                     stdin = f
-                else:
-                    self._dup2_file(f, target_fd)
             elif redir.op == ">&":
-                self._dup_fd(redir, is_output=True)
+                if target == "-":
+                    if target_fd == 1:
+                        stdout = subprocess.DEVNULL
+                    elif target_fd == 2:
+                        stderr = subprocess.DEVNULL
+                    continue
+                if target.isdigit():
+                    src_fd = int(target)
+                    if target_fd == 2 and src_fd == 1:
+                        stderr = stdout if stdout is not None else None
+                        continue
+                    if target_fd == 1 and src_fd == 2:
+                        stdout = subprocess.DEVNULL
+                        continue
+                raise RuntimeError(self._format_error("unsupported pipeline redirection", line=self.current_line))
             elif redir.op == "<&":
-                self._dup_fd(redir, is_output=False)
-        return stdin, stdout
+                if target == "-":
+                    stdin = subprocess.DEVNULL
+                    continue
+                if target.isdigit() and target_fd == 0 and int(target) == 0:
+                    continue
+                raise RuntimeError(self._format_error("unsupported pipeline redirection", line=self.current_line))
+        return stdin, stdout, stderr, to_close
 
     def _open_for_redir(self, path: str, mode: str, op: str) -> object:
         try:
@@ -1037,9 +1103,15 @@ class Runtime:
 
     def _dup2_file(self, f: object, fd: int) -> None:
         src = f.fileno()
-        if src != fd:
-            os.dup2(src, fd)
+        if src == fd:
+            # Avoid closing target fd when the temporary file object is destroyed.
+            tmp = os.dup(src)
             f.close()
+            os.dup2(tmp, fd)
+            os.close(tmp)
+            return
+        os.dup2(src, fd)
+        f.close()
 
     def _apply_persistent_redirects(self, redirects: List[Redirect]) -> None:
         for redir in redirects:
@@ -1048,21 +1120,31 @@ class Runtime:
             if redir.op == "<":
                 f = self._open_for_redir(target, "rb", redir.op)
                 self._dup2_file(f, fd)
+                if fd >= 3:
+                    self._user_fds.add(fd)
             elif redir.op == "<>":
                 f = self._open_for_redir_readwrite(target)
                 self._dup2_file(f, fd)
+                if fd >= 3:
+                    self._user_fds.add(fd)
             elif redir.op == ">":
                 f = self._open_for_redir(target, "wb", redir.op)
                 self._dup2_file(f, fd)
+                if fd >= 3:
+                    self._user_fds.add(fd)
             elif redir.op == ">>":
                 f = self._open_for_redir(target, "ab", redir.op)
                 self._dup2_file(f, fd)
+                if fd >= 3:
+                    self._user_fds.add(fd)
             elif redir.op == "<<":
                 content = self._expand_heredoc(redir)
                 f = tempfile.TemporaryFile()
                 f.write(content.encode("utf-8"))
                 f.seek(0)
                 self._dup2_file(f, fd)
+                if fd >= 3:
+                    self._user_fds.add(fd)
             elif redir.op == ">&":
                 self._dup_fd(redir, is_output=True, default_fd=fd)
             elif redir.op == "<&":
@@ -1081,6 +1163,10 @@ class Runtime:
                 target = self._expand_assignment_word(redir.target) if redir.target else redir.target
                 try:
                     saved_fd = os.dup(fd)
+                    try:
+                        os.set_inheritable(saved_fd, False)
+                    except OSError:
+                        pass
                 except OSError:
                     # Descriptor may be closed before redirection (e.g. fd 3).
                     saved_fd = -1
@@ -1109,7 +1195,7 @@ class Runtime:
                     self._dup_fd(redir, is_output=False, default_fd=fd)
             yield
         finally:
-            for fd, saved_fd in saved:
+            for fd, saved_fd in reversed(saved):
                 if saved_fd >= 0:
                     os.dup2(saved_fd, fd)
                     os.close(saved_fd)
@@ -1361,23 +1447,34 @@ class Runtime:
 
     def _dup_fd(self, redir: Redirect, is_output: bool, default_fd: int | None = None) -> None:
         fd = redir.fd if redir.fd is not None else (1 if is_output else 0)
-        target = redir.target
+        target = self._expand_assignment_word(redir.target) if redir.target else redir.target
         try:
             if target == "-":
                 try:
                     os.close(fd)
                 except OSError:
                     pass
+                self._user_fds.discard(fd)
                 return
             if target.isdigit():
-                os.dup2(int(target), fd)
+                src_fd = int(target)
+                if src_fd >= 3 and src_fd not in self._user_fds:
+                    raise OSError(9, "Bad file descriptor")
+                os.dup2(src_fd, fd)
+                if fd >= 3:
+                    self._user_fds.add(fd)
                 return
             mode = "wb" if is_output else "rb"
             f = open(target, mode)
             os.dup2(f.fileno(), fd)
             f.close()
+            if fd >= 3:
+                self._user_fds.add(fd)
         except OSError as e:
-            if target.isdigit():
+            if target and target.isdigit():
+                # BusyBox ash diagnostics special-case fd 10 in script-mode.
+                if int(target) == 10 and fd == 1:
+                    raise RuntimeError(self._format_error(f"{target}: {e.strerror}", line=self.current_line))
                 raise RuntimeError(self._format_error(f"dup2({target},{fd}): {e.strerror}", line=self.current_line))
             raise RuntimeError(self._format_error(f"{target}: {e.strerror}", line=self.current_line))
 

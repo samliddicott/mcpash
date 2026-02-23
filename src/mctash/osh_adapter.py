@@ -218,7 +218,9 @@ def _word_to_text(node: Dict[str, Any]) -> str:
 def _word_part_to_text(node: Dict[str, Any]) -> str:
     t = node.get("type")
     if t == "word_part.Literal":
-        return node.get("tval", "")
+        raw = node.get("tval", "")
+        # Preserve literal backslashes through ASDL round-trip.
+        return raw.replace("\\", "\\\\")
     if t == "word_part.SingleQuoted":
         return "'" + node.get("sval", "") + "'"
     if t == "word_part.DoubleQuoted":
