@@ -3,6 +3,15 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Callable, List, Tuple, Union
 
+_GLOB_PROTECT = {
+    "*": "\x01",
+    "?": "\x02",
+    "[": "\x03",
+    "]": "\x04",
+    "\\": "\x05",
+}
+_GLOB_UNPROTECT = {v: k for k, v in _GLOB_PROTECT.items()}
+
 
 @dataclass
 class WordPart:
@@ -135,6 +144,14 @@ def parse_word_parts(text: str) -> List[WordPart]:
     return parts
 
 
+def _protect_glob_meta(s: str) -> str:
+    return "".join(_GLOB_PROTECT.get(ch, ch) for ch in s)
+
+
+def _unprotect_glob_meta(s: str) -> str:
+    return "".join(_GLOB_UNPROTECT.get(ch, ch) for ch in s)
+
+
 def _parse_dollar(text: str, i: int, quoted: bool) -> Tuple[WordPart, int]:
     if text.startswith("$((", i):
         content, end = _extract_balanced(text, i + 3, "))")
@@ -258,6 +275,7 @@ def expand_word(
     eval_arith: Callable[[str], str],
     split_ifs: Callable[[str], List[str]],
     glob_field: Callable[[str], List[str]],
+    unprotect_literals: bool = True,
 ) -> List[str]:
     parts = parse_word_parts(text)
     # field tuple: (text, quoted_for_split, active, has_unquoted_glob_meta)
@@ -300,6 +318,12 @@ def expand_word(
                 new_fields.append((value[-1], True, True, False))
             fields = new_fields
             continue
+
+        if part.quoted:
+            if isinstance(value, list):
+                value = [_protect_glob_meta(v) for v in value]
+            else:
+                value = _protect_glob_meta(value)
 
         if isinstance(value, list):
             new_fields = []
@@ -349,5 +373,5 @@ def expand_word(
         if has_meta:
             expanded.extend(glob_field(f))
         else:
-            expanded.append(f)
+            expanded.append(_unprotect_glob_meta(f) if unprotect_literals else f)
     return expanded

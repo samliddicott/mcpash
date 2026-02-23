@@ -1300,6 +1300,19 @@ class Runtime:
         )
         return fields[0] if fields else ""
 
+    def _expand_assignment_word_protected(self, text: str) -> str:
+        fields = expand_word(
+            text,
+            self._expand_param,
+            self._expand_braced_param,
+            self._expand_command_subst_text,
+            self._expand_arith,
+            lambda s: [s],
+            lambda s: [s],
+            unprotect_literals=False,
+        )
+        return fields[0] if fields else ""
+
     def _split_ifs(self, text: str) -> List[str]:
         if text == "":
             return []
@@ -1319,10 +1332,52 @@ class Runtime:
 
     def _glob_field(self, text: str) -> List[str]:
         text = self._tilde_expand(text)
-        if any(c in text for c in ["*", "?", "["]):
-            matches = [p for p in glob.glob(text)]
-            return matches if matches else [text]
+        if any(c in text for c in ["*", "?", "[", "\x01", "\x02", "\x03", "\x04", "\x05"]):
+            pattern_for_match = self._glob_pattern_for_match(text)
+            matches = sorted(glob.glob(pattern_for_match))
+            if matches:
+                return matches
+            return [self._glob_pattern_display(text)]
         return [text]
+
+    def _glob_pattern_for_match(self, text: str) -> str:
+        protected = (
+            text.replace("\x01", "[*]")
+            .replace("\x02", "[?]")
+            .replace("\x03", "[[]")
+            .replace("\x04", "[]]")
+            .replace("\x05", "[\\\\]")
+        )
+        out: List[str] = []
+        i = 0
+        while i < len(protected):
+            ch = protected[i]
+            if ch == "\\" and i + 1 < len(protected):
+                nxt = protected[i + 1]
+                if nxt == "*":
+                    out.append("[*]")
+                elif nxt == "?":
+                    out.append("[?]")
+                elif nxt == "[":
+                    out.append("[[]")
+                elif nxt == "]":
+                    out.append("[]]")
+                else:
+                    out.append(nxt)
+                i += 2
+                continue
+            out.append(ch)
+            i += 1
+        return "".join(out)
+
+    def _glob_pattern_display(self, text: str) -> str:
+        return (
+            text.replace("\x01", "*")
+            .replace("\x02", "?")
+            .replace("\x03", "[")
+            .replace("\x04", "]")
+            .replace("\x05", "\\")
+        )
 
     def _tilde_expand(self, text: str) -> str:
         if not text.startswith("~"):
@@ -1366,11 +1421,13 @@ class Runtime:
     def _expand_braced_param(
         self, name: str, op: str | None, arg: str | None, quoted: bool
     ) -> str | List[str]:
-        def _expand_alt_word() -> str:
-            expanded = self._expand_assignment_word(arg_text)
-            if any(ch in arg_text for ch in ["'", '"', "\\"]):
-                expanded = expanded.replace("[", "[[]").replace("*", "[*]").replace("?", "[?]")
-            return expanded
+        def _expand_alt_word(text: str) -> str:
+            # Keep single quotes literal only when outer expansion is quoted
+            # (matches ash behavior in ${x:+'...'} under double quotes).
+            if quoted and len(text) >= 2 and text[0] == "'" and text[-1] == "'":
+                inner = self._expand_assignment_word_protected(text[1:-1])
+                return "'" + inner + "'"
+            return self._expand_assignment_word_protected(text)
 
         if op == "__len__":
             value, _ = self._get_param_state(name)
@@ -1386,11 +1443,11 @@ class Runtime:
             arg_text = arg or ""
             if op in ["-", ":-"]:
                 if not is_set or (op == ":-" and value == ""):
-                    return _expand_alt_word()
+                    return _expand_alt_word(arg_text)
                 return value
             if op in ["+", ":+"]:
                 if is_set and (op == "+" or value != ""):
-                    return _expand_alt_word()
+                    return _expand_alt_word(arg_text)
                 return ""
             return value
         value, is_set = self._get_param_state(name)
@@ -1399,15 +1456,15 @@ class Runtime:
             return value
         if op in ["-", ":-"]:
             if not is_set or (op == ":-" and value == ""):
-                return _expand_alt_word()
+                return _expand_alt_word(arg_text)
             return value
         if op in ["+", ":+"]:
             if is_set and (op == "+" or value != ""):
-                return _expand_alt_word()
+                return _expand_alt_word(arg_text)
             return ""
         if op in ["=", ":="]:
             if not is_set or (op == ":=" and value == ""):
-                replacement = self._expand_word(arg_text)
+                replacement = _expand_alt_word(arg_text)
                 self._set_local(name, replacement)
                 return replacement
             return value

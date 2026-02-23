@@ -65,7 +65,7 @@ class TokenReader:
                 while self.i < len(self.source) and self._peek() != "\n":
                     self._advance()
                 continue
-            if ch == "\\" and self._peek(1) == "\n":
+            if ch == "\\" and self._peek(1) == "\n" and self._is_line_continuation():
                 self._advance(2)
                 continue
             if ch == "\n":
@@ -227,7 +227,11 @@ class TokenReader:
                     self._advance_to(new_i)
                     continue
                 if ch == "\\" and self._peek(1) == "\n":
-                    self._advance(2)
+                    if self._is_line_continuation():
+                        self._advance(2)
+                        continue
+                    buf.append(ch)
+                    self._advance()
                     continue
                 buf.append(ch)
                 self._advance()
@@ -268,6 +272,16 @@ class TokenReader:
         if self.i + n >= len(self.source):
             return ""
         return self.source[self.i + n]
+
+    def _is_line_continuation(self) -> bool:
+        if self._peek() != "\\" or self._peek(1) != "\n":
+            return False
+        n = 0
+        j = self.i
+        while j >= 0 and self.source[j] == "\\":
+            n += 1
+            j -= 1
+        return (n % 2) == 1
 
     def _capture_heredocs(self) -> None:
         while self._pending_heredocs:

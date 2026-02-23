@@ -150,6 +150,7 @@ def _parse_parts(text: str, in_double: bool) -> list[LstWordPart]:
                 buf.append(ch)
                 i += 1
                 continue
+            buf.append("\\")
             buf.append(nxt)
             i += 2
             continue
@@ -165,6 +166,24 @@ def _find_matching_quote(text: str, start: int) -> int:
         if text[i] == "\\":
             i += 2
             continue
+        if text.startswith("${", i):
+            end = _find_matching_brace(text, i + 2)
+            if end == -1:
+                return -1
+            i = end + 1
+            continue
+        if text.startswith("$((", i):
+            sub, consumed = _parse_arith_sub(text, i)
+            if sub is None:
+                return -1
+            i += consumed
+            continue
+        if text.startswith("$(", i):
+            sub, consumed = _parse_command_sub(text, i)
+            if sub is None:
+                return -1
+            i += consumed
+            continue
         if text[i] == "`":
             end = _find_backtick(text, i + 1)
             if end == -1:
@@ -173,6 +192,27 @@ def _find_matching_quote(text: str, start: int) -> int:
             continue
         if text[i] == '"':
             return i
+        i += 1
+    return -1
+
+
+def _find_matching_brace(text: str, start: int) -> int:
+    depth = 1
+    i = start
+    while i < len(text):
+        if text[i] == "\\":
+            i += 2
+            continue
+        if text.startswith("${", i):
+            depth += 1
+            i += 2
+            continue
+        if text[i] == "}":
+            depth -= 1
+            if depth == 0:
+                return i
+            i += 1
+            continue
         i += 1
     return -1
 
@@ -238,7 +278,7 @@ def _parse_arith_sub(text: str, start: int) -> tuple[str | None, int]:
 def _parse_braced_var(text: str, start: int) -> tuple[LstWordPart | None, int]:
     if not text.startswith("${", start):
         return None, 1
-    end = text.find("}", start + 2)
+    end = _find_matching_brace(text, start + 2)
     if end == -1:
         return None, 1
     inner = text[start + 2 : end]
