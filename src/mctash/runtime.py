@@ -103,6 +103,7 @@ class Runtime:
         "test",
         "set",
         "export",
+        "readonly",
         "unset",
         "shift",
         "printf",
@@ -134,6 +135,7 @@ class Runtime:
         self.local_stack: List[Dict[str, str]] = []
         self.script_name: str = ""
         self.options: Dict[str, bool] = {}
+        self.readonly_vars: set[str] = set()
         self._cmd_sub_used: bool = False
         self._cmd_sub_status: int = 0
         self._loop_depth: int = 0
@@ -584,6 +586,9 @@ class Runtime:
                             return e.code
                         expanded_assignments.append((assign.name, assign.op, value))
                     for name, op, value in expanded_assignments:
+                        if name in self.readonly_vars:
+                            print(self._format_error(f"{name}: is read only", line=self.current_line), file=sys.stderr)
+                            raise SystemExit(2)
                         if op == "+=":
                             self.env[name] = self.env.get(name, "") + value
                         else:
@@ -604,6 +609,9 @@ class Runtime:
             for scope in self.local_stack:
                 local_env.update(scope)
             for name, op, value in expanded_assignments:
+                if name in self.readonly_vars:
+                    print(self._format_error(f"{name}: is read only", line=self.current_line), file=sys.stderr)
+                    raise SystemExit(2)
                 if op == "+=":
                     local_env[name] = local_env.get(name, "") + value
                 else:
@@ -775,6 +783,8 @@ class Runtime:
             return self._run_set(argv[1:])
         if name == "export":
             return self._run_export(argv[1:])
+        if name == "readonly":
+            return self._run_readonly(argv[1:])
         if name == "unset":
             return self._run_unset(argv[1:])
         if name == "shift":
@@ -1922,7 +1932,10 @@ class Runtime:
 
     def _run_eval(self, args: List[str]) -> int:
         source = " ".join(args)
-        return self._eval_source(source, parse_context="eval", line_offset=1)
+        status = self._eval_source(source, parse_context="eval", line_offset=1)
+        if status != 0:
+            raise SystemExit(status)
+        return 0
 
     def _run_declare(self, args: List[str]) -> int:
         if args and args[0] == "-F":
@@ -1959,30 +1972,105 @@ class Runtime:
         return 0
 
     def _run_export(self, args: List[str]) -> int:
-        for arg in args:
+        unexport = False
+        idx = 0
+        while idx < len(args):
+            arg = args[idx]
+            if arg == "--":
+                idx += 1
+                break
+            if arg == "-n":
+                unexport = True
+                idx += 1
+                continue
+            if arg.startswith("-"):
+                self._report_error(f"illegal option {arg}", line=self.current_line, context="export")
+                return 2
+            break
+        status = 0
+        for arg in args[idx:]:
             if "=" in arg:
                 name, value = arg.split("=", 1)
                 op = "="
                 if name.endswith("+"):
                     op = "+="
                     name = name[:-1]
+                if unexport:
+                    self.env.pop(name, None)
+                    continue
+                if name in self.readonly_vars:
+                    self._report_error(f"{name}: is read only", line=self.current_line, context="export")
+                    status = 2
+                    continue
                 if op == "+=":
                     self.env[name] = self.env.get(name, "") + value
                 else:
                     self.env[name] = value
             else:
-                self.env[arg] = self.env.get(arg, "")
-        return 0
+                if unexport:
+                    self.env.pop(arg, None)
+                else:
+                    self.env[arg] = self.env.get(arg, "")
+        return status
+
+    def _run_readonly(self, args: List[str]) -> int:
+        if not args:
+            for name in sorted(self.readonly_vars):
+                print(f"readonly {name}='{self._get_var(name)}'")
+            return 0
+        status = 0
+        for arg in args:
+            if "=" in arg:
+                name, value = arg.split("=", 1)
+                if name in self.readonly_vars:
+                    self._report_error(f"{name}: is read only", line=self.current_line, context="readonly")
+                    status = 2
+                    continue
+                self._set_var(name, value)
+                self.readonly_vars.add(name)
+                continue
+            self.readonly_vars.add(arg)
+            self.env.setdefault(arg, self._get_var(arg))
+        return status
 
     def _run_unset(self, args: List[str]) -> int:
-        for name in args:
+        mode_vars = True
+        idx = 0
+        while idx < len(args):
+            arg = args[idx]
+            if arg == "--":
+                idx += 1
+                break
+            if arg == "-v":
+                mode_vars = True
+                idx += 1
+                continue
+            if arg == "-f":
+                mode_vars = False
+                idx += 1
+                continue
+            if arg.startswith("-"):
+                if arg == "-":
+                    self._report_error("-: bad variable name", line=self.current_line, context="unset")
+                else:
+                    self._report_error(f"illegal option {arg}", line=self.current_line, context="unset")
+                return 2
+            break
+        status = 0
+        for name in args[idx:]:
+            if mode_vars and name in self.readonly_vars:
+                self._report_error(f"{name}: is read only", line=self.current_line, context="unset")
+                raise SystemExit(2)
+            if not mode_vars:
+                self.functions.pop(name, None)
+                continue
             if name in self.env:
                 del self.env[name]
             for scope in self.local_stack:
                 scope.pop(name, None)
             if name == "OPTIND":
                 self._getopts_state = None
-        return 0
+        return status
 
     def _run_shift(self, args: List[str]) -> int:
         n = 1
@@ -2342,7 +2430,10 @@ class Runtime:
         if not cmd:
             return 0
         if cmd[0] in self.BUILTINS:
-            return self._run_builtin(cmd[0], cmd)
+            try:
+                return self._run_builtin(cmd[0], cmd)
+            except SystemExit as e:
+                return int(e.code) if e.code is not None else 0
         if cmd[0] in self.functions:
             return self._run_function(cmd[0], cmd[1:])
         env = dict(self.env)
