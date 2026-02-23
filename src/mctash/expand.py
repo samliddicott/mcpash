@@ -295,15 +295,26 @@ def _split_braced(inner: str) -> Tuple[str | None, str | None, str | None]:
     if not inner:
         return None, None, None
     i = 0
-    name_chars: List[str] = []
-    while i < len(inner) and (inner[i].isalnum() or inner[i] == "_"):
-        name_chars.append(inner[i])
-        i += 1
-    if not name_chars:
-        return None, None, None
-    name = "".join(name_chars)
+    if inner[0] in "@*#?$!-$":
+        name = inner[0]
+        i = 1
+    elif inner[0].isdigit():
+        name = inner[0]
+        i = 1
+    else:
+        name_chars: List[str] = []
+        while i < len(inner) and (inner[i].isalnum() or inner[i] == "_"):
+            name_chars.append(inner[i])
+            i += 1
+        if not name_chars:
+            return None, None, None
+        name = "".join(name_chars)
     if i >= len(inner):
         return name, None, None
+    if inner[i] == ":" and (i + 1 >= len(inner) or inner[i + 1] not in "-=?+"):
+        return name, ":substr", inner[i + 1 :]
+    if inner[i] == "/":
+        return name, "/", inner[i + 1 :]
     two_char_ops = {":-", ":=", ":?", ":+", "##", "%%"}
     if i + 1 < len(inner) and inner[i : i + 2] in two_char_ops:
         op = inner[i : i + 2]

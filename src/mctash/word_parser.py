@@ -299,11 +299,15 @@ def _split_braced_var(inner: str) -> tuple[str | None, str | None, str | None]:
         name = inner[1:]
         if _valid_param_name(name):
             return name, "__len__", None
-    if inner[0] in "@*#?$!-" and len(inner) >= 1:
+    if inner[0] in "@*#?$!-$" and len(inner) >= 1:
         name = inner[0]
         i = 1
         if i >= len(inner):
             return name, None, None
+        if inner[i] == ":" and (i + 1 >= len(inner) or inner[i + 1] not in "-=?+"):
+            return name, ":substr", inner[i + 1 :]
+        if inner[i] == "/":
+            return name, "/", inner[i + 1 :]
         two_char_ops = {":-", ":=", ":?", ":+", "##", "%%"}
         if i + 1 < len(inner) and inner[i : i + 2] in two_char_ops:
             op = inner[i : i + 2]
@@ -321,6 +325,10 @@ def _split_braced_var(inner: str) -> tuple[str | None, str | None, str | None]:
     name = "".join(name_chars)
     if i >= len(inner):
         return name, None, None
+    if inner[i] == ":" and (i + 1 >= len(inner) or inner[i + 1] not in "-=?+"):
+        return name, ":substr", inner[i + 1 :]
+    if inner[i] == "/":
+        return name, "/", inner[i + 1 :]
     two_char_ops = {":-", ":=", ":?", ":+", "##", "%%"}
     if i + 1 < len(inner) and inner[i : i + 2] in two_char_ops:
         op = inner[i : i + 2]

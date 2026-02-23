@@ -1456,6 +1456,10 @@ class Runtime:
             # Minimal handling for operators on positional parameters.
             is_set = value != ""
             arg_text = arg or ""
+            if op in ["=", ":="]:
+                raise RuntimeError(self._format_error(f"{name}: bad variable name", line=self.current_line))
+            if op == ":substr":
+                return self._substring(value, arg_text)
             if op in ["-", ":-"]:
                 if not is_set or (op == ":-" and value == ""):
                     return _expand_alt_word(arg_text)
@@ -1478,6 +1482,8 @@ class Runtime:
                 return _expand_alt_word(arg_text)
             return ""
         if op in ["=", ":="]:
+            if name in ["#", "?", "@", "*", "$", "!", "-"] or name.isdigit():
+                raise RuntimeError(self._format_error(f"{name}: bad variable name", line=self.current_line))
             if not is_set or (op == ":=" and value == ""):
                 replacement = _expand_alt_word(arg_text)
                 self._set_local(name, replacement)
@@ -1498,7 +1504,41 @@ class Runtime:
             if any(ch in arg_text for ch in ["'", '"', "\\"]):
                 pattern = pattern.replace("[", "[[]").replace("*", "[*]").replace("?", "[?]")
             return self._remove_suffix(value, pattern, longest=(op == "%%"))
+        if op == ":substr":
+            return self._substring(value, arg_text)
         return value
+
+    def _substring(self, value: str, arg_text: str) -> str:
+        if arg_text == "":
+            raise RuntimeError(self._format_error("syntax error: bad substitution", line=self.current_line))
+        if ":" in arg_text:
+            off_text, len_text = arg_text.split(":", 1)
+            has_len = True
+        else:
+            off_text, len_text = arg_text, ""
+            has_len = False
+        off = self._to_int_arith(off_text if off_text != "" else "0")
+        n = len(value)
+        if off < 0:
+            off = n + off
+        if off < 0:
+            off = 0
+        if off > n:
+            return ""
+        if not has_len:
+            return value[off:]
+        if len_text == "":
+            return ""
+        ln = self._to_int_arith(len_text)
+        if ln <= 0:
+            return ""
+        return value[off : off + ln]
+
+    def _to_int_arith(self, expr: str) -> int:
+        try:
+            return int(self._expand_arith(expr))
+        except Exception:
+            return 0
 
     def _get_positional(self, digit: str) -> str:
         idx = int(digit)
@@ -1759,6 +1799,12 @@ class Runtime:
             return str(len(self.positional)), True
         if name == "?":
             return str(self.last_status), True
+        if name == "$":
+            return str(os.getpid()), True
+        if name == "!":
+            return str(self._last_bg_job) if self._last_bg_job is not None else "", True
+        if name == "-":
+            return "".join(sorted(k for k, v in self.options.items() if v)), True
         if name == "@":
             return " ".join(self.positional), True
         if name == "*":
