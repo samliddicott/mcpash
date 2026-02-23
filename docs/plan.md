@@ -61,6 +61,32 @@ Exit Criteria
 - Threading model investigation (threads vs fork), with per-thread CWD and FD isolation requirements.
 - License-aligned research: if MIT/BSD/Apache is chosen, evaluate permissive shell implementations (e.g., `dash`/`ash` derivatives, `toysh`) for reusable components or reference.
 
+## Testing
+There are usable corpora, but they differ in fit and licensing.
+
+Best candidates:
+
+1. BusyBox shell tests (`shell/ash_test` and `shell/hush_test`)
+- Repo: `https://github.com/mirror/busybox`
+- Pros: very large, real ash-family behavior coverage, includes expected-output pairs.
+- Cons: GPLv2 project; vendoring tests may affect licensing posture.
+
+2. Oil shell spec tests (`spec/*.test.sh`, especially `posix.test.sh`, `shell-grammar.test.sh`, `redirect*.test.sh`, `word-split.test.sh`)
+- Repo: `https://github.com/oilshell/oil`
+- Pros: broad shell semantics coverage, easy to run incrementally, good diagnostics.
+- Cons: not "ash official"; includes bash/ysh-focused files you must filter.
+
+3. `ash-shell/test` framework
+- Repo: `https://github.com/ash-shell/test`
+- Pros: already integrated in this repo.
+- Cons: it is a test framework, not a language compliance corpus by itself.
+
+Recommended path:
+
+1. Use Oil spec filtered to POSIX/ash-relevant files as primary corpus (fast progress, clearer failures).
+2. Add selected BusyBox `ash_test` cases as secondary parity checks once core semantics stabilize.
+3. Keep `ash-shell/test` for project-local unit tests.
+
 ## Open Decisions
 - Exact ash compliance criteria and test suite selection.
 - Final interop syntax ergonomics and error semantics.
