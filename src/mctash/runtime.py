@@ -36,7 +36,8 @@ from .ast_nodes import (
     WhileCommand,
     Word,
 )
-from .expand import expand_word, parse_word_parts, _extract_balanced, _find_braced_end, _split_braced
+from .expand import PresplitFields, expand_word, parse_word_parts, _extract_balanced, _find_braced_end, _split_braced
+from .lexer import LexContext, TokenReader
 from .parser import ParseError, Parser
 from .asdl_map import AsdlMappingError, lst_list_item_to_asdl
 from .osh_adapter import OshAdapterError, asdl_item_to_list_item
@@ -711,6 +712,8 @@ class Runtime:
                     self.env = local_env
             finally:
                 self.env = saved_env
+            if self.options.get("x", False):
+                self._trace_simple(node, argv, local_env)
             if not argv:
                 try:
                     if node.redirects:
@@ -805,6 +808,31 @@ class Runtime:
             with self._redirected_fds(node.redirects):
                 return self._exec_command(node.child)
         return 2
+
+    def _trace_simple(self, node: SimpleCommand, argv: List[str], local_env: Dict[str, str]) -> None:
+        items: List[str] = []
+        for assign in node.assignments:
+            val = local_env.get(assign.name, "")
+            items.append(f"{assign.name}{assign.op}{self._trace_quote(val)}")
+        force_quote: List[bool] = []
+        if len(argv) == len(node.argv):
+            for w in node.argv:
+                parts = parse_word_parts(w.text)
+                force_quote.append(any(p.quoted for p in parts))
+        else:
+            force_quote = [False] * len(argv)
+        for i, arg in enumerate(argv):
+            items.append(self._trace_quote(arg, force=force_quote[i] if i < len(force_quote) else False))
+        print("+ " + " ".join(items), file=sys.stderr)
+
+    def _trace_quote(self, s: str, force: bool = False) -> str:
+        if s == "":
+            return "''"
+        if force:
+            return "'" + s.replace("'", "'\"'\"'") + "'"
+        if (not force) and re.fullmatch(r"[A-Za-z0-9_./-]+", s):
+            return s
+        return shlex.quote(s)
 
     def _run_subshell(self, body: ListNode) -> int:
         self._subshell_depth += 1
@@ -1465,6 +1493,9 @@ class Runtime:
             # Unquoted empty expansions are elided (e.g. $1 when unset).
             parts = parse_word_parts(w.text)
             if not any(p.quoted for p in parts):
+                if "'" in w.text or '"' in w.text:
+                    argv.extend(fields)
+                    continue
                 keep_split_empties = False
                 has_side_effect_expansion = any(p.kind in {"CMD", "CMD_BQ", "ARITH"} for p in parts)
                 if not has_side_effect_expansion:
@@ -1501,7 +1532,10 @@ class Runtime:
         def _assign_braced(name: str, op: str | None, arg: str | None, quoted: bool):
             if name in ["@", "*"] and op is None:
                 return self._ifs_join(self.positional)
-            return self._expand_braced_param(name, op, arg, quoted)
+            val = self._expand_braced_param(name, op, arg, quoted)
+            if isinstance(val, list):
+                return self._ifs_join([str(v) for v in val])
+            return val
 
         fields = expand_word(
             text,
@@ -1523,7 +1557,10 @@ class Runtime:
         def _assign_braced(name: str, op: str | None, arg: str | None, quoted: bool):
             if name in ["@", "*"] and op is None:
                 return self._ifs_join(self.positional)
-            return self._expand_braced_param(name, op, arg, quoted)
+            val = self._expand_braced_param(name, op, arg, quoted)
+            if isinstance(val, list):
+                return self._ifs_join([str(v) for v in val])
+            return val
 
         fields = expand_word(
             text,
@@ -1688,12 +1725,45 @@ class Runtime:
         self, name: str, op: str | None, arg: str | None, quoted: bool
     ) -> str | List[str]:
         def _expand_alt_word(text: str) -> str:
-            # Keep single quotes literal only when outer expansion is quoted
-            # (matches ash behavior in ${x:+'...'} under double quotes).
-            if quoted and len(text) >= 2 and text[0] == "'" and text[-1] == "'":
-                inner = self._expand_assignment_word_protected(text[1:-1])
-                return "'" + inner + "'"
+            # Under outer double quotes, single quotes are literal chars.
+            if quoted and "'" in text:
+                marker = "\ue00a"
+                expanded = self._expand_assignment_word_protected(text.replace("'", marker))
+                return expanded.replace(marker, "'")
             return self._expand_assignment_word_protected(text)
+
+        def _expand_alt_fields(text: str) -> PresplitFields:
+            reader = TokenReader(text)
+            ctx = LexContext(reserved_words=set(), allow_reserved=False, allow_newline=False)
+            words: List[str] = []
+            while True:
+                tok = reader.next(ctx)
+                if tok is None:
+                    break
+                if tok.kind == "WORD":
+                    words.append(tok.value)
+            out_fields: List[str] = []
+            for w in words:
+                out_fields.extend(
+                    expand_word(
+                        w,
+                        self._expand_param,
+                        self._expand_braced_param,
+                        self._expand_command_subst_text,
+                        self._expand_arith,
+                        self._split_ifs,
+                        self._glob_field,
+                    )
+                )
+            ifs_ws = "".join(ch for ch in self.env.get("IFS", " \t\n") if ch in " \t\n")
+            lead_boundary = bool(text) and bool(ifs_ws) and text[0] in ifs_ws
+            trail_boundary = bool(text) and bool(ifs_ws) and text[-1] in ifs_ws
+            return PresplitFields(out_fields, lead_boundary=lead_boundary, trail_boundary=trail_boundary)
+
+        def _expand_alt_unquoted(text: str):
+            if any(mark in text for mark in ["'", '"', "`", "$(", "${"]):
+                return _expand_alt_fields(text)
+            return _expand_alt_word(text)
 
         if op == "__invalid__":
             raise RuntimeError(self._format_error("syntax error: bad substitution", line=self.current_line))
@@ -1729,11 +1799,11 @@ class Runtime:
                 return self._substring(value, arg_text)
             if op in ["-", ":-"]:
                 if not is_set or (op == ":-" and value == ""):
-                    return _expand_alt_word(arg_text)
+                    return _expand_alt_word(arg_text) if quoted else _expand_alt_unquoted(arg_text)
                 return value
             if op in ["+", ":+"]:
                 if is_set and (op == "+" or value != ""):
-                    return _expand_alt_word(arg_text)
+                    return _expand_alt_word(arg_text) if quoted else _expand_alt_unquoted(arg_text)
                 return ""
             return value
         value, is_set = self._get_param_state(name)
@@ -1742,11 +1812,11 @@ class Runtime:
             return value
         if op in ["-", ":-"]:
             if not is_set or (op == ":-" and value == ""):
-                return _expand_alt_word(arg_text)
+                return _expand_alt_word(arg_text) if quoted else _expand_alt_unquoted(arg_text)
             return value
         if op in ["+", ":+"]:
             if is_set and (op == "+" or value != ""):
-                return _expand_alt_word(arg_text)
+                return _expand_alt_word(arg_text) if quoted else _expand_alt_unquoted(arg_text)
             return ""
         if op in ["=", ":="]:
             if name == "#" and op == "=":
@@ -2805,7 +2875,7 @@ class Runtime:
             sys.stdout.write(data)
             return 0
         try:
-            os.write(1, data.encode("utf-8", errors="ignore"))
+            os.write(1, data.encode("utf-8", errors="surrogateescape"))
             return 0
         except OSError as e:
             if getattr(e, "errno", None) == 32:

@@ -198,6 +198,11 @@ class TokenReader:
                     buf.append('"')
                     self._advance()
                     while self.i < len(self.source) and self._peek() != '"':
+                        if self._peek() == "$" and self._peek(1) == "'":
+                            chunk, new_i = _scan_ansi_c_single(self.source, self.i)
+                            buf.append(chunk)
+                            self._advance_to(new_i)
+                            continue
                         if self._peek() == "$" and self._peek(1) == "(":
                             chunk, new_i = _scan_command_sub(self.source, self.i)
                             buf.append(chunk)
@@ -259,6 +264,11 @@ class TokenReader:
                         self._advance()
                     else:
                         raise LexError(f"syntax error: unterminated quoted string at {quote_line}:{quote_col}")
+                    continue
+                if ch == "$" and self._peek(1) == "'":
+                    chunk, new_i = _scan_ansi_c_single(self.source, self.i)
+                    buf.append(chunk)
+                    self._advance_to(new_i)
                     continue
                 if ch == "$" and self._peek(1) == "(":
                     if self._peek(2) == "(":
@@ -829,5 +839,20 @@ def _scan_process_sub(source: str, start: int) -> tuple[str, int]:
         if ch == "\\" and i + 1 < len(source):
             i += 2
             continue
+        i += 1
+    return source[start:i], i
+
+
+def _scan_ansi_c_single(source: str, start: int) -> tuple[str, int]:
+    if start + 1 >= len(source) or source[start] != "$" or source[start + 1] != "'":
+        return source[start:start + 1], start + 1
+    i = start + 2
+    while i < len(source):
+        ch = source[i]
+        if ch == "\\" and i + 1 < len(source):
+            i += 2
+            continue
+        if ch == "'":
+            return source[start : i + 1], i + 1
         i += 1
     return source[start:i], i

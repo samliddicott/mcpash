@@ -24,6 +24,15 @@ class WordPart:
     arg: str | None = None
 
 
+class PresplitFields(list):
+    """A list of fields that must not be split again by IFS."""
+
+    def __init__(self, values=None, lead_boundary: bool = False, trail_boundary: bool = False):
+        super().__init__(values or [])
+        self.lead_boundary = lead_boundary
+        self.trail_boundary = trail_boundary
+
+
 def parse_word_parts(text: str) -> List[WordPart]:
     parts: List[WordPart] = []
     buf: List[str] = []
@@ -192,6 +201,17 @@ def _parse_ansi_c_single(text: str, start: int) -> Tuple[str, int]:
                 out.append("\v")
             elif nxt in ["\\", "'", '"']:
                 out.append(nxt)
+            elif nxt in "01234567":
+                octal = nxt
+                j = i + 2
+                while j < len(text) and len(octal) < 3 and text[j] in "01234567":
+                    octal += text[j]
+                    j += 1
+                code = int(octal, 8)
+                if code != 0:
+                    out.append(chr(code))
+                i = j
+                continue
             elif nxt == "x":
                 hx = ""
                 j = i + 2
@@ -199,11 +219,14 @@ def _parse_ansi_c_single(text: str, start: int) -> Tuple[str, int]:
                     hx += text[j]
                     j += 1
                 if hx:
-                    out.append(chr(int(hx, 16)))
+                    code = int(hx, 16)
+                    if code != 0:
+                        out.append(chr(code))
                     i = j
                     continue
-                out.append("x")
+                out.append("\\x")
             else:
+                out.append("\\")
                 out.append(nxt)
             i += 2
             continue
@@ -602,13 +625,19 @@ def expand_word(
                         continue
                     all_parts: List[str] = []
                     saw_delim_only = False
-                    for v in value:
-                        pieces = split_ifs(v)
-                        if not pieces:
-                            if v != "":
-                                saw_delim_only = True
-                            continue
-                        all_parts.extend(pieces)
+                    if isinstance(value, PresplitFields):
+                        if value.lead_boundary and (f != "" or q):
+                            new_fields.append((f, q, False, gm))
+                            f = ""
+                        all_parts.extend(list(value))
+                    else:
+                        for v in value:
+                            pieces = split_ifs(v)
+                            if not pieces:
+                                if v != "":
+                                    saw_delim_only = True
+                                continue
+                            all_parts.extend(pieces)
                     if not all_parts:
                         if saw_delim_only:
                             if f != "" or q:
@@ -622,14 +651,20 @@ def expand_word(
                         f = ""
                     if len(all_parts) == 1:
                         p = all_parts[0]
-                        new_fields.append((f + p, q, True, gm or has_glob_meta(p)))
+                        is_trail = isinstance(value, PresplitFields) and value.trail_boundary and idx < len(parts) - 1
+                        new_fields.append((f + p, q, (not is_trail), gm or has_glob_meta(p)))
+                        if is_trail:
+                            new_fields.append(("", q, True, False))
                     else:
                         first = all_parts[0]
                         new_fields.append((f + first, q, False, gm or has_glob_meta(first)))
                         for p in all_parts[1:-1]:
                             new_fields.append((p, q, False, has_glob_meta(p)))
                         last = all_parts[-1]
-                        new_fields.append((last, q, True, has_glob_meta(last)))
+                        is_trail = isinstance(value, PresplitFields) and value.trail_boundary and idx < len(parts) - 1
+                        new_fields.append((last, q, (not is_trail), has_glob_meta(last)))
+                        if is_trail:
+                            new_fields.append(("", q, True, False))
             fields = new_fields
             continue
 
