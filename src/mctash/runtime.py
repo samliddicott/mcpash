@@ -885,7 +885,7 @@ class Runtime:
         value = self._expand_assignment_word(node.value.text)
         for item in node.items:
             for pat in item.patterns:
-                expanded_pat = self._pattern_from_word(pat)
+                expanded_pat = self._pattern_from_word(pat, for_case=True)
                 if fnmatch.fnmatchcase(value, expanded_pat):
                     return self._exec_list(item.body)
         return 0
@@ -1563,7 +1563,7 @@ class Runtime:
 
     def _glob_field(self, text: str) -> List[str]:
         text = self._tilde_expand(text)
-        if any(c in text for c in ["*", "?", "[", "\ue001", "\ue002", "\ue003", "\ue004", "\ue005"]):
+        if any(c in text for c in ["*", "?", "[", "\ue001", "\ue002", "\ue003", "\ue004", "\ue005", "\ue007"]):
             pattern_for_match = self._glob_pattern_for_match(text)
             matches = sorted(glob.glob(pattern_for_match))
             if matches:
@@ -1578,11 +1578,28 @@ class Runtime:
             .replace("\ue003", "[[]")
             .replace("\ue004", "[]]")
             .replace("\ue005", "[\\\\]")
+            .replace("\ue008", "!")
         )
         out: List[str] = []
         i = 0
         while i < len(protected):
             ch = protected[i]
+            if ch == "[":
+                j = i + 1
+                cls: List[str] = []
+                while j < len(protected) and protected[j] != "]":
+                    cls.append(protected[j])
+                    j += 1
+                if j < len(protected) and protected[j] == "]":
+                    hy_count = cls.count("\ue007")
+                    cls = [c for c in cls if c != "\ue007"]
+                    if hy_count:
+                        cls.extend("-" for _ in range(hy_count))
+                    out.append("[")
+                    out.extend(cls)
+                    out.append("]")
+                    i = j + 1
+                    continue
             if ch == "\\" and i + 1 < len(protected):
                 nxt = protected[i + 1]
                 if nxt == "*":
@@ -1597,6 +1614,10 @@ class Runtime:
                     out.append(nxt)
                 i += 2
                 continue
+            if ch == "\ue007":
+                out.append("-")
+                i += 1
+                continue
             out.append(ch)
             i += 1
         return "".join(out)
@@ -1608,6 +1629,8 @@ class Runtime:
             .replace("\ue003", "[")
             .replace("\ue004", "]")
             .replace("\ue005", "\\")
+            .replace("\ue007", "-")
+            .replace("\ue008", "!")
         )
 
     def _tilde_expand(self, text: str) -> str:
@@ -1833,8 +1856,31 @@ class Runtime:
 
     def _split_unescaped_slash(self, text: str) -> tuple[str, str]:
         i = 0
+        in_single = False
+        in_double = False
         while i < len(text):
             ch = text[i]
+            if in_single:
+                if ch == "'":
+                    in_single = False
+                i += 1
+                continue
+            if in_double:
+                if ch == "\\" and i + 1 < len(text):
+                    i += 2
+                    continue
+                if ch == '"':
+                    in_double = False
+                i += 1
+                continue
+            if ch == "'":
+                in_single = True
+                i += 1
+                continue
+            if ch == '"':
+                in_double = True
+                i += 1
+                continue
             if ch == "\\" and i + 1 < len(text):
                 i += 2
                 continue
@@ -2195,15 +2241,18 @@ class Runtime:
                 return value[:i]
         return value
 
-    def _pattern_from_word(self, text: str) -> str:
+    def _pattern_from_word(self, text: str, for_case: bool = False) -> str:
         backslash_marker = "\ue006"
         raw = self._expand_assignment_word_protected(text)
+        rb = r"\]" if for_case else "]"
         raw = (
-            raw.replace("\ue001", "[*]")
-            .replace("\ue002", "[?]")
-            .replace("\ue003", "[[]")
-            .replace("\ue004", "]")
-            .replace("\ue005", backslash_marker)
+            raw.replace("\ue001", r"\*")
+            .replace("\ue002", r"\?")
+            .replace("\ue003", r"\[")
+            .replace("\ue004", rb)
+            .replace("\ue005", r"\\")
+            .replace("\ue007", r"\-")
+            .replace("\ue008", r"\!")
         )
         out: List[str] = []
         i = 0
@@ -2245,7 +2294,64 @@ class Runtime:
                 continue
             out.append(ch)
             i += 1
-        return "".join(out).replace(backslash_marker, "[\\\\]")
+        pat = "".join(out).replace(backslash_marker, "[\\\\]")
+        if for_case:
+            return self._normalize_class_escapes(pat)
+        return pat
+
+    def _normalize_class_escapes(self, pattern: str) -> str:
+        out: List[str] = []
+        i = 0
+        while i < len(pattern):
+            if pattern[i] != "[":
+                out.append(pattern[i])
+                i += 1
+                continue
+            j = i + 1
+            cls: List[str] = []
+            while j < len(pattern):
+                if pattern[j] == "\\" and j + 1 < len(pattern):
+                    cls.append(pattern[j : j + 2])
+                    j += 2
+                    continue
+                if pattern[j] == "]":
+                    break
+                cls.append(pattern[j])
+                j += 1
+            if j >= len(pattern) or pattern[j] != "]":
+                out.append(pattern[i])
+                i += 1
+                continue
+
+            neg = False
+            k = 0
+            if cls and cls[0] == "!":
+                neg = True
+                k = 1
+
+            literal_rbr = False
+            literal_hy = 0
+            body: List[str] = []
+            for tok in cls[k:]:
+                if tok == r"\]":
+                    literal_rbr = True
+                    continue
+                if tok == r"\-":
+                    literal_hy += 1
+                    continue
+                body.append(tok)
+
+            out.append("[")
+            if neg:
+                out.append("!")
+            if literal_rbr:
+                out.append("]")
+            out.extend(body)
+            if literal_hy:
+                out.extend("-" for _ in range(literal_hy))
+            out.append("]")
+            i = j + 1
+        return "".join(out)
 
     def _set_local(self, name: str, value: str) -> None:
         if not self.local_stack:

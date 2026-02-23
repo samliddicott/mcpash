@@ -9,6 +9,8 @@ _GLOB_PROTECT = {
     "[": "\ue003",
     "]": "\ue004",
     "\\": "\ue005",
+    "-": "\ue007",
+    "!": "\ue008",
 }
 _GLOB_UNPROTECT = {v: k for k, v in _GLOB_PROTECT.items()}
 
