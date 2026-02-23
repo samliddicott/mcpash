@@ -40,7 +40,9 @@ run_ash() {
     "PYTHONPATH=\"${ROOT}/src\" exec python3 -m mctash \"\$@\"" \
     > "${ASH_TEST_DIR}/ash"
   chmod +x "${ASH_TEST_DIR}/ash"
-  : > "${ASH_TEST_DIR}/.config"
+  cat > "${ASH_TEST_DIR}/.config" <<'EOF'
+CONFIG_FEATURE_FANCY_ECHO=y
+EOF
 
   cd "${ASH_TEST_DIR}"
   set +e
