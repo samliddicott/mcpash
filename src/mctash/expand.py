@@ -256,7 +256,8 @@ def expand_word(
                     for v in value:
                         pieces = split_ifs(v)
                         if not pieces:
-                            new_fields.append((f, q))
+                            if f != "":
+                                new_fields.append((f, q))
                         else:
                             for p in pieces:
                                 new_fields.append((f + p, q))
@@ -268,7 +269,7 @@ def expand_word(
         else:
             pieces = split_ifs(value)
             if not pieces:
-                fields = [(f, q) for f, q in fields]
+                fields = [(f, q) for f, q in fields if f != ""]
             else:
                 new_fields = []
                 for f, q in fields:

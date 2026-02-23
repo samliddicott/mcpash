@@ -129,7 +129,7 @@ class Runtime:
         self.current_line: int | None = None
         self.source_stack: List[str] = []
         self.traps: Dict[str, str] = {}
-        self._pending_signals: List[tuple[str, int]] = []
+        self._pending_signals: List[str] = []
         self._running_trap: bool = False
         self._trap_entry_status: int | None = None
         self._subshell_depth: int = 0
@@ -141,6 +141,8 @@ class Runtime:
         self._last_bg_job: int | None = None
         self._bg_pids: Dict[int, int] = {}
         self._thread_ctx = threading.local()
+        self._fd_redirect_depth: int = 0
+        self._force_broken_pipe: bool = False
         self._install_signal_handlers()
 
     def set_positional_args(self, args: List[str]) -> None:
@@ -170,12 +172,12 @@ class Runtime:
     def _signal_handler(self, signum, frame) -> None:
         if signum == signal.SIGTERM:
             if "TERM" in self.traps:
-                self._pending_signals.append(("TERM", self.last_status))
+                self._pending_signals.append("TERM")
             else:
                 raise SystemExit(128 + signum)
         if signum == signal.SIGINT:
             if "INT" in self.traps:
-                self._pending_signals.append(("INT", self.last_status))
+                self._pending_signals.append("INT")
             else:
                 raise SystemExit(128 + signum)
 
@@ -201,9 +203,12 @@ class Runtime:
         if self._subshell_depth > 0:
             return
         while self._pending_signals:
-            sig, entry_status = self._pending_signals.pop(0)
+            sig = self._pending_signals.pop(0)
             action = self.traps.get(sig)
             if action:
+                entry_status = self.last_status
+                if entry_status == 0 and self.last_nonzero_status != 0:
+                    entry_status = self.last_nonzero_status
                 self._run_trap_action(action, entry_status)
 
     def _run_trap_action(self, action: str, entry_status: int) -> int:
@@ -306,6 +311,7 @@ class Runtime:
             return 0 if (node.negate and status != 0) else (1 if node.negate and status == 0 else status)
 
         procs: List[subprocess.Popen] = []
+        statuses: List[int] = []
         prev = None
         for i, cmd in enumerate(node.commands):
             if not isinstance(cmd, SimpleCommand):
@@ -335,8 +341,10 @@ class Runtime:
                 prev.stdout.close()
             prev = proc
         status = procs[-1].wait()
+        statuses.append(status)
         for p in procs[:-1]:
-            p.wait()
+            statuses.insert(0, p.wait())
+        status = self._pipeline_result(statuses)
         if node.negate:
             return 0 if status != 0 else 1
         return status
@@ -353,22 +361,59 @@ class Runtime:
     def _exec_pipeline_inprocess(self, node: Pipeline) -> int:
         data: bytes | None = None
         status = 0
+        statuses: List[int] = []
         for i, cmd in enumerate(node.commands):
             if not isinstance(cmd, SimpleCommand):
-                status = self._exec_command(cmd)
+                last = i == len(node.commands) - 1
+                force_epipe = (not last) and self._pipeline_sink_is_no_reader(node.commands[i + 1])
+                saved_epipe = self._force_broken_pipe
+                self._force_broken_pipe = force_epipe
+                try:
+                    status = self._exec_command(cmd)
+                finally:
+                    self._force_broken_pipe = saved_epipe
+                statuses.append(status)
                 data = None
                 continue
             argv = self._expand_argv(cmd.argv)
             if not argv:
                 status = 2
+                statuses.append(status)
                 data = None
                 continue
             last = i == len(node.commands) - 1
             status, data = self._exec_simple_capture(cmd, argv, data, capture=not last)
+            statuses.append(status)
             if last and data is not None:
                 sys.stdout.write(data.decode("utf-8", errors="ignore"))
                 sys.stdout.flush()
-        return status
+        return self._pipeline_result(statuses if statuses else [status])
+
+    def _pipeline_result(self, statuses: List[int]) -> int:
+        if self.options.get("pipefail", False):
+            for st in reversed(statuses):
+                if st != 0:
+                    return st
+            return 0
+        return statuses[-1] if statuses else 0
+
+    def _pipeline_sink_is_no_reader(self, cmd: Command) -> bool:
+        if isinstance(cmd, SimpleCommand):
+            argv = self._expand_argv(cmd.argv)
+            return argv == ["true"]
+        if isinstance(cmd, GroupCommand):
+            items = cmd.body.items
+            if len(items) != 1:
+                return False
+            andor = items[0].node
+            if len(andor.pipelines) != 1:
+                return False
+            pl = andor.pipelines[0]
+            if len(pl.commands) != 1 or not isinstance(pl.commands[0], SimpleCommand):
+                return False
+            argv = self._expand_argv(pl.commands[0].argv)
+            return argv == ["true"]
+        return False
 
     def _exec_simple_capture(self, cmd: SimpleCommand, argv: List[str], data: bytes | None, capture: bool) -> tuple[int, bytes | None]:
         name = argv[0]
@@ -383,10 +428,17 @@ class Runtime:
                     sys.stdin = io.StringIO(input_text)
                 output = io.StringIO()
                 sys.stdout = output if capture else saved_stdout
-                if name in self.functions:
-                    status = self._run_function(name, argv[1:])
-                else:
-                    status = self._run_builtin(name, argv)
+                try:
+                    if name in self.functions:
+                        status = self._run_function(name, argv[1:])
+                    else:
+                        status = self._run_builtin(name, argv)
+                except SystemExit as e:
+                    status = int(e.code) if e.code is not None else 0
+                except ReturnFromFunction as e:
+                    status = e.code
+                except (BreakLoop, ContinueLoop):
+                    status = 1
                 out_text = output.getvalue()
                 return status, out_text.encode("utf-8")
             finally:
@@ -985,7 +1037,11 @@ class Runtime:
 
     @contextmanager
     def _redirected_fds(self, redirects: List[Redirect]):
+        if not redirects:
+            yield
+            return
         saved: List[Tuple[int, int]] = []
+        self._fd_redirect_depth += 1
         try:
             for redir in redirects:
                 fd = redir.fd if redir.fd is not None else (0 if redir.op in ["<", "<<", "<&"] else 1)
@@ -1029,6 +1085,7 @@ class Runtime:
                         os.close(fd)
                     except OSError:
                         pass
+            self._fd_redirect_depth = max(0, self._fd_redirect_depth - 1)
 
     def _expand_argv(self, words: List[Word]) -> List[str]:
         argv: List[str] = []
@@ -1379,6 +1436,11 @@ class Runtime:
         if args[0] == "--":
             self.set_positional_args(args[1:])
             return 0
+        if args[0] in ["-o", "+o"]:
+            if len(args) >= 2 and args[1] == "pipefail":
+                self.options["pipefail"] = args[0] == "-o"
+                return 0
+            return 1
         if args[0].startswith("-") or args[0].startswith("+"):
             for token in args:
                 if token == "--":
@@ -1464,8 +1526,12 @@ class Runtime:
                 continue
             out.append(fmt[i])
             i += 1
+        rendered = "".join(out)
+        if isinstance(sys.stdout, io.StringIO) and self._fd_redirect_depth == 0:
+            sys.stdout.write(rendered)
+            return 0
         # Use latin-1 to preserve byte-oriented escapes like \\xHH.
-        data = "".join(out).encode("latin-1", errors="ignore")
+        data = rendered.encode("latin-1", errors="ignore")
         try:
             os.write(1, data)
             return 0
@@ -1533,6 +1599,12 @@ class Runtime:
         data = " ".join(args)
         if newline:
             data += "\n"
+        if isinstance(sys.stdout, io.StringIO) and self._fd_redirect_depth == 0:
+            sys.stdout.write(data)
+            return 0
+        if self._force_broken_pipe and self._fd_redirect_depth == 0:
+            print("ash: write error: Broken pipe", file=sys.stderr)
+            return 1
         try:
             os.write(1, data.encode("utf-8", errors="ignore"))
             return 0
@@ -1562,6 +1634,9 @@ class Runtime:
         return 0
 
     def _readline_fd0(self) -> str | None:
+        if isinstance(sys.stdin, io.StringIO):
+            line = sys.stdin.readline()
+            return line if line != "" else None
         buf = bytearray()
         while True:
             chunk = os.read(0, 1)
@@ -1768,6 +1843,8 @@ class Runtime:
         return status
 
     def _capture_eval(self, source: str) -> tuple[str, int]:
+        if self._has_unterminated_quote(source):
+            raise RuntimeError(self._format_error("syntax error: unterminated quoted string", line=0))
         r_fd, w_fd = os.pipe()
         saved_stdout = os.dup(1)
         os.dup2(w_fd, 1)
@@ -1780,6 +1857,35 @@ class Runtime:
         with os.fdopen(r_fd, "rb") as r:
             data = r.read()
         return data.decode("utf-8", errors="ignore"), status
+
+    def _has_unterminated_quote(self, source: str) -> bool:
+        in_single = False
+        in_double = False
+        i = 0
+        while i < len(source):
+            ch = source[i]
+            if in_single:
+                if ch == "'":
+                    in_single = False
+                i += 1
+                continue
+            if in_double:
+                if ch == "\\" and i + 1 < len(source):
+                    i += 2
+                    continue
+                if ch == '"':
+                    in_double = False
+                i += 1
+                continue
+            if ch == "'":
+                in_single = True
+            elif ch == '"':
+                in_double = True
+            elif ch == "\\" and i + 1 < len(source):
+                i += 2
+                continue
+            i += 1
+        return in_single or in_double
 
     def _expand_command_subst(self, text: str) -> str:
         return self._expand_command_subst_text(text)
