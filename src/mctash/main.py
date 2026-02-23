@@ -27,7 +27,7 @@ def main(argv: List[str] | None = None) -> int:
         rt.set_script_name(script_name)
         rt.set_positional_args(script_args)
         try:
-            parser_impl = Parser(source)
+            parser_impl = Parser(source, aliases=rt.aliases)
             while True:
                 item = parser_impl.parse_next()
                 if item is None:
@@ -96,7 +96,7 @@ def main(argv: List[str] | None = None) -> int:
     rt.set_script_name(args.script or "")
     rt.set_positional_args(args.script_args)
     try:
-        parser_impl = Parser(source)
+        parser_impl = Parser(source, aliases=rt.aliases)
         while True:
             item = parser_impl.parse_next()
             if item is None:

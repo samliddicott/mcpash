@@ -825,7 +825,7 @@ class Runtime:
         self.source_stack.append(path)
         if args:
             self.set_positional_args(args)
-        parser_impl = Parser(source)
+        parser_impl = Parser(source, aliases=self.aliases)
         status = 0
         try:
             while True:
@@ -2114,7 +2114,7 @@ class Runtime:
         parse_context: str | None = None,
         line_offset: int = 0,
     ) -> int:
-        parser_impl = Parser(source)
+        parser_impl = Parser(source, aliases=self.aliases)
         status = 0
         try:
             while True:

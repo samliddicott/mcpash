@@ -1,5 +1,4 @@
 from __future__ import annotations
-
 from typing import List, Optional
 
 from .ast_nodes import (
@@ -79,7 +78,7 @@ RESERVED_WORDS = {
 
 
 class Parser:
-    def __init__(self, source: str):
+    def __init__(self, source: str, aliases: Optional[dict[str, str]] = None):
         self.reader = TokenReader(source)
         self.buffer: list[Token] = []
         self.ctx = LexContext(reserved_words=RESERVED_WORDS, allow_reserved=True, allow_newline=True)
@@ -87,6 +86,7 @@ class Parser:
         self.last_lst_item: Optional[LstListItem] = None
         self.last_line: int | None = None
         self.pending_heredocs: List[tuple[Redirect, LstRedirect]] = []
+        self.aliases: dict[str, str] = aliases if aliases is not None else {}
 
     def _peek(self) -> Optional[Token]:
         if not self.buffer:
@@ -143,6 +143,49 @@ class Parser:
 
     def _token_adjacent(self, left: Token, right: Token) -> bool:
         return left.index + len(left.value) == right.index
+
+    def _inject_alias_tokens(self, src_tok: Token, text: str) -> bool:
+        trailing = bool(text) and text[-1].isspace()
+        alias_reader = TokenReader(text)
+        alias_ctx = LexContext(reserved_words=RESERVED_WORDS, allow_reserved=True, allow_newline=False)
+        alias_tokens: list[Token] = []
+        while True:
+            tok = alias_reader.next(alias_ctx)
+            if tok is None:
+                break
+            if tok.kind == "OP" and tok.value == "\n":
+                continue
+            alias_tokens.append(Token(tok.kind, tok.value, src_tok.line, src_tok.col, src_tok.index))
+        if alias_tokens:
+            self.buffer = alias_tokens + self.buffer
+        return trailing
+
+    def _alias_affects_syntax(self, text: str) -> bool:
+        alias_reader = TokenReader(text)
+        alias_ctx = LexContext(reserved_words=RESERVED_WORDS, allow_reserved=True, allow_newline=False)
+        tok = alias_reader.next(alias_ctx)
+        if tok is None:
+            return False
+        if tok.kind == "RESERVED":
+            return True
+        if tok.kind == "WORD" and tok.value in {"{", "}", "(", ")"}:
+            return True
+        return False
+
+    def _maybe_expand_alias(self, tok: Optional[Token], seen: set[str], syntax_only: bool = False) -> bool:
+        if tok is None or not self._is_word(tok):
+            return False
+        if tok.value not in self.aliases:
+            return False
+        name = tok.value
+        if name not in self.aliases or name in seen:
+            return False
+        if syntax_only and not self._alias_affects_syntax(self.aliases[name]):
+            return False
+        seen.add(name)
+        self._advance()
+        self._inject_alias_tokens(tok, self.aliases[name])
+        return True
 
     def _is_heredoc_only_andor(self, node: AndOr) -> bool:
         if len(node.pipelines) != 1 or node.operators:
@@ -283,6 +326,12 @@ class Parser:
             tok = self._peek()
             if tok is None:
                 break
+            if self._is_word(tok) and tok.value in self.aliases:
+                seen: set[str] = set()
+                if self._maybe_expand_alias(tok, seen, syntax_only=False):
+                    tok = self._peek()
+                    if tok is None:
+                        break
             if self._is_word(tok) and tok.value in stop_words:
                 break
             if tok.kind == "OP" and tok.value in stop_words:
@@ -379,6 +428,12 @@ class Parser:
         )
 
     def parse_command(self) -> tuple[Command, LstCommand]:
+        alias_seen: set[str] = set()
+        while True:
+            tok0 = self._peek()
+            if self._maybe_expand_alias(tok0, alias_seen, syntax_only=True):
+                continue
+            break
         tok = self._peek()
         if self._is_word(tok) and tok.value == "if":
             command, lst_command = self.parse_if()
