@@ -4,11 +4,11 @@ from dataclasses import dataclass
 from typing import Callable, List, Tuple, Union
 
 _GLOB_PROTECT = {
-    "*": "\x01",
-    "?": "\x02",
-    "[": "\x03",
-    "]": "\x04",
-    "\\": "\x05",
+    "*": "\ue001",
+    "?": "\ue002",
+    "[": "\ue003",
+    "]": "\ue004",
+    "\\": "\ue005",
 }
 _GLOB_UNPROTECT = {v: k for k, v in _GLOB_PROTECT.items()}
 
