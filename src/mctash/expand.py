@@ -412,7 +412,7 @@ def _split_braced(inner: str) -> Tuple[str | None, str | None, str | None]:
     if inner[i] in ["-", "=", "?", "#", "%", "+"]:
         op = inner[i]
         return name, op, inner[i + 1 :]
-    return name, None, None
+    return None, None, None
 
 
 def expand_word(

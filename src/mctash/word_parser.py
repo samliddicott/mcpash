@@ -350,4 +350,4 @@ def _split_braced_var(inner: str) -> tuple[str | None, str | None, str | None]:
     if inner[i] in ["-", "=", "?", "#", "%", "+"]:
         op = inner[i]
         return name, op, inner[i + 1 :]
-    return name, None, None
+    return None, None, None

@@ -475,6 +475,20 @@ class Runtime:
         name = argv[0]
         input_text = data.decode("utf-8", errors="ignore") if data is not None else None
         if name in self.functions or name in self.BUILTINS:
+            if capture and self._stdout_redirected_away(cmd.redirects):
+                with self._redirected_fds(cmd.redirects):
+                    try:
+                        if name in self.functions:
+                            status = self._run_function(name, argv[1:])
+                        else:
+                            status = self._run_builtin(name, argv)
+                    except SystemExit as e:
+                        status = int(e.code) if e.code is not None else 0
+                    except ReturnFromFunction as e:
+                        status = e.code
+                    except (BreakLoop, ContinueLoop):
+                        status = 1
+                return status, b""
             saved_stdin = sys.stdin
             saved_stdout = sys.stdout
             try:
@@ -485,10 +499,11 @@ class Runtime:
                 output = io.StringIO()
                 sys.stdout = output if capture else saved_stdout
                 try:
-                    if name in self.functions:
-                        status = self._run_function(name, argv[1:])
-                    else:
-                        status = self._run_builtin(name, argv)
+                    with self._redirected_fds(cmd.redirects):
+                        if name in self.functions:
+                            status = self._run_function(name, argv[1:])
+                        else:
+                            status = self._run_builtin(name, argv)
                 except SystemExit as e:
                     status = int(e.code) if e.code is not None else 0
                 except ReturnFromFunction as e:
@@ -514,6 +529,17 @@ class Runtime:
         except FileNotFoundError:
             print(f"{argv[0]}: not found", file=sys.stderr)
             return 127, b""
+
+    def _stdout_redirected_away(self, redirects: List[Redirect]) -> bool:
+        for redir in redirects:
+            fd = redir.fd if redir.fd is not None else (0 if redir.op in ["<", "<<", "<&", "<>"] else 1)
+            if fd != 1:
+                continue
+            if redir.op in [">", ">>"]:
+                return True
+            if redir.op == ">&" and redir.target is not None:
+                return redir.target != "1"
+        return False
 
     def _exec_command(self, node: Command) -> int:
         if isinstance(node, GroupCommand):
@@ -578,14 +604,13 @@ class Runtime:
                 try:
                     self.env = local_env
                     self._apply_persistent_redirects(node.redirects)
-                    expanded_assignments: List[tuple[str, str, str]] = []
                     for assign in node.assignments:
                         try:
                             value = self._expand_assignment_word(assign.value)
                         except CommandSubstFailure as e:
                             return e.code
-                        expanded_assignments.append((assign.name, assign.op, value))
-                    for name, op, value in expanded_assignments:
+                        name = assign.name
+                        op = assign.op
                         if name in self.readonly_vars:
                             print(self._format_error(f"{name}: is read only", line=self.current_line), file=sys.stderr)
                             raise SystemExit(2)
@@ -597,25 +622,29 @@ class Runtime:
                 finally:
                     self.env = saved_env
 
-            expanded_assignments: List[tuple[str, str, str]] = []
-            for assign in node.assignments:
-                try:
-                    value = self._expand_assignment_word(assign.value)
-                except CommandSubstFailure as e:
-                    return e.code
-                expanded_assignments.append((assign.name, assign.op, value))
-
             local_env = dict(self.env)
             for scope in self.local_stack:
                 local_env.update(scope)
-            for name, op, value in expanded_assignments:
-                if name in self.readonly_vars:
-                    print(self._format_error(f"{name}: is read only", line=self.current_line), file=sys.stderr)
-                    raise SystemExit(2)
-                if op == "+=":
-                    local_env[name] = local_env.get(name, "") + value
-                else:
-                    local_env[name] = value
+            saved_env = self.env
+            try:
+                self.env = local_env
+                for assign in node.assignments:
+                    try:
+                        value = self._expand_assignment_word(assign.value)
+                    except CommandSubstFailure as e:
+                        return e.code
+                    name = assign.name
+                    op = assign.op
+                    if name in self.readonly_vars:
+                        print(self._format_error(f"{name}: is read only", line=self.current_line), file=sys.stderr)
+                        raise SystemExit(2)
+                    if op == "+=":
+                        local_env[name] = local_env.get(name, "") + value
+                    else:
+                        local_env[name] = value
+                    self.env = local_env
+            finally:
+                self.env = saved_env
             if not argv:
                 try:
                     if node.redirects:
@@ -1506,6 +1535,11 @@ class Runtime:
             return str(self._last_bg_job) if self._last_bg_job is not None else ""
         if name == "-":
             return "".join(sorted(k for k, v in self.options.items() if v))
+        if name == "LINENO":
+            line = self.current_line if self.current_line is not None else 0
+            if self.script_name == "":
+                line = max(0, line - 1)
+            return str(line)
         value, is_set = self._get_param_state(name)
         if (not is_set or value == "") and self.options.get("u", False) and name not in ["@", "*", "#"]:
             raise RuntimeError(f"unbound variable: {name}")
@@ -1900,6 +1934,11 @@ class Runtime:
             return str(self._last_bg_job) if self._last_bg_job is not None else "", True
         if name == "-":
             return "".join(sorted(k for k, v in self.options.items() if v)), True
+        if name == "LINENO":
+            line = self.current_line if self.current_line is not None else 0
+            if self.script_name == "":
+                line = max(0, line - 1)
+            return str(line), True
         if name == "@":
             return " ".join(self.positional), True
         if name == "*":
@@ -1994,7 +2033,8 @@ class Runtime:
                 else:
                     self._set_local(name, expanded)
             else:
-                self._set_local(arg, "")
+                if arg not in self.local_stack[-1]:
+                    self._set_local(arg, "")
         return 0
 
     def _run_eval(self, args: List[str]) -> int:
