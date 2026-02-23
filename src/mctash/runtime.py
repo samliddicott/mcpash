@@ -172,6 +172,7 @@ class Runtime:
         self._bg_jobs: Dict[int, threading.Thread] = {}
         self._bg_status: Dict[int, int] = {}
         self._last_bg_job: int | None = None
+        self._last_bg_pid: int | None = None
         self._bg_pids: Dict[int, int] = {}
         self._thread_ctx = threading.local()
         self._fd_redirect_depth: int = 0
@@ -205,26 +206,62 @@ class Runtime:
         return self._exec_list(script.body)
 
     def _install_signal_handlers(self) -> None:
-        try:
-            signal.signal(signal.SIGTERM, self._signal_handler)
-        except Exception:
-            pass
-        try:
-            signal.signal(signal.SIGINT, self._signal_handler)
-        except Exception:
-            pass
+        for name in ["HUP", "INT", "QUIT", "TERM", "USR1", "USR2", "WINCH", "CHLD", "PIPE", "ALRM"]:
+            sig = getattr(signal, f"SIG{name}", None)
+            if sig is None:
+                continue
+            try:
+                signal.signal(sig, self._signal_handler)
+            except Exception:
+                pass
 
     def _signal_handler(self, signum, frame) -> None:
-        if signum == signal.SIGTERM:
-            if "TERM" in self.traps:
-                self._pending_signals.append("TERM")
-            else:
-                raise SystemExit(128 + signum)
-        if signum == signal.SIGINT:
-            if "INT" in self.traps:
-                self._pending_signals.append("INT")
-            else:
-                raise SystemExit(128 + signum)
+        try:
+            name = signal.Signals(signum).name.replace("SIG", "")
+        except Exception:
+            name = str(signum)
+        action = self.traps.get(name)
+        if action is not None:
+            if action == "":
+                return
+            self._pending_signals.append(name)
+            return
+        if name in {"CHLD", "WINCH"}:
+            return
+        if name in {"USR1", "USR2", "SYS"}:
+            msg = signal.strsignal(signum)
+            if msg:
+                print(msg, file=sys.stderr)
+        raise SystemExit(128 + signum)
+
+    def _normalize_signal_spec(self, spec: str) -> str | None:
+        text = spec.strip()
+        if text == "":
+            return None
+        if text == "0" or text.upper() == "EXIT":
+            return "EXIT"
+        if text.lstrip("-").isdigit():
+            num = int(text)
+            if num == 0:
+                return "EXIT"
+            try:
+                return signal.Signals(num).name.replace("SIG", "")
+            except Exception:
+                return None
+        up = text.upper()
+        if up.startswith("SIG"):
+            up = up[3:]
+        if up == "0":
+            return "EXIT"
+        if hasattr(signal, f"SIG{up}"):
+            return up
+        return None
+
+    def _signal_number(self, name: str) -> int:
+        if name == "EXIT":
+            return 0
+        sig = getattr(signal, f"SIG{name}", None)
+        return int(sig) if sig is not None else 0
 
     def _format_error(self, msg: str, line: int | None = None, context: str | None = None) -> str:
         if self.source_stack:
@@ -256,7 +293,13 @@ class Runtime:
                 entry_status = self.last_status
                 if entry_status == 0 and self.last_nonzero_status != 0:
                     entry_status = self.last_nonzero_status
+                saved_last = self.last_status
+                saved_nonzero = self.last_nonzero_status
+                saved_hint = self._trap_status_hint
                 self._run_trap_action(action, entry_status)
+                self.last_status = saved_last
+                self.last_nonzero_status = saved_nonzero
+                self._trap_status_hint = saved_hint
 
     def _run_trap_action(self, action: str, entry_status: int) -> int:
         self._running_trap = True
@@ -320,6 +363,64 @@ class Runtime:
                     return 0 if status == 0 else status
             except Exception:
                 pass
+
+            # Fast path: single external command can be started directly so
+            # $! is a real PID and signal/wait behavior is closer to ash.
+            try:
+                node = item.node
+                if (
+                    len(node.pipelines) == 1
+                    and not node.pipelines[0].negate
+                    and len(node.operators) == 0
+                    and len(node.pipelines[0].commands) == 1
+                    and isinstance(node.pipelines[0].commands[0], SimpleCommand)
+                ):
+                    sc = node.pipelines[0].commands[0]
+                    argv = self._expand_argv(sc.argv)
+                    argv = self._expand_aliases(argv)
+                    if argv and argv[0] not in self.BUILTINS and argv[0] not in self.functions:
+                        cmd_env = dict(self.env)
+                        for scope in self.local_stack:
+                            for k, v in scope.items():
+                                if k in self.env:
+                                    cmd_env[k] = v
+                        for assign in sc.assignments:
+                            value = self._expand_assignment_word(assign.value)
+                            if assign.op == "+=":
+                                cmd_env[assign.name] = cmd_env.get(assign.name, "") + value
+                            else:
+                                cmd_env[assign.name] = value
+                        job_id = self._next_job_id
+                        self._next_job_id += 1
+                        child_env = dict(cmd_env)
+                        path0 = argv[0]
+                        if os.path.isfile(path0):
+                            try:
+                                with open(path0, "rb") as f:
+                                    head = f.read(2)
+                                if head == b"#!":
+                                    child_env["MCTASH_COMM_NAME"] = os.path.basename(path0)
+                            except OSError:
+                                pass
+                        with self._redirected_fds(sc.redirects):
+                            proc = subprocess.Popen(argv, env=child_env)
+
+                        def _watch_proc() -> None:
+                            try:
+                                self._bg_status[job_id] = proc.wait()
+                            finally:
+                                self._bg_pids.pop(job_id, None)
+
+                        th = threading.Thread(target=_watch_proc, daemon=True)
+                        self._bg_jobs[job_id] = th
+                        self._bg_pids[job_id] = proc.pid
+                        self._last_bg_job = job_id
+                        self._last_bg_pid = proc.pid
+                        th.start()
+                        return 0
+            except Exception:
+                pass
+
             job_id = self._next_job_id
             self._next_job_id += 1
 
@@ -677,6 +778,7 @@ class Runtime:
                     except ContinueLoop as e:
                         if e.count > 1:
                             raise ContinueLoop(e.count - 1)
+                        self._run_pending_traps()
                         continue
                     except BreakLoop as e:
                         if e.count > 1:
@@ -1166,6 +1268,7 @@ class Runtime:
                     job_id = getattr(self._thread_ctx, "job_id", None)
                     if isinstance(job_id, int):
                         self._bg_pids[job_id] = proc.pid
+                        self._last_bg_pid = proc.pid
                     return proc.wait()
                 except FileNotFoundError:
                     self._report_error(f"{argv[0]}: not found", line=self.current_line, context=context)
@@ -1222,7 +1325,13 @@ class Runtime:
         def wait_job(job_id: int) -> int:
             th = self._bg_jobs.get(job_id)
             if th is not None:
-                th.join()
+                while th.is_alive():
+                    th.join(0.05)
+                    if self._pending_signals:
+                        sig_name = self._pending_signals[0]
+                        self._run_pending_traps()
+                        sig_num = self._signal_number(sig_name)
+                        return 128 + sig_num if sig_num else 1
             st = self._bg_status.get(job_id, 0)
             if st < 0 and "TERM" in self.traps:
                 self._run_trap_action(self.traps["TERM"], 128 + signal.SIGTERM)
@@ -1236,7 +1345,12 @@ class Runtime:
             return last
         last = 0
         for arg in args:
-            token = arg[1:] if arg.startswith("%") else arg
+            if arg == "%%":
+                if self._last_bg_job is None:
+                    return 127
+                token = str(self._last_bg_job)
+            else:
+                token = arg[1:] if arg.startswith("%") else arg
             if not token.isdigit():
                 return 127
             job_id = int(token)
@@ -1248,23 +1362,59 @@ class Runtime:
     def _run_kill(self, args: List[str]) -> int:
         if not args:
             return 1
-        token = args[-1]
-        job_tok = token[1:] if token.startswith("%") else token
-        if job_tok.isdigit() and int(job_tok) in self._bg_jobs:
-            job_id = int(job_tok)
-            pid = self._bg_pids.get(job_id)
-            if pid is None:
-                return 1
-            try:
-                os.kill(pid, signal.SIGTERM)
-                return 0
-            except Exception:
-                return 1
-        try:
-            proc = subprocess.run(["kill"] + args, env=self.env)
-            return proc.returncode
-        except Exception:
+        sig_num = signal.SIGTERM
+        i = 0
+        targets: List[str] = []
+        while i < len(args):
+            a = args[i]
+            if a == "--":
+                targets.extend(args[i + 1 :])
+                break
+            if a == "-s":
+                if i + 1 >= len(args):
+                    return 1
+                spec = self._normalize_signal_spec(args[i + 1])
+                if spec is None:
+                    return 1
+                n = self._signal_number(spec)
+                if n == 0:
+                    return 1
+                sig_num = n
+                i += 2
+                continue
+            if a.startswith("-") and a != "-" and not a[1:].isdigit():
+                spec = self._normalize_signal_spec(a[1:])
+                if spec is None:
+                    return 1
+                n = self._signal_number(spec)
+                if n == 0:
+                    return 1
+                sig_num = n
+                i += 1
+                continue
+            targets.extend(args[i:])
+            break
+        if not targets:
             return 1
+        status = 0
+        for token in targets:
+            pid: int | None = None
+            if token == "%%":
+                if self._last_bg_job is not None:
+                    pid = self._bg_pids.get(self._last_bg_job)
+            elif token.startswith("%") and token[1:].isdigit():
+                job_id = int(token[1:])
+                pid = self._bg_pids.get(job_id)
+            elif token.isdigit():
+                pid = int(token)
+            if pid is None:
+                status = 1
+                continue
+            try:
+                os.kill(pid, sig_num)
+            except Exception:
+                status = 1
+        return status
 
     def _expand_aliases(self, argv: List[str]) -> List[str]:
         if not argv:
@@ -1748,8 +1898,10 @@ class Runtime:
             return str(self.last_status)
         if name == "$":
             return str(os.getpid())
+        if name == "PPID":
+            return str(os.getppid())
         if name == "!":
-            return str(self._last_bg_job) if self._last_bg_job is not None else ""
+            return str(self._last_bg_pid) if self._last_bg_pid is not None else ""
         if name == "-":
             return "".join(sorted(k for k, v in self.options.items() if v))
         if name == "LINENO":
@@ -1813,6 +1965,11 @@ class Runtime:
         if op == "__invalid__":
             raise RuntimeError(self._format_error("syntax error: bad substitution", line=self.current_line))
         if op == "__len__":
+            if name in ["@", "*", "#", "?", "$", "!", "-", "LINENO", "PPID"] or name.isdigit():
+                v = self._expand_param(name, quoted)
+                if isinstance(v, list):
+                    return str(len(v))
+                return str(len(v))
             value, _ = self._get_param_state(name)
             return str(len(value))
         if name == "@" and op is None:
@@ -3259,13 +3416,18 @@ class Runtime:
         if len(args) < 2:
             return 1
         action = args[0]
+        status = 0
         for sig in args[1:]:
-            key = sig.upper()
-            if action == "-":
+            key = self._normalize_signal_spec(sig)
+            if key is None:
+                self._report_error(f"{sig}: invalid signal specification", line=self.current_line, context="trap")
+                status = 1
+                continue
+            if action in ["-", "0"]:
                 self.traps.pop(key, None)
             else:
                 self.traps[key] = action
-        return 0
+        return status
 
     def _run_type(self, args: List[str]) -> int:
         if not args:
