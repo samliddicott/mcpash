@@ -110,7 +110,7 @@ def _parse_parts(text: str, in_double: bool) -> list[LstWordPart]:
                 parts.append(LstLiteralPart(text[i:]))
                 return parts
             inner = text[i + 1 : end]
-            parts.append(LstCommandSubPart(inner))
+            parts.append(LstCommandSubPart(inner, style="backtick"))
             i = end + 1
             continue
         if ch == "$":
@@ -132,7 +132,7 @@ def _parse_parts(text: str, in_double: bool) -> list[LstWordPart]:
                 sub, consumed = _parse_command_sub(text, i)
                 if sub is not None:
                     flush_literal()
-                    parts.append(LstCommandSubPart(sub))
+                    parts.append(LstCommandSubPart(sub, style="dollar"))
                     i += consumed
                     continue
             name, consumed = _parse_param(text, i)

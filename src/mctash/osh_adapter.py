@@ -248,8 +248,10 @@ def _word_part_to_text(node: Dict[str, Any]) -> str:
         return "${" + name + "}"
     if t == "word_part.CommandSub":
         src = node.get("child_source") or ""
-        escaped = src.replace("\\", "\\\\").replace("`", "\\`")
-        return "`" + escaped + "`"
+        syntax = node.get("syntax") or "dollar"
+        if syntax == "backtick":
+            return "`" + src + "`"
+        return "$(" + src + ")"
     if t == "word_part.ArithSub":
         return "$((" + (node.get("expr_source") or node.get("code") or "") + "))"
     return ""

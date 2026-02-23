@@ -898,19 +898,27 @@ class Parser:
             tok1 = self._peek_n(1)
             return tok1 is not None and self._is_word(tok1)
         if tok.value.endswith("()"):
-            return True
+            base = tok.value[:-2]
+            return self._is_valid_func_name(base)
         tok1 = self._peek_n(1)
         tok2 = self._peek_n(2)
         if tok1 and self._is_word(tok1) and tok1.value == "()":
-            return True
+            return self._is_valid_func_name(tok.value)
         if (
             tok1
             and ((self._is_word(tok1) and tok1.value == "(") or (tok1.kind == "OP" and tok1.value == "("))
             and tok2
             and ((self._is_word(tok2) and tok2.value == ")") or (tok2.kind == "OP" and tok2.value == ")"))
         ):
-            return True
+            return self._is_valid_func_name(tok.value)
         return False
+
+    def _is_valid_func_name(self, name: str) -> bool:
+        if not name:
+            return False
+        if not (name[0].isalpha() or name[0] == "_"):
+            return False
+        return all(ch.isalnum() or ch == "_" for ch in name)
 
     def _resolve_word(self, word: LstWord) -> LstWord:
         word.parts = [self._resolve_part(part) for part in word.parts]

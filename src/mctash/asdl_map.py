@@ -294,6 +294,7 @@ def word_part(part: LstWordPart) -> Dict[str, Any]:
             "type": "word_part.CommandSub",
             "child_source": part.source,
             "child": lst_script_to_asdl(part.child) if part.child else None,
+            "syntax": part.style,
         }
     if isinstance(part, LstArithSubPart):
         return {"type": "word_part.ArithSub", "expr_source": part.source}

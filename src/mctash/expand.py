@@ -15,7 +15,7 @@ _GLOB_UNPROTECT = {v: k for k, v in _GLOB_PROTECT.items()}
 
 @dataclass
 class WordPart:
-    kind: str  # LIT, PARAM, CMD, ARITH, BRACED
+    kind: str  # LIT, PARAM, CMD, CMD_BQ, ARITH, BRACED
     value: str
     quoted: bool
     op: str | None = None
@@ -64,14 +64,20 @@ def parse_word_parts(text: str) -> List[WordPart]:
                 cmd: List[str] = []
                 while j < len(text):
                     if text[j] == "\\" and j + 1 < len(text):
-                        cmd.append(text[j + 1])
+                        nxt = text[j + 1]
+                        if nxt in ["\\", "`", "$", "\n"]:
+                            cmd.append(nxt)
+                            j += 2
+                            continue
+                        cmd.append("\\")
+                        cmd.append(nxt)
                         j += 2
                         continue
                     if text[j] == "`":
                         break
                     cmd.append(text[j])
                     j += 1
-                parts.append(WordPart("CMD", "".join(cmd), quoted=False))
+                parts.append(WordPart("CMD_BQ", "".join(cmd), quoted=False))
                 i = j + 1 if j < len(text) and text[j] == "`" else j
                 continue
             if ch == "$":
@@ -125,14 +131,20 @@ def parse_word_parts(text: str) -> List[WordPart]:
                 cmd: List[str] = []
                 while j < len(text):
                     if text[j] == "\\" and j + 1 < len(text):
-                        cmd.append(text[j + 1])
+                        nxt = text[j + 1]
+                        if nxt in ["\\", "`", "$", '"', "\n"]:
+                            cmd.append(nxt)
+                            j += 2
+                            continue
+                        cmd.append("\\")
+                        cmd.append(nxt)
                         j += 2
                         continue
                     if text[j] == "`":
                         break
                     cmd.append(text[j])
                     j += 1
-                parts.append(WordPart("CMD", "".join(cmd), quoted=True))
+                parts.append(WordPart("CMD_BQ", "".join(cmd), quoted=True))
                 quote_has_parts = True
                 i = j + 1 if j < len(text) and text[j] == "`" else j
                 continue
@@ -202,6 +214,17 @@ def _extract_balanced(text: str, start: int, closing: str) -> Tuple[str, int]:
             if ch == "\\" and i + 1 < len(text):
                 i += 2
                 continue
+            if ch == "`":
+                i += 1
+                while i < len(text):
+                    if text[i] == "\\" and i + 1 < len(text):
+                        i += 2
+                        continue
+                    if text[i] == "`":
+                        i += 1
+                        break
+                    i += 1
+                continue
             if ch == '"':
                 in_double = False
                 i += 1
@@ -216,6 +239,20 @@ def _extract_balanced(text: str, start: int, closing: str) -> Tuple[str, int]:
             in_double = True
             i += 1
             continue
+        if ch == "\\" and i + 1 < len(text):
+            i += 2
+            continue
+        if ch == "`":
+            i += 1
+            while i < len(text):
+                if text[i] == "\\" and i + 1 < len(text):
+                    i += 2
+                    continue
+                if text[i] == "`":
+                    i += 1
+                    break
+                i += 1
+            continue
         if text.startswith("$((", i):
             depth += 1
             i += 3
@@ -224,6 +261,16 @@ def _extract_balanced(text: str, start: int, closing: str) -> Tuple[str, int]:
             depth += 1
             i += 2
             continue
+        if closing == ")":
+            if ch == "(":
+                paren_depth += 1
+                i += 1
+                continue
+            if ch == ")":
+                if paren_depth > 0:
+                    paren_depth -= 1
+                    i += 1
+                    continue
         if closing == "))":
             if ch == "(":
                 paren_depth += 1
@@ -271,7 +318,7 @@ def expand_word(
     text: str,
     get_param: Callable[[str, bool], Union[str, List[str]]],
     get_param_braced: Callable[[str, str | None, str | None, bool], Union[str, List[str]]],
-    eval_cmd: Callable[[str], str],
+    eval_cmd: Callable[[str, bool], str],
     eval_arith: Callable[[str], str],
     split_ifs: Callable[[str], List[str]],
     glob_field: Callable[[str], List[str]],
@@ -292,7 +339,9 @@ def expand_word(
         elif part.kind == "BRACED":
             value = get_param_braced(part.value, part.op, part.arg, part.quoted)
         elif part.kind == "CMD":
-            value = eval_cmd(part.value)
+            value = eval_cmd(part.value, False)
+        elif part.kind == "CMD_BQ":
+            value = eval_cmd(part.value, True)
         elif part.kind == "ARITH":
             value = eval_arith(part.value)
         else:

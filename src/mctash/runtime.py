@@ -11,6 +11,7 @@ import tempfile
 import threading
 import fnmatch
 import re
+import uuid
 from contextlib import contextmanager
 from typing import Dict, Iterable, List, Optional, Tuple
 
@@ -150,6 +151,8 @@ class Runtime:
         self._user_fds: set[int] = set()
         self._active_temp_fds: set[int] = set()
         self._getopts_state: tuple[tuple[str, ...], int, int] | None = None
+        self._procsub_paths: set[str] = set()
+        self._line_offset: int = 0
         # Align with ash test assumptions: shell starts with only stdio fds open.
         try:
             os.close(3)
@@ -203,6 +206,8 @@ class Runtime:
         if context:
             prefix = f"{prefix}: {context}"
         if line is not None:
+            if self._line_offset:
+                line += self._line_offset
             if self.c_string_mode and line > 0 and len(self.source_stack) <= 1:
                 line = line - 1
             prefix = f"{prefix}: line {line}"
@@ -533,8 +538,6 @@ class Runtime:
             if node.line is not None:
                 self.current_line = node.line
             argv = self._expand_argv(node.argv)
-            if not argv and node.argv:
-                argv = [w.text for w in node.argv]
             argv = self._expand_aliases(argv)
 
             if argv and argv[0] == "exec" and len(argv) <= 1 and node.redirects:
@@ -1045,7 +1048,7 @@ class Runtime:
             target_fd = redir.fd
             if target_fd is None:
                 target_fd = 0 if redir.op in ["<", "<<", "<&", "<>"] else 1
-            target = self._expand_assignment_word(redir.target) if redir.target else redir.target
+            target = self._expand_redir_target(redir)
             if redir.op == "<":
                 f = self._open_for_redir(target, "rb", redir.op)
                 to_close.append(f)
@@ -1149,7 +1152,7 @@ class Runtime:
     def _apply_persistent_redirects(self, redirects: List[Redirect]) -> None:
         for redir in redirects:
             fd = redir.fd if redir.fd is not None else (0 if redir.op in ["<", "<<", "<&", "<>"] else 1)
-            target = self._expand_assignment_word(redir.target) if redir.target else redir.target
+            target = self._expand_redir_target(redir)
             if redir.op == "<":
                 f = self._open_for_redir(target, "rb", redir.op)
                 self._dup2_file(f, fd)
@@ -1195,7 +1198,7 @@ class Runtime:
         try:
             for redir in redirects:
                 fd = redir.fd if redir.fd is not None else (0 if redir.op in ["<", "<<", "<&", "<>"] else 1)
-                target = self._expand_assignment_word(redir.target) if redir.target else redir.target
+                target = self._expand_redir_target(redir)
                 try:
                     saved_fd = os.dup(fd)
                     try:
@@ -1260,6 +1263,9 @@ class Runtime:
     def _expand_argv(self, words: List[Word]) -> List[str]:
         argv: List[str] = []
         for w in words:
+            if self._is_process_subst(w.text):
+                argv.append(self._process_substitute(w.text))
+                continue
             fields = expand_word(
                 w.text,
                 self._expand_param,
@@ -1289,6 +1295,8 @@ class Runtime:
         return fields[0] if fields else ""
 
     def _expand_assignment_word(self, text: str) -> str:
+        if self._is_process_subst(text):
+            return self._process_substitute(text)
         fields = expand_word(
             text,
             self._expand_param,
@@ -1312,6 +1320,13 @@ class Runtime:
             unprotect_literals=False,
         )
         return fields[0] if fields else ""
+
+    def _expand_redir_target(self, redir: Redirect) -> str | None:
+        if redir.target is None:
+            return None
+        if self._is_process_subst(redir.target):
+            return self._process_substitute(redir.target)
+        return self._expand_assignment_word(redir.target)
 
     def _split_ifs(self, text: str) -> List[str]:
         if text == "":
@@ -1493,8 +1508,8 @@ class Runtime:
             return self.positional[idx - 1]
         return ""
 
-    def _expand_command_subst_text(self, cmd: str) -> str:
-        output, status = self._capture_eval(cmd)
+    def _expand_command_subst_text(self, cmd: str, backtick: bool = False) -> str:
+        output, status = self._capture_eval(cmd, line_bias=(-1 if backtick else 0))
         self._cmd_sub_used = True
         self._cmd_sub_status = status
         return output.rstrip("\n")
@@ -1612,7 +1627,7 @@ class Runtime:
                         break
                     cmd.append(text[j])
                     j += 1
-                out.append(self._expand_command_subst_text("".join(cmd)))
+                out.append(self._expand_command_subst_text("".join(cmd), backtick=True))
                 i = j + 1 if j < len(text) and text[j] == "`" else j
                 continue
             if ch == "$":
@@ -2406,20 +2421,26 @@ class Runtime:
             status = 1
         return status
 
-    def _capture_eval(self, source: str) -> tuple[str, int]:
-        if self._has_unterminated_quote(source):
-            raise RuntimeError(self._format_error("syntax error: unterminated quoted string", line=0))
-        r_fd, w_fd = os.pipe()
+    def _capture_eval(self, source: str, line_bias: int = 0) -> tuple[str, int]:
+        tmp = tempfile.TemporaryFile()
         saved_stdout = os.dup(1)
-        os.dup2(w_fd, 1)
-        os.close(w_fd)
+        os.dup2(tmp.fileno(), 1)
+        saved_line = self.current_line
+        saved_offset = self._line_offset
+        base = (self.current_line or 1) + line_bias
+        if base < 1:
+            base = 1
+        self._line_offset = saved_offset + (base - 1)
         try:
             status = self._eval_source(source)
         finally:
+            self.current_line = saved_line
+            self._line_offset = saved_offset
             os.dup2(saved_stdout, 1)
             os.close(saved_stdout)
-        with os.fdopen(r_fd, "rb") as r:
-            data = r.read()
+        tmp.seek(0)
+        data = tmp.read()
+        tmp.close()
         return data.decode("utf-8", errors="ignore"), status
 
     def _normalize_parse_error(self, msg: str) -> tuple[str, int | None]:
@@ -2471,3 +2492,43 @@ class Runtime:
 
     def _expand_command_subst(self, text: str) -> str:
         return self._expand_command_subst_text(text)
+
+    def _is_process_subst(self, text: str) -> bool:
+        return (text.startswith("<(") or text.startswith(">(")) and text.endswith(")")
+
+    def _process_substitute(self, text: str) -> str:
+        if not self._is_process_subst(text):
+            return text
+        mode = text[0]
+        body = text[2:-1]
+        if mode == "<":
+            out, _ = self._capture_eval(body)
+            fd, path = tempfile.mkstemp(prefix="mctash-psubst-in-")
+            with os.fdopen(fd, "wb") as f:
+                f.write(out.encode("utf-8", errors="ignore"))
+            self._procsub_paths.add(path)
+            return path
+
+        fifo_path = os.path.join(tempfile.gettempdir(), f"mctash-psubst-out-{uuid.uuid4().hex}")
+        os.mkfifo(fifo_path, 0o600)
+        self._procsub_paths.add(fifo_path)
+        env = dict(self.env)
+        for scope in self.local_stack:
+            env.update(scope)
+
+        def _runner() -> None:
+            try:
+                subprocess.run(
+                    ["bash", "-c", f"{body} < \"$1\"", "mctash-psubst", fifo_path],
+                    env=env,
+                    check=False,
+                )
+            finally:
+                try:
+                    os.unlink(fifo_path)
+                except OSError:
+                    pass
+                self._procsub_paths.discard(fifo_path)
+
+        threading.Thread(target=_runner, daemon=True).start()
+        return fifo_path

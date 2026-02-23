@@ -78,6 +78,11 @@ class TokenReader:
                 if self._queue:
                     return self._queue.pop(0)
                 continue
+            if ch in ["<", ">"] and self._peek(1) == "(":
+                start_line, start_col, start_index = self.line, self.col, self.i
+                chunk, new_i = _scan_process_sub(self.source, self.i)
+                self._advance_to(new_i)
+                return Token("WORD", chunk, start_line, start_col, start_index)
             if ch in ["&", "|"] and self._peek(1) == "\\" and self._peek(2) == "\n" and self._peek(3) == ch:
                 tok = Token("OP", ch + ch, self.line, self.col, self.i)
                 self._advance(4)
@@ -154,6 +159,24 @@ class TokenReader:
                 ch = self._peek()
                 if ch in " \t\r\n":
                     break
+                if ch == "\\":
+                    nxt = self._peek(1)
+                    if nxt == "\n" and self._is_line_continuation():
+                        self._advance(2)
+                        continue
+                    if nxt:
+                        buf.append("\\")
+                        buf.append(nxt)
+                        self._advance(2)
+                        continue
+                    buf.append("\\")
+                    self._advance()
+                    continue
+                if ch in ["<", ">"] and self._peek(1) == "(":
+                    chunk, new_i = _scan_process_sub(self.source, self.i)
+                    buf.append(chunk)
+                    self._advance_to(new_i)
+                    continue
                 two = ch + self._peek(1)
                 if two in OPERATORS or ch in OPERATORS:
                     break
@@ -225,13 +248,6 @@ class TokenReader:
                         chunk, new_i = _scan_command_sub(self.source, self.i)
                     buf.append(chunk)
                     self._advance_to(new_i)
-                    continue
-                if ch == "\\" and self._peek(1) == "\n":
-                    if self._is_line_continuation():
-                        self._advance(2)
-                        continue
-                    buf.append(ch)
-                    self._advance()
                     continue
                 buf.append(ch)
                 self._advance()
@@ -412,6 +428,7 @@ def _scan_command_sub(source: str, start: int) -> tuple[str, int]:
         return source[start:start + 1], start + 1
     i += 2
     depth = 1
+    paren_depth = 0
     in_single = False
     in_double = False
     while i < len(source):
@@ -424,6 +441,10 @@ def _scan_command_sub(source: str, start: int) -> tuple[str, int]:
         if in_double:
             if ch == "\\" and i + 1 < len(source):
                 i += 2
+                continue
+            if ch == "`":
+                chunk, new_i = _scan_backtick_sub(source, i)
+                i = new_i
                 continue
             if ch == '"':
                 in_double = False
@@ -439,11 +460,26 @@ def _scan_command_sub(source: str, start: int) -> tuple[str, int]:
             in_double = True
             i += 1
             continue
+        if ch == "`":
+            chunk, new_i = _scan_backtick_sub(source, i)
+            i = new_i
+            continue
+        if ch == "\\" and i + 1 < len(source):
+            i += 2
+            continue
         if source.startswith("$(", i):
             depth += 1
             i += 2
             continue
+        if ch == "(":
+            paren_depth += 1
+            i += 1
+            continue
         if ch == ")":
+            if paren_depth > 0:
+                paren_depth -= 1
+                i += 1
+                continue
             depth -= 1
             i += 1
             if depth == 0:
@@ -521,5 +557,63 @@ def _scan_backtick_sub(source: str, start: int) -> tuple[str, int]:
         if ch == "`":
             i += 1
             return source[start:i], i
+        i += 1
+    return source[start:i], i
+
+
+def _scan_process_sub(source: str, start: int) -> tuple[str, int]:
+    i = start
+    if i + 1 >= len(source) or source[i] not in "<>" or source[i + 1] != "(":
+        return source[start:start + 1], start + 1
+    i += 2
+    depth = 1
+    in_single = False
+    in_double = False
+    while i < len(source):
+        ch = source[i]
+        if in_single:
+            if ch == "'":
+                in_single = False
+            i += 1
+            continue
+        if in_double:
+            if ch == "\\" and i + 1 < len(source):
+                i += 2
+                continue
+            if ch == '"':
+                in_double = False
+                i += 1
+                continue
+            i += 1
+            continue
+        if ch == "'":
+            in_single = True
+            i += 1
+            continue
+        if ch == '"':
+            in_double = True
+            i += 1
+            continue
+        if source.startswith("$(", i):
+            chunk, new_i = _scan_command_sub(source, i)
+            i = new_i
+            continue
+        if ch == "`":
+            chunk, new_i = _scan_backtick_sub(source, i)
+            i = new_i
+            continue
+        if ch == "(":
+            depth += 1
+            i += 1
+            continue
+        if ch == ")":
+            depth -= 1
+            i += 1
+            if depth == 0:
+                return source[start:i], i
+            continue
+        if ch == "\\" and i + 1 < len(source):
+            i += 2
+            continue
         i += 1
     return source[start:i], i

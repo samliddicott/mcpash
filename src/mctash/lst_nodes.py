@@ -42,6 +42,7 @@ class LstParamPart(LstWordPart):
 class LstCommandSubPart(LstWordPart):
     source: str
     child: "LstScript | None" = None
+    style: str = "dollar"
 
 
 @dataclass
