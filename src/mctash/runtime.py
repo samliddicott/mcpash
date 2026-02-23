@@ -174,6 +174,7 @@ class Runtime:
         self._last_bg_job: int | None = None
         self._last_bg_pid: int | None = None
         self._bg_pids: Dict[int, int] = {}
+        self._bg_pid_to_job: Dict[int, int] = {}
         self._thread_ctx = threading.local()
         self._fd_redirect_depth: int = 0
         self._force_broken_pipe: bool = False
@@ -228,7 +229,7 @@ class Runtime:
             return
         if name in {"CHLD", "WINCH"}:
             return
-        if name in {"USR1", "USR2", "SYS"}:
+        if name in {"HUP", "USR1", "USR2", "SYS"}:
             msg = signal.strsignal(signum)
             if msg:
                 print(msg, file=sys.stderr)
@@ -403,7 +404,7 @@ class Runtime:
                             except OSError:
                                 pass
                         with self._redirected_fds(sc.redirects):
-                            proc = subprocess.Popen(argv, env=child_env)
+                            proc = subprocess.Popen(argv, env=child_env, start_new_session=True)
 
                         def _watch_proc() -> None:
                             try:
@@ -414,6 +415,7 @@ class Runtime:
                         th = threading.Thread(target=_watch_proc, daemon=True)
                         self._bg_jobs[job_id] = th
                         self._bg_pids[job_id] = proc.pid
+                        self._bg_pid_to_job[proc.pid] = job_id
                         self._last_bg_job = job_id
                         self._last_bg_pid = proc.pid
                         th.start()
@@ -439,6 +441,17 @@ class Runtime:
             self._bg_jobs[job_id] = thread
             self._last_bg_job = job_id
             thread.start()
+            # Best-effort: wait briefly for background job leader PID so $! is
+            # available immediately after '&' for common cases.
+            deadline = time.monotonic() + 0.1
+            while time.monotonic() < deadline:
+                pid = self._bg_pids.get(job_id)
+                if pid is not None:
+                    self._last_bg_pid = pid
+                    break
+                if not thread.is_alive():
+                    break
+                time.sleep(0.001)
             return 0
         return self._exec_and_or(item.node)
 
@@ -595,9 +608,16 @@ class Runtime:
     ) -> tuple[int, bytes, float]:
         start = time.monotonic()
         tmp = tempfile.TemporaryFile()
+        try:
+            sys.stdout.flush()
+        except Exception:
+            pass
         saved_stdout = os.dup(1)
         saved_stdin = sys.stdin
         os.dup2(tmp.fileno(), 1)
+        py_stdout = os.fdopen(os.dup(1), "w", encoding="utf-8", errors="surrogateescape", buffering=1)
+        saved_py_stdout = sys.stdout
+        sys.stdout = py_stdout
         saved_epipe = self._force_broken_pipe
         self._force_broken_pipe = force_epipe
         try:
@@ -608,6 +628,15 @@ class Runtime:
             except SystemExit as e:
                 status = int(e.code) if e.code is not None else 0
         finally:
+            try:
+                sys.stdout.flush()
+            except Exception:
+                pass
+            sys.stdout = saved_py_stdout
+            try:
+                py_stdout.close()
+            except Exception:
+                pass
             sys.stdin = saved_stdin
             self._force_broken_pipe = saved_epipe
             os.dup2(saved_stdout, 1)
@@ -768,7 +797,17 @@ class Runtime:
             last = 0
             try:
                 while True:
-                    cond_status = self._exec_list(node.cond)
+                    try:
+                        cond_status = self._exec_list(node.cond)
+                    except ContinueLoop as e:
+                        if e.count > 1:
+                            raise ContinueLoop(e.count - 1)
+                        self._run_pending_traps()
+                        continue
+                    except BreakLoop as e:
+                        if e.count > 1:
+                            raise BreakLoop(e.count - 1)
+                        break
                     should_run = cond_status != 0 if node.until else cond_status == 0
                     if not should_run:
                         break
@@ -1264,11 +1303,17 @@ class Runtime:
         try:
             with self._redirected_fds(redirects):
                 try:
-                    proc = subprocess.Popen(argv, env=child_env)
                     job_id = getattr(self._thread_ctx, "job_id", None)
+                    proc = subprocess.Popen(
+                        argv,
+                        env=child_env,
+                        start_new_session=bool(isinstance(job_id, int)),
+                    )
                     if isinstance(job_id, int):
                         self._bg_pids[job_id] = proc.pid
-                        self._last_bg_pid = proc.pid
+                        self._bg_pid_to_job[proc.pid] = job_id
+                        if job_id == self._last_bg_job:
+                            self._last_bg_pid = proc.pid
                     return proc.wait()
                 except FileNotFoundError:
                     self._report_error(f"{argv[0]}: not found", line=self.current_line, context=context)
@@ -1333,9 +1378,8 @@ class Runtime:
                         sig_num = self._signal_number(sig_name)
                         return 128 + sig_num if sig_num else 1
             st = self._bg_status.get(job_id, 0)
-            if st < 0 and "TERM" in self.traps:
-                self._run_trap_action(self.traps["TERM"], 128 + signal.SIGTERM)
-                return 0
+            if st < 0:
+                return 128 + (-st)
             return st
 
         if not args:
@@ -1348,12 +1392,25 @@ class Runtime:
             if arg == "%%":
                 if self._last_bg_job is None:
                     return 127
-                token = str(self._last_bg_job)
+                job_id = self._last_bg_job
             else:
                 token = arg[1:] if arg.startswith("%") else arg
-            if not token.isdigit():
-                return 127
-            job_id = int(token)
+                if not token.isdigit():
+                    return 127
+                token_i = int(token)
+                if arg.startswith("%"):
+                    job_id = token_i
+                elif token_i in self._bg_jobs or token_i in self._bg_status:
+                    job_id = token_i
+                else:
+                    job_id = self._bg_pid_to_job.get(token_i, -1)
+                    if job_id < 0:
+                        for jid, pid in self._bg_pids.items():
+                            if pid == token_i:
+                                job_id = jid
+                                break
+                    if job_id < 0:
+                        return 127
             if job_id not in self._bg_jobs and job_id not in self._bg_status:
                 return 127
             last = wait_job(job_id)
@@ -1399,19 +1456,28 @@ class Runtime:
         status = 0
         for token in targets:
             pid: int | None = None
+            from_job = False
             if token == "%%":
                 if self._last_bg_job is not None:
                     pid = self._bg_pids.get(self._last_bg_job)
+                    from_job = True
             elif token.startswith("%") and token[1:].isdigit():
                 job_id = int(token[1:])
                 pid = self._bg_pids.get(job_id)
+                from_job = True
             elif token.isdigit():
                 pid = int(token)
             if pid is None:
                 status = 1
                 continue
             try:
-                os.kill(pid, sig_num)
+                if from_job:
+                    try:
+                        os.killpg(pid, sig_num)
+                    except Exception:
+                        os.kill(pid, sig_num)
+                else:
+                    os.kill(pid, sig_num)
             except Exception:
                 status = 1
         return status
@@ -3411,13 +3477,19 @@ class Runtime:
     def _run_trap(self, args: List[str]) -> int:
         if not args:
             for sig, action in sorted(self.traps.items()):
-                print(f"trap -- '{action}' {sig}")
+                print(f"trap -- '{action}' {sig}", flush=True)
             return 0
-        if len(args) < 2:
-            return 1
-        action = args[0]
+        first_is_cond = self._normalize_signal_spec(args[0]) is not None
+        if first_is_cond:
+            action = "-"
+            sig_args = args
+        else:
+            if len(args) < 2:
+                return 1
+            action = args[0]
+            sig_args = args[1:]
         status = 0
-        for sig in args[1:]:
+        for sig in sig_args:
             key = self._normalize_signal_spec(sig)
             if key is None:
                 self._report_error(f"{sig}: invalid signal specification", line=self.current_line, context="trap")
@@ -3592,8 +3664,15 @@ class Runtime:
 
     def _capture_eval(self, source: str, line_bias: int = 0) -> tuple[str, int, bool]:
         tmp = tempfile.TemporaryFile()
+        try:
+            sys.stdout.flush()
+        except Exception:
+            pass
         saved_stdout = os.dup(1)
         os.dup2(tmp.fileno(), 1)
+        py_stdout = os.fdopen(os.dup(1), "w", encoding="utf-8", errors="surrogateescape", buffering=1)
+        saved_py_stdout = sys.stdout
+        sys.stdout = py_stdout
         saved_line = self.current_line
         saved_offset = self._line_offset
         base = (self.current_line or 1) + line_bias
@@ -3601,6 +3680,15 @@ class Runtime:
         try:
             status = self._eval_source(source)
         finally:
+            try:
+                sys.stdout.flush()
+            except Exception:
+                pass
+            sys.stdout = saved_py_stdout
+            try:
+                py_stdout.close()
+            except Exception:
+                pass
             self.current_line = saved_line
             self._line_offset = saved_offset
             os.dup2(saved_stdout, 1)
