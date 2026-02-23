@@ -8,7 +8,8 @@ import sys
 from typing import List, Tuple
 
 from .parser import ParseError, Parser
-from .asdl_map import lst_script_to_asdl
+from .asdl_map import AsdlMappingError, lst_list_item_to_asdl, lst_script_to_asdl
+from .osh_adapter import OshAdapterError, asdl_item_to_list_item
 from .runtime import BreakLoop, ContinueLoop, Runtime, RuntimeError
 
 
@@ -34,7 +35,7 @@ def main(argv: List[str] | None = None) -> int:
 
     if args.dump_lst:
         script = Parser(source).parse_script()
-        payload = lst_script_to_asdl(script.lst) if script.lst else {}
+        payload = lst_script_to_asdl(script.lst, strict=True) if script.lst else {}
         print(json.dumps(payload, indent=2, sort_keys=True))
         return 0
 
@@ -47,10 +48,16 @@ def main(argv: List[str] | None = None) -> int:
             item = parser_impl.parse_next()
             if item is None:
                 break
-            rt.last_status = rt._exec_list_item(item)
+            if parser_impl.last_lst_item is None:
+                raise ParseError("internal parse error: missing LST list item")
+            asdl_item = lst_list_item_to_asdl(parser_impl.last_lst_item, strict=True)
+            rt.last_status = rt._exec_list_item(asdl_item_to_list_item(asdl_item))
         return rt.last_status
     except ParseError as e:
         print(f"parse error: {e}", file=sys.stderr)
+        return 2
+    except (AsdlMappingError, OshAdapterError) as e:
+        print(f"asdl error: {e}", file=sys.stderr)
         return 2
     except RuntimeError as e:
         print(f"runtime error: {e}", file=sys.stderr)

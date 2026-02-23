@@ -84,6 +84,7 @@ class Parser:
         self.buffer: list[Token] = []
         self.ctx = LexContext(reserved_words=RESERVED_WORDS, allow_reserved=True, allow_newline=True)
         self.last_lst: Optional[LstAndOr] = None
+        self.last_lst_item: Optional[LstListItem] = None
         self.pending_heredocs: List[tuple[Redirect, LstRedirect]] = []
 
     def _peek(self) -> Optional[Token]:
@@ -154,11 +155,14 @@ class Parser:
         self.last_lst = lst_node
         tok = self._peek()
         background = False
+        terminator: str | None = None
         if tok and tok.kind == "OP" and tok.value in ["\n", ";", "&"]:
             background = tok.value == "&"
+            terminator = tok.value
             self._advance()
             if tok.value == "\n":
                 self._consume_pending_heredocs()
+        self.last_lst_item = LstListItem(node=lst_node, terminator=terminator)
         return ListItem(node=node, background=background)
 
     def parse_list(self) -> tuple[ListNode, LstListNode]:

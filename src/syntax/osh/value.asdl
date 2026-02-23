@@ -1,0 +1,230 @@
+# Runtime value
+
+module value
+{
+  # import from frontend/syntax.asdl
+  use frontend syntax {
+    loc Token
+    expr command
+    DoubleQuoted
+    re proc_sig 
+    Func
+    NameType
+    EggexFlag
+    BraceGroup SourceLine
+    debug_frame
+    ShFunction
+    cmd_frag
+  }
+
+  use core runtime {
+    Cell
+  }
+
+  # Probably need to export 'class vm' declarations in
+  # _gen/bin/oils_for_unix.mycpp.h, or another header
+  #
+  # extern [ core vm _Builtin ]  # for value.BuiltinProc, below
+  # extern [ core vm _Callable ] # for value.BuiltinFunc, below
+
+  IntBox = (int i)
+
+  InitializerValue = (str? key, str rval, bool plus_eq)
+
+  ProcDefaults = (
+    List[value]? for_word,  # all of them are value.Str
+    List[value]? for_typed,
+    Dict[str, value]? for_named,
+    value? for_block,
+  )
+
+  LeftName = (str name, loc blame_loc)
+
+  # for setvar, and value.Place
+  y_lvalue = 
+    # e.g. read (&x)
+    Local %LeftName
+    # e.g. &a[0][1].key -- we evaluate a[0][1] first
+  | Container(value obj, value index)
+
+  # An sh_lvalue is for things mutation that happen with dynamic scope
+  #
+  # - sh_expr_eval uses this for unset / printf -v
+  # - word_eval uses this for ${a[0]=}
+  # - expr_eval / cmd_eval use this for setvar a[i] = 42
+  sh_lvalue = 
+    Var %LeftName
+  | Indexed(str name, int index, loc blame_loc)
+  | Keyed(str name, str key, loc blame_loc)
+
+  eggex_ops =
+    # for BASH_REMATCH or ~ with a string
+    No
+    # These lists are indexed by group number, and will have None entries
+  | Yes(List[value?] convert_funcs, List[Token?] convert_toks,
+        List[str?] capture_names)
+
+  RegexMatch = (str s, List[int] indices, eggex_ops ops)
+
+  regex_match = 
+    No
+  | Yes %RegexMatch
+
+  # Arbitrary objects, where attributes are looked up on the prototype chain.
+  Obj = (Obj? prototype, Dict[str, value] d)
+
+  # Commands, words, and expressions from syntax.asdl are evaluated to a VALUE.
+  # value_t instances are stored in state.Mem().
+  value =
+    #
+    # Implementation details
+    #
+
+    # Only used for io.stdin aka val_ops.StdinIterator.  (It would be nice if
+    # we could express iter_value.{Eof,Interrupted,Str,Int,...} in ASDL)
+    Interrupted
+  | Stdin
+    # Can't be instantiated by users
+    # a[3:5] a[:10] a[3:] a[:]  # both ends are optional
+  | Slice(IntBox? lower, IntBox? upper)
+
+    #
+    # OSH/Bash types
+    #
+
+    # Methods on state::Mem return value.Undef, but it's not visible in YSH.
+    # Note: A var bound to Undef is different than no binding because of
+    # dynamic scope.  Undef can shadow values lower on the stack.
+  | Undef
+
+  | Str(str s)
+
+  | InitializerList(List[InitializerValue] assigns)
+
+    # "holes" in the array are represented by None
+  | InternalStringArray(List[str] strs)
+    # TODO: Switch to this more efficient representation.  max_index makes
+    # append-sparse workload faster, and normal append loops too
+  | BashArray(Dict[BigInt, str] d, BigInt max_index)
+
+  | BashAssoc(Dict[str, str] d)
+
+    # The DATA model for YSH follows JSON.  Note: YSH doesn't have 'undefined'
+    # and 'null' like JavaScript, just 'null'.
+  | Null
+  | Bool(bool b)
+  | Int(BigInt i)
+  | Float(float f)
+  | List(List[value] items)
+  | Dict(Dict[str, value] d)
+
+    # Possible types
+    # value.Htm8 - a string that can be queried, with lazily materialized "views"
+    # value.Tsv8 - ditto
+    # value.Json8 - some kind of jq or JSONPath query language
+
+    # Objects are for for polymorphism
+  | Obj %Obj
+
+    # for i in (0 .. n) { echo $i }  # both ends are required
+    # TODO: BigInt
+  | Range(int lower, int upper)
+
+    # expr is spliced
+    # / d+; ignorecase / -> '[[:digit:]]+' REG_ICASE
+  | Eggex(re spliced, str canonical_flags,
+          List[value?] convert_funcs, List[Token?] convert_toks,
+          # str? is because some groups are not named
+          str? as_ere, List[str?] capture_names)
+
+    # The indices list has 2 * (num_group + 1) entries.  Group 0 is the whole
+    # match, and each group has both a start and end index.
+    # It's flat to reduce allocations.  The group() start() end() funcs/methods
+    # provide a nice interface.
+  | Match %RegexMatch
+
+    # A place has an additional stack frame where the value is evaluated.
+    # The frame MUST be lower on the stack at the time of use.
+  | Place(y_lvalue lval, Dict[str, Cell] frame)
+
+    # for io->evalToDict(), which uses ctx_FrontFrame(), which is distinct from
+    # ctx_Eval()
+    # TODO: ASDL should let us "collapse" this Dict directly into value_t
+  | Frame(Dict[str, Cell] frame)
+  | DebugFrame(debug_frame frame)
+
+  #
+  # Code units: BoundFunc, BuiltinFunc, Func, BuiltinProc, Proc
+  #
+
+    # for obj.method and obj->mutatingMethod
+  | BoundFunc(value me, value func)
+    # callable is vm._Callable.
+    # TODO: ASDL needs some kind of "extern" to declare vm._Callable,
+    # vm._Builtin.  I think it would just generate a forward declaration.
+  | BuiltinFunc(any callable)
+
+  | Func(str name, Func parsed,
+         List[value] pos_defaults, Dict[str, value] named_defaults,
+         Dict[str, Cell] captured_frame,
+         # module is where "global" lookups happen
+         Dict[str, Cell] module_frame)
+
+    # command.ShFunction and command.Proc evaluate to value.Proc
+    # They each have name, name_tok, and body.
+    #
+    # YSH procs disable dynamic scope, have default args to evaluate, and
+    # different @ARGV.
+
+    # builtin is vm._Builtin, this can be introspected
+  | BuiltinProc(any builtin)
+  | Proc(str name, Token name_tok, proc_sig sig, command body,
+         ProcDefaults? defaults, bool sh_compat,
+         Dict[str, Cell] captured_frame,
+         # module is where "global" lookups happen
+         Dict[str, Cell] module_frame,
+         str? code_str)
+
+  #
+  # Unevaluated CODE types: ExprFrag, Expr, CommandFrag, Command
+  #
+
+  # This can be the output of parseExpr()?
+  #| ExprFrag(expr e)
+
+    # var x = ^[42 + a[i]]
+    # my-ls | where [size > 10]
+  | Expr(expr e,
+         Dict[str, Cell] captured_frame,
+         Dict[str, Cell] module_frame)
+
+    # This is an UNBOUND command, like
+    # ^(echo 1; echo 2) and cd { echo 1; echo 2 } 
+  | CommandFrag(command c)
+
+    # Bound command
+  | Command(cmd_frag frag,
+            Dict[str, Cell] captured_frame,
+            Dict[str, Cell] module_frame)
+
+    # Other introspection
+    # __builtins__ - Dict[str, value_t] - I would like to make this read-only
+    # __modules__  - Dict[str, Obj] - read-only to prevent non-Obj
+    # __sh_funcs__ - Dict[str, value.Proc] - read-only to prevent non-Proc
+    # __traps__    - Dict[str, command_t] ?
+    # __builtin_procs__ - Dict[str, BuiltinProc] - builtin commands - special
+    #                                              and non-special?  and assignment?
+    # __aliases__ - Dict[str, str]
+    # __jobs__    - maybe nicer that jobs -p
+    # __stack__   - replaces pp stacks_, frame_vars_
+    #
+    # More:
+    # - dir stack pushd/popd - read-only variable
+    # - there is a hidden mem.pwd, in addition to $PWD
+    # - completion hooks and spec
+    # - getopts state
+    # - command cache - hash builtin
+}
+
+# vim: sw=2
+

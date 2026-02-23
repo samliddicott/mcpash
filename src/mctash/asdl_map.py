@@ -35,19 +35,33 @@ from .lst_nodes import (
 )
 
 
-def lst_script_to_asdl(script: LstScript) -> Dict[str, Any]:
+class AsdlMappingError(Exception):
+    pass
+
+
+def lst_script_to_asdl(script: LstScript, strict: bool = False) -> Dict[str, Any]:
+    children = [_lst_list_item_to_command(node) for node in script.body.items]
+    if strict:
+        _assert_no_noop(children)
     return {
         "type": "command.CommandList",
-        "children": [_lst_list_item_to_command(node) for node in script.body.items],
+        "children": children,
         "note": "partial mapping to Oil/OSH ASDL",
     }
+
+def lst_list_item_to_asdl(item: LstListItem, strict: bool = False) -> Dict[str, Any]:
+    node = _lst_list_item_to_command(item)
+    if strict:
+        _assert_no_noop([node])
+    return node
 
 
 def _lst_andor_to_command(node: LstAndOr) -> Dict[str, Any]:
     return {
         "type": "command.AndOr",
         "children": [_lst_pipeline_to_command(p) for p in node.pipelines],
-        "ops": [token_pos(pos) for pos in (node.op_positions or [])],
+        "ops": list(node.operators),
+        "op_pos": [token_pos(pos) for pos in (node.op_positions or [])],
     }
 
 
@@ -56,7 +70,8 @@ def _lst_pipeline_to_command(node: LstPipeline) -> Dict[str, Any]:
         "type": "command.Pipeline",
         "negated": node.negate,
         "children": [_lst_command_to_command(c) for c in node.commands],
-        "ops": [token_pos(pos) for pos in (node.op_positions or [])],
+        "ops": ["|"] * len(node.op_positions or []),
+        "op_pos": [token_pos(pos) for pos in (node.op_positions or [])],
     }
 
 
@@ -72,7 +87,7 @@ def _lst_command_to_command(node) -> Dict[str, Any]:
     if isinstance(node, LstGroupCommand):
         return {
             "type": "command.BraceGroup",
-            "children": [_lst_andor_to_command(n) for n in node.body.items],
+            "children": [_lst_list_item_to_command(n) for n in node.body.items],
         }
     if isinstance(node, LstIfCommand):
         return _if_command(node)
@@ -106,6 +121,23 @@ def _lst_command_to_command(node) -> Dict[str, Any]:
             "pairs": [_assign_pair(a) for a in node.assignments],
         }
     return {"type": "command.NoOp"}
+
+
+def _assert_no_noop(nodes: List[Dict[str, Any]]) -> None:
+    def walk(node: Any) -> bool:
+        if isinstance(node, dict):
+            if node.get("type") == "command.NoOp":
+                return True
+            for value in node.values():
+                if walk(value):
+                    return True
+            return False
+        if isinstance(node, list):
+            return any(walk(item) for item in node)
+        return False
+
+    if walk(nodes):
+        raise AsdlMappingError("strict OSH mapping failed: command.NoOp encountered")
 
 
 def _lst_andor_list(node: LstListNode) -> Dict[str, Any]:
@@ -218,7 +250,7 @@ def _case_arm(item: LstCaseItem) -> Dict[str, Any]:
     return {
         "type": "CaseArm",
         "pattern": {"type": "pat.Words", "words": [word(p) for p in item.patterns]},
-        "action": [_lst_andor_to_command(n) for n in item.body.items],
+        "action": [_lst_list_item_to_command(n) for n in item.body.items],
     }
 
 

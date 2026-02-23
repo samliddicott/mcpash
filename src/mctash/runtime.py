@@ -34,6 +34,8 @@ from .ast_nodes import (
 )
 from .expand import expand_word
 from .parser import ParseError, Parser
+from .asdl_map import AsdlMappingError, lst_list_item_to_asdl
+from .osh_adapter import OshAdapterError, asdl_item_to_list_item
 
 
 class RuntimeError(Exception):
@@ -517,9 +519,14 @@ class Runtime:
                 node = parser_impl.parse_next()
                 if node is None:
                     break
-                status = self._exec_list_item(node)
+                if parser_impl.last_lst_item is None:
+                    raise ParseError("internal parse error: missing LST list item")
+                asdl_item = lst_list_item_to_asdl(parser_impl.last_lst_item, strict=True)
+                status = self._exec_list_item(asdl_item_to_list_item(asdl_item))
         except ReturnFromFunction as e:
             status = e.code
+        except (AsdlMappingError, OshAdapterError):
+            status = 2
         finally:
             self.set_positional_args(saved_positional)
         return status
@@ -1240,13 +1247,19 @@ class Runtime:
                 node = parser_impl.parse_next()
                 if node is None:
                     break
-                status = self._exec_list_item(node)
+                if parser_impl.last_lst_item is None:
+                    raise ParseError("internal parse error: missing LST list item")
+                asdl_item = lst_list_item_to_asdl(parser_impl.last_lst_item, strict=True)
+                status = self._exec_list_item(asdl_item_to_list_item(asdl_item))
         except ReturnFromFunction as e:
             status = e.code
         except SystemExit as e:
             status = int(e.code) if e.code is not None else 0
         except ParseError as e:
             print(f"parse error: {e}", file=sys.stderr)
+            status = 2
+        except (AsdlMappingError, OshAdapterError) as e:
+            print(f"asdl error: {e}", file=sys.stderr)
             status = 2
         except RuntimeError as e:
             print(str(e), file=sys.stderr)
