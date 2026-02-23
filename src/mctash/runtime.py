@@ -1322,7 +1322,14 @@ class Runtime:
             # Unquoted empty expansions are elided (e.g. $1 when unset).
             parts = parse_word_parts(w.text)
             if not any(p.quoted for p in parts):
-                fields = [f for f in fields if f != ""]
+                keep_split_empties = False
+                raw = self._expand_assignment_word(w.text)
+                if raw != "":
+                    ifs = self.env.get("IFS", " \t\n")
+                    ifs_nonws = "".join(ch for ch in ifs if ch not in " \t\n")
+                    keep_split_empties = any(ch in ifs_nonws for ch in raw)
+                if not keep_split_empties:
+                    fields = [f for f in fields if f != ""]
             argv.extend(fields)
         return argv
 

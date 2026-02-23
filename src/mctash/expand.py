@@ -492,7 +492,13 @@ def expand_word(
                     for v in value:
                         pieces = split_ifs(v)
                         if not pieces:
-                            new_fields.append((f, q, True, gm))
+                            if v != "":
+                                # Delimiter-only text still creates a field boundary.
+                                if f != "" or q:
+                                    new_fields.append((f, q, False, gm))
+                                new_fields.append(("", q, True, False))
+                            else:
+                                new_fields.append((f, q, True, gm))
                         else:
                             for p in pieces:
                                 new_fields.append((f + p, q, True, gm or has_glob_meta(p)))
@@ -514,7 +520,19 @@ def expand_word(
         else:
             pieces = split_ifs(value)
             if not pieces:
-                fields = [(f, q, active, gm) for f, q, active, gm in fields]
+                if value != "":
+                    new_fields = []
+                    for f, q, active, gm in fields:
+                        if not active:
+                            new_fields.append((f, q, active, gm))
+                            continue
+                        # Delimiter-only text still creates a field boundary.
+                        if f != "" or q:
+                            new_fields.append((f, q, False, gm))
+                        new_fields.append(("", q, True, False))
+                    fields = new_fields
+                else:
+                    fields = [(f, q, active, gm) for f, q, active, gm in fields]
             else:
                 new_fields = []
                 for f, q, active, gm in fields:
