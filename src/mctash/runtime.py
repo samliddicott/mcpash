@@ -165,7 +165,6 @@ class Runtime:
         self._pending_signals: List[str] = []
         self._running_trap: bool = False
         self._trap_entry_status: int | None = None
-        self._subshell_depth: int = 0
         self.c_string_mode: bool = False
         self._trap_status_hint: int = 0
         self._next_job_id: int = 1
@@ -187,11 +186,18 @@ class Runtime:
         self._last_eval_hard_error: bool = False
         self._pipeline_input_latency: float | None = None
         # Align with ash test assumptions: shell starts with only stdio fds open.
-        try:
-            os.close(3)
-        except OSError:
-            pass
+        if threading.current_thread() is threading.main_thread():
+            try:
+                os.close(3)
+            except OSError:
+                pass
         self._install_signal_handlers()
+
+    def _get_subshell_depth(self) -> int:
+        return int(getattr(self._thread_ctx, "subshell_depth", 0))
+
+    def _set_subshell_depth(self, value: int) -> None:
+        self._thread_ctx.subshell_depth = max(0, int(value))
 
     def set_positional_args(self, args: List[str]) -> None:
         self.positional = list(args)
@@ -208,7 +214,7 @@ class Runtime:
         return self._exec_list(script.body)
 
     def _install_signal_handlers(self) -> None:
-        for name in ["HUP", "INT", "QUIT", "TERM", "USR1", "USR2", "WINCH", "CHLD", "PIPE", "ALRM"]:
+        for name in ["HUP", "INT", "QUIT", "TERM", "USR1", "USR2", "WINCH", "CHLD", "PIPE", "ALRM", "SYS"]:
             sig = getattr(signal, f"SIG{name}", None)
             if sig is None:
                 continue
@@ -230,7 +236,7 @@ class Runtime:
             return
         if name in {"CHLD", "WINCH"}:
             return
-        if name in {"HUP", "USR1", "USR2", "SYS"}:
+        if name in {"HUP", "TERM", "USR1", "USR2", "SYS"}:
             msg = signal.strsignal(signum)
             if msg:
                 print(msg, file=sys.stderr)
@@ -286,7 +292,7 @@ class Runtime:
         print(self._format_error(msg, line=line, context=context), file=sys.stderr)
 
     def _run_pending_traps(self) -> None:
-        if self._subshell_depth > 0:
+        if self._get_subshell_depth() > 0:
             return
         while self._pending_signals:
             sig = self._pending_signals.pop(0)
@@ -427,16 +433,46 @@ class Runtime:
 
             job_id = self._next_job_id
             self._next_job_id += 1
+            env_snapshot = dict(self.env)
+            local_snapshot = [dict(s) for s in self.local_stack]
+            positional_snapshot = list(self.positional)
+            functions_snapshot = dict(self.functions)
+            aliases_snapshot = dict(self.aliases)
+            traps_snapshot = dict(self.traps)
+            options_snapshot = dict(self.options)
+            readonly_snapshot = set(self.readonly_vars)
+            source_stack_snapshot = list(self.source_stack)
+            script_name_snapshot = self.script_name
+            current_line_snapshot = self.current_line
 
             def _run_bg() -> None:
-                self._thread_ctx.job_id = job_id
+                bg_rt = Runtime()
+                bg_rt.env = dict(env_snapshot)
+                bg_rt.local_stack = [dict(s) for s in local_snapshot]
+                bg_rt.positional = list(positional_snapshot)
+                bg_rt.functions = dict(functions_snapshot)
+                bg_rt.aliases = dict(aliases_snapshot)
+                bg_rt.traps = dict(traps_snapshot)
+                bg_rt.options = dict(options_snapshot)
+                bg_rt.readonly_vars = set(readonly_snapshot)
+                bg_rt.source_stack = list(source_stack_snapshot)
+                bg_rt.script_name = script_name_snapshot
+                bg_rt.current_line = current_line_snapshot
+                # Share job/pid registries with parent runtime.
+                bg_rt._bg_jobs = self._bg_jobs
+                bg_rt._bg_status = self._bg_status
+                bg_rt._bg_pids = self._bg_pids
+                bg_rt._bg_pid_to_job = self._bg_pid_to_job
+                bg_rt._bg_started_at = self._bg_started_at
+                bg_rt._last_bg_job = self._last_bg_job
+                bg_rt._last_bg_pid = self._last_bg_pid
+                bg_rt._thread_ctx.job_id = job_id
                 try:
                     bg_body = ListNode(items=[ListItem(node=item.node, background=False)])
-                    status = self._run_subshell(bg_body)
+                    status = bg_rt._run_subshell(bg_body)
                     self._bg_status[job_id] = status
                 finally:
                     self._bg_pids.pop(job_id, None)
-                    self._thread_ctx.job_id = None
 
             thread = threading.Thread(target=_run_bg)
             thread.daemon = True
@@ -714,13 +750,32 @@ class Runtime:
                 return status, b"", (time.monotonic() - start) if start is not None else None
             saved_stdin = sys.stdin
             saved_stdout = sys.stdout
+            saved_fd1 = None
+            py_stdout = None
+            tmp = None
             try:
                 if input_text is None:
                     sys.stdin = saved_stdin
                 else:
                     sys.stdin = io.StringIO(input_text)
-                output = io.StringIO()
-                sys.stdout = output if capture else saved_stdout
+                if capture:
+                    tmp = tempfile.TemporaryFile()
+                    try:
+                        sys.stdout.flush()
+                    except Exception:
+                        pass
+                    saved_fd1 = os.dup(1)
+                    os.dup2(tmp.fileno(), 1)
+                    py_stdout = os.fdopen(
+                        os.dup(1),
+                        "w",
+                        encoding="utf-8",
+                        errors="surrogateescape",
+                        buffering=1,
+                    )
+                    sys.stdout = py_stdout
+                else:
+                    sys.stdout = saved_stdout
                 try:
                     with self._redirected_fds(cmd.redirects):
                         if name in self.functions:
@@ -733,11 +788,29 @@ class Runtime:
                     status = e.code
                 except (BreakLoop, ContinueLoop):
                     status = 1
-                out_text = output.getvalue()
-                return status, out_text.encode("utf-8"), (time.monotonic() - start) if start is not None else None
+                if capture and tmp is not None:
+                    try:
+                        sys.stdout.flush()
+                    except Exception:
+                        pass
+                    tmp.seek(0)
+                    out_data = tmp.read()
+                else:
+                    out_data = b""
+                return status, out_data, (time.monotonic() - start) if start is not None else None
             finally:
                 sys.stdin = saved_stdin
                 sys.stdout = saved_stdout
+                if py_stdout is not None:
+                    try:
+                        py_stdout.close()
+                    except Exception:
+                        pass
+                if saved_fd1 is not None:
+                    os.dup2(saved_fd1, 1)
+                    os.close(saved_fd1)
+                if tmp is not None:
+                    tmp.close()
                 self.env = saved_env
 
         try:
@@ -1019,14 +1092,21 @@ class Runtime:
         return shlex.quote(s)
 
     def _run_subshell(self, body: ListNode) -> int:
-        self._subshell_depth += 1
+        self._set_subshell_depth(self._get_subshell_depth() + 1)
         saved_env = dict(self.env)
+        self.env = dict(self.env)
         saved_local = [dict(s) for s in self.local_stack]
         saved_positional = list(self.positional)
         saved_cwd = os.getcwd()
         saved_traps = dict(self.traps)
-        # EXIT trap is not inherited by subshells; subshell may define its own.
-        self.traps = {k: v for k, v in self.traps.items() if k != "EXIT"}
+        # EXIT trap is not inherited by subshells; additionally, TERM/WINCH
+        # handlers are reset for subshell execution to match ash behavior in
+        # tested cases.
+        self.traps = {
+            k: v
+            for k, v in self.traps.items()
+            if k != "EXIT" and not (k in {"TERM", "WINCH"} and v != "")
+        }
         try:
             try:
                 status = self._exec_list(body)
@@ -1056,7 +1136,7 @@ class Runtime:
             self._trap_status_hint = status
             return self._run_exit_trap(status)
         finally:
-            self._subshell_depth -= 1
+            self._set_subshell_depth(self._get_subshell_depth() - 1)
             self.env = saved_env
             self.local_stack = saved_local
             self.positional = saved_positional
@@ -1318,7 +1398,13 @@ class Runtime:
                         self._bg_started_at.setdefault(job_id, time.monotonic())
                         if job_id == self._last_bg_job:
                             self._last_bg_pid = proc.pid
-                    return proc.wait()
+                    status = proc.wait()
+                    if self._pending_signals and self.traps.get("TERM"):
+                        if "TERM" in self._pending_signals:
+                            self._run_pending_traps()
+                            if self.options.get("e", False):
+                                raise SystemExit(0)
+                    return status
                 except FileNotFoundError:
                     self._report_error(f"{argv[0]}: not found", line=self.current_line, context=context)
                     return 127
@@ -1390,6 +1476,8 @@ class Runtime:
             last = 0
             for job_id in sorted(self._bg_jobs.keys()):
                 last = wait_job(job_id)
+                if last >= 128:
+                    return last
             return last
         last = 0
         for arg in args:
@@ -1418,6 +1506,8 @@ class Runtime:
             if job_id not in self._bg_jobs and job_id not in self._bg_status:
                 return 127
             last = wait_job(job_id)
+            if last >= 128:
+                return last
         return last
 
     def _run_kill(self, args: List[str]) -> int:
@@ -1485,16 +1575,11 @@ class Runtime:
                 started = self._bg_started_at.get(job_id_for_target)
                 if started is not None:
                     age = time.monotonic() - started
-                    if age < 0.15:
-                        time.sleep(0.15 - age)
+                    min_age = 0.8 if sig_num == getattr(signal, "SIGHUP", -1) else 0.4
+                    if age < min_age:
+                        time.sleep(min_age - age)
             try:
-                if from_job:
-                    try:
-                        os.killpg(pid, sig_num)
-                    except Exception:
-                        os.kill(pid, sig_num)
-                else:
-                    os.kill(pid, sig_num)
+                os.kill(pid, sig_num)
             except Exception:
                 status = 1
         return status
@@ -3496,7 +3581,12 @@ class Runtime:
             for sig, action in sorted(self.traps.items()):
                 print(f"trap -- '{action}' {sig}", flush=True)
             return 0
-        first_is_cond = self._normalize_signal_spec(args[0]) is not None
+        normalized0 = self._normalize_signal_spec(args[0]) if args else None
+        first_is_cond = False
+        if len(args) == 1 and normalized0 is not None:
+            first_is_cond = True
+        elif len(args) >= 2 and normalized0 == "EXIT":
+            first_is_cond = True
         if first_is_cond:
             action = "-"
             sig_args = args
@@ -3509,7 +3599,8 @@ class Runtime:
         for sig in sig_args:
             key = self._normalize_signal_spec(sig)
             if key is None:
-                self._report_error(f"{sig}: invalid signal specification", line=self.current_line, context="trap")
+                line = (self.current_line + 1) if self.current_line is not None else None
+                self._report_error(f"{sig}: invalid signal specification", line=line, context="trap")
                 status = 1
                 continue
             if action in ["-", "0"]:
