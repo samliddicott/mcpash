@@ -292,14 +292,28 @@ def _parse_braced_var(text: str, start: int) -> tuple[LstWordPart | None, int]:
 
 
 def _split_braced_var(inner: str) -> tuple[str | None, str | None, str | None]:
+    def _parse_param_name(text: str) -> tuple[str | None, int]:
+        if not text:
+            return None, 0
+        if text[0] in "@*#?$!-":
+            return text[0], 1
+        if text[0].isdigit():
+            return text[0], 1
+        if text[0].isalpha() or text[0] == "_":
+            j = 1
+            while j < len(text) and (text[j].isalnum() or text[j] == "_"):
+                j += 1
+            return text[:j], j
+        return None, 0
+
     i = 0
     if not inner:
         return None, None, None
     if inner.startswith("#") and len(inner) > 1:
-        name = inner[1:]
-        if _valid_param_name(name):
-            return name, "__len__", None
-    if inner[0] in "@*#?$!-$" and len(inner) >= 1:
+        len_name, used = _parse_param_name(inner[1:])
+        if len_name is not None and used == len(inner) - 1:
+            return len_name, "__len__", None
+    if inner[0] in "@*#?$!-" and len(inner) >= 1:
         name = inner[0]
         i = 1
         if i >= len(inner):
@@ -333,7 +347,7 @@ def _split_braced_var(inner: str) -> tuple[str | None, str | None, str | None]:
     if i + 1 < len(inner) and inner[i : i + 2] in two_char_ops:
         op = inner[i : i + 2]
         return name, op, inner[i + 2 :]
-    if inner[i] in ["-", "=", "?", "#", "%"]:
+    if inner[i] in ["-", "=", "?", "#", "%", "+"]:
         op = inner[i]
         return name, op, inner[i + 1 :]
     return name, None, None

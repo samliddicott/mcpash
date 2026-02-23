@@ -36,7 +36,7 @@ from .ast_nodes import (
     WhileCommand,
     Word,
 )
-from .expand import expand_word, parse_word_parts, _extract_balanced, _split_braced
+from .expand import expand_word, parse_word_parts, _extract_balanced, _find_braced_end, _split_braced
 from .parser import ParseError, Parser
 from .asdl_map import AsdlMappingError, lst_list_item_to_asdl
 from .osh_adapter import OshAdapterError, asdl_item_to_list_item
@@ -1478,20 +1478,32 @@ class Runtime:
                 return "'" + inner + "'"
             return self._expand_assignment_word_protected(text)
 
+        if op == "__invalid__":
+            raise RuntimeError(self._format_error("syntax error: bad substitution", line=self.current_line))
         if op == "__len__":
             value, _ = self._get_param_state(name)
             return str(len(value))
         if name == "@" and op is None:
             return list(self.positional)
         if name.isdigit():
-            value = self._get_positional(name)
+            value, is_set = self._get_param_state(name)
             if op is None:
                 return value
-            # Minimal handling for operators on positional parameters.
-            is_set = value != ""
             arg_text = arg or ""
             if op in ["=", ":="]:
-                raise RuntimeError(self._format_error(f"{name}: bad variable name", line=self.current_line))
+                if not is_set or (op == ":=" and value == ""):
+                    raise RuntimeError(self._format_error(f"{name}: bad variable name", line=self.current_line))
+                return value
+            if op in ["?", ":?"]:
+                if not is_set or (op == ":?" and value == ""):
+                    if arg_text:
+                        msg = self._expand_assignment_word_protected(arg_text)
+                    elif op == ":?":
+                        msg = "parameter not set or null"
+                    else:
+                        msg = "parameter not set"
+                    raise RuntimeError(self._format_error(f"{name}: {msg}", line=self.current_line))
+                return value
             if op == ":substr":
                 return self._substring(value, arg_text)
             if op in ["-", ":-"]:
@@ -1516,16 +1528,23 @@ class Runtime:
                 return _expand_alt_word(arg_text)
             return ""
         if op in ["=", ":="]:
-            if name in ["#", "?", "@", "*", "$", "!", "-"] or name.isdigit():
-                raise RuntimeError(self._format_error(f"{name}: bad variable name", line=self.current_line))
+            if name == "#" and op == "=":
+                raise RuntimeError(self._format_error("syntax error: bad substitution", line=self.current_line))
             if not is_set or (op == ":=" and value == ""):
+                if name in ["#", "?", "@", "*", "$", "!", "-"] or name.isdigit():
+                    raise RuntimeError(self._format_error(f"{name}: bad variable name", line=self.current_line))
                 replacement = _expand_alt_word(arg_text)
                 self._set_local(name, replacement)
                 return replacement
             return value
         if op in ["?", ":?"]:
             if not is_set or (op == ":?" and value == ""):
-                msg = self._expand_word(arg_text) if arg_text else "parameter null or not set"
+                if arg_text:
+                    msg = self._expand_assignment_word_protected(arg_text)
+                elif op == ":?":
+                    msg = "parameter not set or null"
+                else:
+                    msg = "parameter not set"
                 raise RuntimeError(self._format_error(f"{name}: {msg}", line=self.current_line))
             return value
         if op in ["#", "##"]:
@@ -1544,7 +1563,7 @@ class Runtime:
 
     def _substring(self, value: str, arg_text: str) -> str:
         if arg_text == "":
-            raise RuntimeError(self._format_error("syntax error: bad substitution", line=self.current_line))
+            raise RuntimeError(self._format_error("syntax error: missing '}'", line=self.current_line))
         if ":" in arg_text:
             off_text, len_text = arg_text.split(":", 1)
             has_len = True
@@ -1718,24 +1737,20 @@ class Runtime:
                     i = end
                     continue
                 if text.startswith("${", i):
-                    end = text.find("}", i + 2)
+                    end = _find_braced_end(text, i + 2)
                     if end == -1:
                         out.append("$")
                         i += 1
                         continue
                     inner = text[i + 2 : end]
-                    if inner.startswith("#") and len(inner) > 1:
-                        out.append(self._expand_braced_param(inner[1:], "__len__", None, False))
-                        i = end + 1
-                        continue
                     name, op, arg = _split_braced(inner)
                     if name is None:
-                        out.append("$")
-                        i += 1
-                        continue
-                    out.append(self._expand_braced_param(name, op, arg, False))
-                    i = end + 1
-                    continue
+                        raise RuntimeError(
+                            self._format_error("syntax error: bad substitution", line=self.current_line)
+                        )
+                out.append(self._expand_braced_param(name, op, arg, False))
+                i = end + 1
+                continue
                 if i + 1 < len(text):
                     nxt = text[i + 1]
                     if nxt in "#@*?$!-":

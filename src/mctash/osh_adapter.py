@@ -241,6 +241,10 @@ def _word_part_to_text(node: Dict[str, Any]) -> str:
         op = node.get("op")
         if op == "__len__":
             return "${#" + name + "}"
+        if op == ":substr":
+            arg = node.get("arg")
+            arg_s = _word_to_text(arg) if isinstance(arg, dict) else ""
+            return "${" + name + ":" + arg_s + "}"
         if op:
             arg = node.get("arg")
             arg_s = _word_to_text(arg) if isinstance(arg, dict) else ""

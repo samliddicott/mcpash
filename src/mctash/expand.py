@@ -172,16 +172,13 @@ def _parse_dollar(text: str, i: int, quoted: bool) -> Tuple[WordPart, int]:
         content, end = _extract_balanced(text, i + 2, ")")
         return WordPart("CMD", content, quoted), end
     if text.startswith("${", i):
-        end = text.find("}", i + 2)
+        end = _find_braced_end(text, i + 2)
         if end == -1:
             return WordPart("LIT", "$", quoted), i + 1
         inner = text[i + 2 : end]
-        if inner.startswith("#") and len(inner) > 1:
-            name = inner[1:]
-            return WordPart("BRACED", name, quoted, op="__len__", arg=None), end + 1
         name, op, arg = _split_braced(inner)
         if name is None:
-            return WordPart("LIT", "$", quoted), i + 1
+            return WordPart("BRACED", "", quoted, op="__invalid__", arg=inner), end + 1
         return WordPart("BRACED", name, quoted, op=op, arg=arg), end + 1
     if i + 1 < len(text):
         ch = text[i + 1]
@@ -291,11 +288,104 @@ def _extract_balanced(text: str, start: int, closing: str) -> Tuple[str, int]:
     return text[start:], len(text)
 
 
+def _find_braced_end(text: str, start: int) -> int:
+    depth = 1
+    i = start
+    in_single = False
+    in_double = False
+    while i < len(text):
+        ch = text[i]
+        if in_single:
+            if ch == "'":
+                in_single = False
+            i += 1
+            continue
+        if in_double:
+            if ch == "\\" and i + 1 < len(text):
+                i += 2
+                continue
+            if ch == "`":
+                i += 1
+                while i < len(text):
+                    if text[i] == "\\" and i + 1 < len(text):
+                        i += 2
+                        continue
+                    if text[i] == "`":
+                        i += 1
+                        break
+                    i += 1
+                continue
+            if ch == '"':
+                in_double = False
+                i += 1
+                continue
+            i += 1
+            continue
+        if ch == "'":
+            in_single = True
+            i += 1
+            continue
+        if ch == '"':
+            in_double = True
+            i += 1
+            continue
+        if ch == "\\" and i + 1 < len(text):
+            i += 2
+            continue
+        if text.startswith("$((", i):
+            _, i = _extract_balanced(text, i + 3, "))")
+            continue
+        if text.startswith("$(", i):
+            _, i = _extract_balanced(text, i + 2, ")")
+            continue
+        if text.startswith("${", i):
+            depth += 1
+            i += 2
+            continue
+        if ch == "`":
+            i += 1
+            while i < len(text):
+                if text[i] == "\\" and i + 1 < len(text):
+                    i += 2
+                    continue
+                if text[i] == "`":
+                    i += 1
+                    break
+                i += 1
+            continue
+        if ch == "}":
+            depth -= 1
+            if depth == 0:
+                return i
+            i += 1
+            continue
+        i += 1
+    return -1
+
+
 def _split_braced(inner: str) -> Tuple[str | None, str | None, str | None]:
+    def _parse_param_name(text: str) -> Tuple[str | None, int]:
+        if not text:
+            return None, 0
+        if text[0] in "@*#?$!-":
+            return text[0], 1
+        if text[0].isdigit():
+            return text[0], 1
+        if text[0].isalpha() or text[0] == "_":
+            j = 1
+            while j < len(text) and (text[j].isalnum() or text[j] == "_"):
+                j += 1
+            return text[:j], j
+        return None, 0
+
     if not inner:
         return None, None, None
+    if inner.startswith("#") and len(inner) > 1:
+        len_name, used = _parse_param_name(inner[1:])
+        if len_name is not None and used == len(inner) - 1:
+            return len_name, "__len__", None
     i = 0
-    if inner[0] in "@*#?$!-$":
+    if inner[0] in "@*#?$!-":
         name = inner[0]
         i = 1
     elif inner[0].isdigit():
