@@ -499,6 +499,13 @@ def expand_word(
             fields = new_fields
             continue
 
+        if part.kind == "LIT" and not part.quoted:
+            fields = [
+                (f + value, q, active, gm or has_glob_meta(value)) if active else (f, q, active, gm)
+                for f, q, active, gm in fields
+            ]
+            continue
+
         if part.quoted:
             fields = [
                 (f + value, True or q, active, gm) if active else (f, True or q, active, gm)
