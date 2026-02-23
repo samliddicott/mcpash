@@ -1433,11 +1433,13 @@ class Runtime:
             parts = parse_word_parts(w.text)
             if not any(p.quoted for p in parts):
                 keep_split_empties = False
-                raw = self._expand_assignment_word(w.text)
-                if raw != "":
-                    ifs = self.env.get("IFS", " \t\n")
-                    ifs_nonws = "".join(ch for ch in ifs if ch not in " \t\n")
-                    keep_split_empties = any(ch in ifs_nonws for ch in raw)
+                has_cmd_subst = any(p.kind in {"CMD", "CMD_BQ"} for p in parts)
+                if not has_cmd_subst:
+                    raw = self._expand_assignment_word(w.text)
+                    if raw != "":
+                        ifs = self.env.get("IFS", " \t\n")
+                        ifs_nonws = "".join(ch for ch in ifs if ch not in " \t\n")
+                        keep_split_empties = any(ch in ifs_nonws for ch in raw)
                 if not keep_split_empties:
                     fields = [f for f in fields if f != ""]
             argv.extend(fields)

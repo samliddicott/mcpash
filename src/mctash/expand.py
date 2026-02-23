@@ -640,7 +640,7 @@ def expand_word(
         rendered = _unprotect_glob_meta(f) if unprotect_literals else f
         # Globbing is driven by unquoted meta presence, not by whether any
         # quoted fragments contributed to the same output field.
-        if has_meta:
+        if has_meta or not quoted:
             expanded.extend(glob_field(f if unprotect_literals else rendered))
         else:
             expanded.append(rendered)
