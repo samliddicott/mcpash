@@ -102,3 +102,6 @@ Execution policy while iterating failures:
 - Exact ash compliance criteria and test suite selection.
 - Final interop syntax ergonomics and error semantics.
 - Long-term plan for full Bash compatibility.
+
+## Conformance Snapshot
+- Current conformance status matrix: `docs/conformance-matrix.md`
