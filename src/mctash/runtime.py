@@ -864,8 +864,8 @@ class Runtime:
         value = self._expand_assignment_word(node.value.text)
         for item in node.items:
             for pat in item.patterns:
-                expanded_pat = self._expand_assignment_word(pat)
-                if fnmatch.fnmatch(value, expanded_pat):
+                expanded_pat = self._pattern_from_word(pat)
+                if fnmatch.fnmatchcase(value, expanded_pat):
                     return self._exec_list(item.body)
         return 0
 
@@ -2169,13 +2169,31 @@ class Runtime:
             raw.replace("\ue001", "[*]")
             .replace("\ue002", "[?]")
             .replace("\ue003", "[[]")
-            .replace("\ue004", "[]]")
+            .replace("\ue004", "]")
             .replace("\ue005", backslash_marker)
         )
         out: List[str] = []
         i = 0
+        in_class = False
+        class_can_close = False
         while i < len(raw):
             ch = raw[i]
+            if ch == "[":
+                in_class = True
+                class_can_close = False
+                out.append(ch)
+                i += 1
+                continue
+            if in_class:
+                # Inside bracket expressions backslash is literal in shell
+                # patterns; it does not escape ']'.
+                out.append(ch)
+                if ch == "]" and class_can_close:
+                    in_class = False
+                else:
+                    class_can_close = True
+                i += 1
+                continue
             if ch == "\\" and i + 1 < len(raw):
                 nxt = raw[i + 1]
                 if nxt == "*":

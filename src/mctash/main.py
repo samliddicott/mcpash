@@ -71,7 +71,7 @@ def main(argv: List[str] | None = None) -> int:
     shebang_args: List[str] = []
 
     if script:
-        with open(script, "r", encoding="utf-8") as f:
+        with open(script, "r", encoding="utf-8", errors="surrogateescape") as f:
             source = f.read()
         source, shebang_args = _strip_shebang_and_args(source)
     else:
