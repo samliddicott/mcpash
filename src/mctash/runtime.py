@@ -71,6 +71,12 @@ class CommandSubstFailure(Exception):
         self.code = code
 
 
+class ArithExpansionFailure(Exception):
+    def __init__(self, code: int = 2) -> None:
+        super().__init__(f"arithmetic expansion failed with {code}")
+        self.code = code
+
+
 class Runtime:
     ENV_MUTATING_BUILTINS = {
         "cd",
@@ -658,6 +664,8 @@ class Runtime:
                 argv = self._expand_argv(node.argv)
             except CommandSubstFailure as e:
                 return e.code
+            except ArithExpansionFailure as e:
+                raise SystemExit(e.code)
             argv = self._expand_aliases(argv)
 
             if argv and argv[0] == "exec" and len(argv) <= 1 and node.redirects:
@@ -671,6 +679,8 @@ class Runtime:
                             value = self._expand_assignment_word(assign.value)
                         except CommandSubstFailure as e:
                             return e.code
+                        except ArithExpansionFailure as e:
+                            raise SystemExit(e.code)
                         name = assign.name
                         op = assign.op
                         if name in self.readonly_vars:
@@ -700,6 +710,8 @@ class Runtime:
                         value = self._expand_assignment_word(assign.value)
                     except CommandSubstFailure as e:
                         return e.code
+                    except ArithExpansionFailure as e:
+                        raise SystemExit(e.code)
                     name = assign.name
                     op = assign.op
                     if name in self.readonly_vars:
@@ -1493,7 +1505,8 @@ class Runtime:
             # Unquoted empty expansions are elided (e.g. $1 when unset).
             parts = parse_word_parts(w.text)
             if not any(p.quoted for p in parts):
-                if "'" in w.text or '"' in w.text:
+                has_cmd_subst = any(p.kind in {"CMD", "CMD_BQ"} for p in parts)
+                if ("'" in w.text or '"' in w.text) and not has_cmd_subst:
                     argv.extend(fields)
                     continue
                 keep_split_empties = False
@@ -1744,6 +1757,10 @@ class Runtime:
                     words.append(tok.value)
             out_fields: List[str] = []
             for w in words:
+                w_parts = parse_word_parts(w)
+                if any(p.quoted for p in w_parts):
+                    out_fields.append(self._expand_assignment_word_protected(w))
+                    continue
                 out_fields.extend(
                     expand_word(
                         w,
@@ -2022,23 +2039,18 @@ class Runtime:
         self._cmd_sub_status = status
         return output.rstrip("\n")
 
-    def _expand_arith(self, expr: str) -> str:
-        parts = expand_word(
-            expr,
-            self._expand_param,
-            self._expand_braced_param,
-            self._expand_command_subst_text,
-            lambda s: s,
-            lambda s: [s],
-            lambda s: [s],
-        )
-        joined = parts[0] if parts else "0"
+    def _expand_arith(self, expr: str, context: str | None = None) -> str:
+        joined = expr
         try:
-            return self._expand_arith_with_bash(joined)
+            return self._expand_arith_with_bash(joined, context=context)
         except Exception:
-            return "0"
+            raise
 
-    def _expand_arith_with_bash(self, expr: str) -> str:
+    def _expand_arith_with_bash(self, expr: str, context: str | None = None) -> str:
+        pre_err = self._arith_precheck(expr)
+        if pre_err is not None:
+            self._report_error(pre_err, line=self.current_line, context=context)
+            raise ArithExpansionFailure(2)
         merged_env = dict(self.env)
         for scope in self.local_stack:
             merged_env.update(scope)
@@ -2070,13 +2082,37 @@ class Runtime:
                 if "=" in payload:
                     name, value = payload.split("=", 1)
                     self._set_local(name, value)
-        if not saw_result:
-            err = (proc.stderr or "").lower()
+        err_text = (proc.stderr or "")
+        if proc.returncode != 0 or (err_text.strip() != "") or not saw_result:
+            err = err_text.lower()
             if "division by 0" in err or "divide by 0" in err:
-                self._report_error("divide by zero", line=self.current_line)
+                self._report_error("divide by zero", line=self.current_line, context=context)
             else:
-                self._report_error("arithmetic syntax error", line=self.current_line)
+                self._report_error("arithmetic syntax error", line=self.current_line, context=context)
+            raise ArithExpansionFailure(2)
         return result
+
+    def _arith_precheck(self, expr: str) -> str | None:
+        # ash rejects `1 ? 20 : x+=2` as arithmetic syntax error
+        # (assignment cannot appear as the selected ternary operand here).
+        depth = 0
+        qpos = -1
+        cpos = -1
+        for i, ch in enumerate(expr):
+            if ch == "(":
+                depth += 1
+            elif ch == ")":
+                depth = max(0, depth - 1)
+            elif ch == "?" and depth == 0 and qpos < 0:
+                qpos = i
+            elif ch == ":" and depth == 0 and qpos >= 0:
+                cpos = i
+                break
+        if qpos >= 0 and cpos > qpos:
+            false_arm = expr[cpos + 1 :].strip()
+            if re.match(r"^[A-Za-z_][A-Za-z0-9_]*\s*(\+=|-=|\*=|/=|%=|&=|\|=|\^=|=)", false_arm):
+                return "arithmetic syntax error"
+        return None
 
     def _arith_capture_names(self, expr: str, env: Dict[str, str]) -> List[str]:
         seen: set[str] = set()
@@ -3011,7 +3047,13 @@ class Runtime:
             return 1
         last = "0"
         for expr in args:
-            last = self._expand_arith(expr)
+            if "$" in expr:
+                self._report_error("arithmetic syntax error", line=self.current_line, context="let")
+                return 2
+            try:
+                last = self._expand_arith(expr, context="let")
+            except ArithExpansionFailure as e:
+                return e.code
         try:
             return 1 if int(last) == 0 else 0
         except ValueError:
