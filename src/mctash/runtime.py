@@ -1079,10 +1079,22 @@ class Runtime:
         if argv[0] == "":
             self._report_error(": Permission denied", line=self.current_line, context=context)
             return 127
+        child_env = dict(env)
+        # If we're directly exec'ing a shebang script, propagate the script
+        # basename so the child mctash can mirror ash-like /proc/$pid/comm.
+        path0 = argv[0]
+        if os.path.isfile(path0):
+            try:
+                with open(path0, "rb") as f:
+                    head = f.read(2)
+                if head == b"#!":
+                    child_env["MCTASH_COMM_NAME"] = os.path.basename(path0)
+            except OSError:
+                pass
         try:
             with self._redirected_fds(redirects):
                 try:
-                    proc = subprocess.Popen(argv, env=env)
+                    proc = subprocess.Popen(argv, env=child_env)
                     job_id = getattr(self._thread_ctx, "job_id", None)
                     if isinstance(job_id, int):
                         self._bg_pids[job_id] = proc.pid

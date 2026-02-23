@@ -13,7 +13,17 @@ from .osh_adapter import OshAdapterError, asdl_item_to_list_item
 from .runtime import BreakLoop, ContinueLoop, Runtime, RuntimeError
 
 
+def _set_proc_comm() -> None:
+    name = os.environ.get("MCTASH_COMM_NAME", "ash")
+    try:
+        with open("/proc/self/comm", "w", encoding="utf-8") as f:
+            f.write((name[:15] if name else "ash") + "\n")
+    except OSError:
+        pass
+
+
 def main(argv: List[str] | None = None) -> int:
+    _set_proc_comm()
     argv = list(argv) if argv is not None else sys.argv[1:]
     if argv and argv[0] == "-c":
         if len(argv) < 2:
