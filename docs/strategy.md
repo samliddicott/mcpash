@@ -8,6 +8,7 @@ Deliver a Python 3 Bash implementation with bidirectional Bash ↔ Python intero
 - Interop must be **explicit** and **predictable**; avoid invisible type coercions.
 - A **lossless syntax representation** is required for safe translation, refactoring, and tooling.
 - Keep the core **minimal and testable**; expand via staged milestones.
+- Prioritize behavior against POSIX shell spec/rationale, then reconcile with `man ash` and BusyBox ash tests.
 
 ## Architecture Strategy
 ### 1) Front End: Lexer, Parser, LST, AST
@@ -60,6 +61,11 @@ Deliver a Python 3 Bash implementation with bidirectional Bash ↔ Python intero
   - Integration tests for pipelines, redirection, and status propagation.
   - Real-world scripts under a compatibility harness.
 - Treat parser failures as **high-severity**; regressions must be caught early.
+- Use spec-driven debugging order:
+  - POSIX shell spec (normative): https://pubs.opengroup.org/onlinepubs/9799919799.2024edition/utilities/V3_chap02.html
+  - POSIX rationale (intent/edge cases): https://pubs.opengroup.org/onlinepubs/9699919799/xrat/V4_xcu_chap02.html
+  - `man ash` behavior notes
+  - BusyBox `ash_test` failing case
 
 ## Licensing and Legal Strategy
 - Avoid direct code reuse from GPL Bash unless explicitly intended.
@@ -71,6 +77,10 @@ Deliver a Python 3 Bash implementation with bidirectional Bash ↔ Python intero
 - ASDL enables concise, structured AST definitions and serialization workflows.
 - Lossless Syntax Trees preserve comments and formatting through span metadata.
 - ASTs are lossy and unsuitable for translation or style-preserving tooling.
+
+## Standards References
+- POSIX Shell Command Language (Issue 8, 2024 edition): https://pubs.opengroup.org/onlinepubs/9799919799.2024edition/utilities/V3_chap02.html
+- POSIX Shell Command Language Rationale (XCU): https://pubs.opengroup.org/onlinepubs/9699919799/xrat/V4_xcu_chap02.html
 
 ## Next Decisions
 - Define the exact **interop syntax** for the MVP.

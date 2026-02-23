@@ -56,6 +56,9 @@ These ideas are foundational for Mctash because **interop and tooling require st
   - Define what data types are allowed to cross the boundary.
   - Define how errors and exceptions propagate (e.g., Python exception → Bash non-zero status).
 - **Testable semantics**: A portable, reproducible test suite to validate compatibility.
+- **Normative grounding**: align behavior to POSIX Shell Command Language and use rationale text for ambiguous cases.
+  - Spec: https://pubs.opengroup.org/onlinepubs/9799919799.2024edition/utilities/V3_chap02.html
+  - Rationale: https://pubs.opengroup.org/onlinepubs/9699919799/xrat/V4_xcu_chap02.html
 
 ## Assumptions and Constraints
 - **Compatibility will be staged**: we will start with a well-defined subset (Milestone 1 = ash compliance) and grow toward Bash.
@@ -79,6 +82,10 @@ These ideas are foundational for Mctash because **interop and tooling require st
 - “From AST to Lossless Syntax Tree” (2017-02-11): LST structure, spans, preserving formatting/comments.
 - “What is Zephyr ASDL?” (2016-12-11): ASDL describes data structures (AST), not grammar; ADTs and serialization.
 - “Translating Shell to Oil” (2017-02-05) and “Part Two” (2017-02-06): style-preserving translation and language evolution rationale.
+
+## Standards References
+- POSIX Shell Command Language (Issue 8, 2024 edition): https://pubs.opengroup.org/onlinepubs/9799919799.2024edition/utilities/V3_chap02.html
+- POSIX Shell Command Language Rationale (XCU): https://pubs.opengroup.org/onlinepubs/9699919799/xrat/V4_xcu_chap02.html
 
 ## Open Questions (Next for Strategy)
 - What exact Bash subset is our first milestone?
