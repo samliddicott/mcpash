@@ -36,6 +36,7 @@ class SimpleCommand:
     argv: List[Word]
     assignments: List[Assignment]
     redirects: List[Redirect]
+    line: Optional[int] = None
 
 
 @dataclass

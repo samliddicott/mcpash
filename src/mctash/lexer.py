@@ -86,6 +86,48 @@ class TokenReader:
                 tok = Token("OP", ";;", self.line, self.col, self.i)
                 self._advance(4)
                 return tok
+            if (
+                ch == "<"
+                and self._peek(1) == "\\"
+                and self._peek(2) == "\n"
+                and self._peek(3) == "<"
+                and self._peek(4) == "\\"
+                and self._peek(5) == "\n"
+                and self._peek(6) == "-"
+            ):
+                tok = Token("OP", "<<-", self.line, self.col, self.i)
+                self._advance(7)
+                self._pending_heredocs.append(("<PENDING>", True, False))
+                return tok
+            if (
+                ch == "<"
+                and self._peek(1) == "\\"
+                and self._peek(2) == "\n"
+                and self._peek(3) == "<"
+                and self._peek(4) == "-"
+                and self._peek(5) == "\\"
+                and self._peek(6) == "\n"
+            ):
+                tok = Token("OP", "<<-", self.line, self.col, self.i)
+                self._advance(7)
+                self._pending_heredocs.append(("<PENDING>", True, False))
+                return tok
+            if ch == "<" and self._peek(1) == "\\" and self._peek(2) == "\n" and self._peek(3) == "<":
+                tok = Token("OP", "<<", self.line, self.col, self.i)
+                self._advance(4)
+                self._pending_heredocs.append(("<PENDING>", False, False))
+                return tok
+            if (
+                ch == "<"
+                and self._peek(1) == "<"
+                and self._peek(2) == "\\"
+                and self._peek(3) == "\n"
+                and self._peek(4) == "-"
+            ):
+                tok = Token("OP", "<<-", self.line, self.col, self.i)
+                self._advance(5)
+                self._pending_heredocs.append(("<PENDING>", True, False))
+                return tok
 
             three = ch + self._peek(1) + self._peek(2)
             if three in OPERATORS:
@@ -190,10 +232,12 @@ class TokenReader:
                 buf.append(ch)
                 self._advance()
             word = "".join(buf)
-            if self._pending_heredocs and self._pending_heredocs[-1][0] == "<PENDING>":
-                _, strip_tabs, _ = self._pending_heredocs[-1]
-                quoted = _is_quoted(word)
-                self._pending_heredocs[-1] = (_strip_quotes(word), strip_tabs, quoted)
+            if self._pending_heredocs:
+                for idx, (delim, strip_tabs, _) in enumerate(self._pending_heredocs):
+                    if delim == "<PENDING>":
+                        quoted = _is_quoted(word)
+                        self._pending_heredocs[idx] = (_strip_quotes(word), strip_tabs, quoted)
+                        break
             kind = "WORD"
             if ctx.allow_reserved and word in ctx.reserved_words:
                 kind = "RESERVED"
@@ -230,7 +274,7 @@ class TokenReader:
             delimiter, strip_tabs, quoted = self._pending_heredocs.pop(0)
             if delimiter == "<PENDING>":
                 continue
-            content, end_index = _consume_heredoc(self.source, self.i, delimiter, strip_tabs)
+            content, end_index = _consume_heredoc(self.source, self.i, delimiter, strip_tabs, quoted)
             heredoc_value = f"{'Q' if quoted else 'E'}:{'T' if strip_tabs else 'N'}:{content}"
             self._queue.append(Token("HEREDOC", heredoc_value, self.line, self.col, self.i))
             self._advance_to(end_index)
@@ -246,24 +290,54 @@ def tokenize(source: str) -> Iterator[Token]:
         yield tok
 
 
-def _consume_heredoc(source: str, start: int, delimiter: str, strip_tabs: bool) -> tuple[str, int]:
+def _consume_heredoc(
+    source: str,
+    start: int,
+    delimiter: str,
+    strip_tabs: bool,
+    quoted: bool,
+) -> tuple[str, int]:
     i = start
     lines: List[str] = []
+    logical_line = ""
+    logical_had_newline = False
     while i < len(source):
         line_start = i
         while i < len(source) and source[i] != "\n":
             i += 1
         line = source[line_start:i]
-        cmp_line = line.lstrip("\t") if strip_tabs else line
-        if cmp_line == delimiter:
-            if i < len(source) and source[i] == "\n":
-                i += 1
-            break
-        lines.append(line.lstrip("\t") if strip_tabs else line)
-        if i < len(source) and source[i] == "\n":
-            lines.append("\n")
+        has_newline = i < len(source) and source[i] == "\n"
+        if has_newline:
             i += 1
+
+        current = line
+        if strip_tabs and logical_line == "":
+            current = current.lstrip("\t")
+
+        if not quoted and _has_unescaped_trailing_backslash(current) and has_newline:
+            logical_line += current[:-1]
+            continue
+
+        logical_line += current
+        logical_had_newline = has_newline
+        cmp_line = logical_line
+        if cmp_line == delimiter:
+            break
+        lines.append(logical_line)
+        if logical_had_newline:
+            lines.append("\n")
+        logical_line = ""
+        logical_had_newline = False
     return "".join(lines), i
+
+
+def _has_unescaped_trailing_backslash(text: str) -> bool:
+    n = 0
+    i = len(text) - 1
+    while i >= 0 and text[i] == "\\":
+        n += 1
+        i -= 1
+    return (n % 2) == 1
 
 
 def _strip_quotes(text: str) -> str:
@@ -315,7 +389,7 @@ def _strip_quotes(text: str) -> str:
 
 
 def _is_quoted(text: str) -> bool:
-    return any(ch in text for ch in ["\\", "'", '"'])
+    return any(ch in text for ch in ["\\", "'", '"', "`"])
 
 
 def _scan_command_sub(source: str, start: int) -> tuple[str, int]:

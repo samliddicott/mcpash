@@ -194,6 +194,8 @@ def _redir(redir: LstRedirect) -> Dict[str, Any]:
             "type": "redir_param.HereDoc",
             "here_begin": word(redir.target),
             "stdin_parts": [word_part(LstLiteralPart(redir.here_doc))],
+            "do_expand": redir.here_doc_expand,
+            "strip_tabs": redir.here_doc_strip_tabs,
         }
     else:
         arg = {"type": "redir_param.Word", "word": word(redir.target)}

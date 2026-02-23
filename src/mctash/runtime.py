@@ -35,7 +35,7 @@ from .ast_nodes import (
     WhileCommand,
     Word,
 )
-from .expand import expand_word
+from .expand import expand_word, _extract_balanced, _split_braced
 from .parser import ParseError, Parser
 from .asdl_map import AsdlMappingError, lst_list_item_to_asdl
 from .osh_adapter import OshAdapterError, asdl_item_to_list_item
@@ -145,6 +145,7 @@ class Runtime:
         self._fd_redirect_depth: int = 0
         self._force_broken_pipe: bool = False
         self._user_fds: set[int] = set()
+        self._active_temp_fds: set[int] = set()
         # Align with ash test assumptions: shell starts with only stdio fds open.
         try:
             os.close(3)
@@ -520,6 +521,8 @@ class Runtime:
             finally:
                 self._loop_depth -= 1
         if isinstance(node, SimpleCommand):
+            if node.line is not None:
+                self.current_line = node.line
             argv = self._expand_argv(node.argv)
             if not argv and node.argv:
                 argv = [w.text for w in node.argv]
@@ -639,6 +642,18 @@ class Runtime:
             except RuntimeError as e:
                 print(str(e), file=sys.stderr)
                 status = 1
+            if status < 0:
+                sig_num = -status
+                sig_name = None
+                try:
+                    sig_name = signal.Signals(sig_num).name.replace("SIG", "")
+                except Exception:
+                    sig_name = None
+                if sig_name:
+                    action = self.traps.get(sig_name)
+                    if action:
+                        self._run_trap_action(action, 128 + sig_num)
+                        status = 0
             if status != 0:
                 self.last_nonzero_status = status
             self._trap_status_hint = status
@@ -806,11 +821,11 @@ class Runtime:
                 source = f.read()
         except OSError:
             return 1
-        parser_impl = Parser(source)
         saved_positional = list(self.positional) if args else None
         self.source_stack.append(path)
         if args:
             self.set_positional_args(args)
+        parser_impl = Parser(source)
         status = 0
         try:
             while True:
@@ -1156,6 +1171,8 @@ class Runtime:
             yield
             return
         saved: List[Tuple[int, int]] = []
+        saved_active = set(self._active_temp_fds)
+        transient_fds: set[int] = set()
         self._fd_redirect_depth += 1
         try:
             for redir in redirects:
@@ -1174,25 +1191,40 @@ class Runtime:
                 if redir.op == "<":
                     f = self._open_for_redir(target, "rb", redir.op)
                     self._dup2_file(f, fd)
+                    if fd >= 3:
+                        transient_fds.add(fd)
+                        self._active_temp_fds.add(fd)
                 elif redir.op == "<>":
                     f = self._open_for_redir_readwrite(target)
                     self._dup2_file(f, fd)
+                    if fd >= 3:
+                        transient_fds.add(fd)
+                        self._active_temp_fds.add(fd)
                 elif redir.op == ">":
                     f = self._open_for_redir(target, "wb", redir.op)
                     self._dup2_file(f, fd)
+                    if fd >= 3:
+                        transient_fds.add(fd)
+                        self._active_temp_fds.add(fd)
                 elif redir.op == ">>":
                     f = self._open_for_redir(target, "ab", redir.op)
                     self._dup2_file(f, fd)
+                    if fd >= 3:
+                        transient_fds.add(fd)
+                        self._active_temp_fds.add(fd)
                 elif redir.op == "<<":
                     content = self._expand_heredoc(redir)
                     f = tempfile.TemporaryFile()
                     f.write(content.encode("utf-8"))
                     f.seek(0)
                     self._dup2_file(f, fd)
+                    if fd >= 3:
+                        transient_fds.add(fd)
+                        self._active_temp_fds.add(fd)
                 elif redir.op == ">&":
-                    self._dup_fd(redir, is_output=True, default_fd=fd)
+                    self._dup_fd(redir, is_output=True, default_fd=fd, allowed_fds=transient_fds)
                 elif redir.op == "<&":
-                    self._dup_fd(redir, is_output=False, default_fd=fd)
+                    self._dup_fd(redir, is_output=False, default_fd=fd, allowed_fds=transient_fds)
             yield
         finally:
             for fd, saved_fd in reversed(saved):
@@ -1204,6 +1236,7 @@ class Runtime:
                         os.close(fd)
                     except OSError:
                         pass
+            self._active_temp_fds = saved_active
             self._fd_redirect_depth = max(0, self._fd_redirect_depth - 1)
 
     def _expand_argv(self, words: List[Word]) -> List[str]:
@@ -1356,12 +1389,18 @@ class Runtime:
         if op in ["?", ":?"]:
             if not is_set or (op == ":?" and value == ""):
                 msg = self._expand_word(arg_text) if arg_text else "parameter null or not set"
-                raise RuntimeError(f"{name}: {msg}")
+                raise RuntimeError(self._format_error(f"{name}: {msg}", line=self.current_line))
             return value
         if op in ["#", "##"]:
-            return self._remove_prefix(value, arg_text, longest=(op == "##"))
+            pattern = self._expand_assignment_word(arg_text)
+            if any(ch in arg_text for ch in ["'", '"', "\\"]):
+                pattern = pattern.replace("[", "[[]").replace("*", "[*]").replace("?", "[?]")
+            return self._remove_prefix(value, pattern, longest=(op == "##"))
         if op in ["%", "%%"]:
-            return self._remove_suffix(value, arg_text, longest=(op == "%%"))
+            pattern = self._expand_assignment_word(arg_text)
+            if any(ch in arg_text for ch in ["'", '"', "\\"]):
+                pattern = pattern.replace("[", "[[]").replace("*", "[*]").replace("?", "[?]")
+            return self._remove_suffix(value, pattern, longest=(op == "%%"))
         return value
 
     def _get_positional(self, digit: str) -> str:
@@ -1434,18 +1473,110 @@ class Runtime:
         content = redir.here_doc or ""
         if not redir.here_doc_expand:
             return content
-        fields = expand_word(
-            content,
-            self._expand_param,
-            self._expand_braced_param,
-            self._expand_command_subst_text,
-            self._expand_arith,
-            lambda s: [s],
-            lambda s: [s],
-        )
-        return fields[0] if fields else ""
+        return self._expand_heredoc_unquoted(content)
 
-    def _dup_fd(self, redir: Redirect, is_output: bool, default_fd: int | None = None) -> None:
+    def _expand_heredoc_unquoted(self, text: str) -> str:
+        out: List[str] = []
+        i = 0
+        while i < len(text):
+            ch = text[i]
+            if ch == "\\":
+                if i + 1 < len(text) and text[i + 1] == "\n":
+                    i += 2
+                    continue
+                if i + 1 < len(text) and text[i + 1] in ["\\", "$", "`"]:
+                    out.append(text[i + 1])
+                    i += 2
+                    continue
+                out.append("\\")
+                i += 1
+                continue
+            if ch == "`":
+                j = i + 1
+                cmd: List[str] = []
+                while j < len(text):
+                    if text[j] == "\\" and j + 1 < len(text):
+                        nxt = text[j + 1]
+                        if nxt in ["\\", "`", "$", "\n"]:
+                            cmd.append(nxt)
+                            j += 2
+                            continue
+                        cmd.append("\\")
+                        cmd.append(nxt)
+                        j += 2
+                        continue
+                    if text[j] == "`":
+                        break
+                    cmd.append(text[j])
+                    j += 1
+                out.append(self._expand_command_subst_text("".join(cmd)))
+                i = j + 1 if j < len(text) and text[j] == "`" else j
+                continue
+            if ch == "$":
+                if text.startswith("$((", i):
+                    expr, end = _extract_balanced(text, i + 3, "))")
+                    out.append(self._expand_arith(expr))
+                    i = end
+                    continue
+                if text.startswith("$(", i):
+                    cmd, end = _extract_balanced(text, i + 2, ")")
+                    out.append(self._expand_command_subst_text(cmd))
+                    i = end
+                    continue
+                if text.startswith("${", i):
+                    end = text.find("}", i + 2)
+                    if end == -1:
+                        out.append("$")
+                        i += 1
+                        continue
+                    inner = text[i + 2 : end]
+                    if inner.startswith("#") and len(inner) > 1:
+                        out.append(self._expand_braced_param(inner[1:], "__len__", None, False))
+                        i = end + 1
+                        continue
+                    name, op, arg = _split_braced(inner)
+                    if name is None:
+                        out.append("$")
+                        i += 1
+                        continue
+                    out.append(self._expand_braced_param(name, op, arg, False))
+                    i = end + 1
+                    continue
+                if i + 1 < len(text):
+                    nxt = text[i + 1]
+                    if nxt in "#@*?$!-":
+                        val = self._expand_param(nxt, False)
+                        out.append(" ".join(val) if isinstance(val, list) else val)
+                        i += 2
+                        continue
+                    if nxt.isdigit():
+                        val = self._expand_param(nxt, False)
+                        out.append(" ".join(val) if isinstance(val, list) else val)
+                        i += 2
+                        continue
+                    if nxt.isalpha() or nxt == "_":
+                        j = i + 1
+                        while j < len(text) and (text[j].isalnum() or text[j] == "_"):
+                            j += 1
+                        name = text[i + 1 : j]
+                        val = self._expand_param(name, False)
+                        out.append(" ".join(val) if isinstance(val, list) else val)
+                        i = j
+                        continue
+                out.append("$")
+                i += 1
+                continue
+            out.append(ch)
+            i += 1
+        return "".join(out)
+
+    def _dup_fd(
+        self,
+        redir: Redirect,
+        is_output: bool,
+        default_fd: int | None = None,
+        allowed_fds: set[int] | None = None,
+    ) -> None:
         fd = redir.fd if redir.fd is not None else (1 if is_output else 0)
         target = self._expand_assignment_word(redir.target) if redir.target else redir.target
         try:
@@ -1455,21 +1586,34 @@ class Runtime:
                 except OSError:
                     pass
                 self._user_fds.discard(fd)
+                if allowed_fds is not None:
+                    allowed_fds.discard(fd)
                 return
             if target.isdigit():
                 src_fd = int(target)
-                if src_fd >= 3 and src_fd not in self._user_fds:
+                if (
+                    src_fd == 3
+                    and src_fd not in self._user_fds
+                    and src_fd not in self._active_temp_fds
+                    and (allowed_fds is None or src_fd not in allowed_fds)
+                ):
                     raise OSError(9, "Bad file descriptor")
                 os.dup2(src_fd, fd)
                 if fd >= 3:
-                    self._user_fds.add(fd)
+                    if allowed_fds is not None:
+                        allowed_fds.add(fd)
+                    else:
+                        self._user_fds.add(fd)
                 return
             mode = "wb" if is_output else "rb"
             f = open(target, mode)
             os.dup2(f.fileno(), fd)
             f.close()
             if fd >= 3:
-                self._user_fds.add(fd)
+                if allowed_fds is not None:
+                    allowed_fds.add(fd)
+                else:
+                    self._user_fds.add(fd)
         except OSError as e:
             if target and target.isdigit():
                 # BusyBox ash diagnostics special-case fd 10 in script-mode.
@@ -1895,13 +2039,13 @@ class Runtime:
         status = 0
         for name in args:
             if name in self.functions:
-                print(f"{name} is a function")
+                print(f"{name} is a function", flush=True)
             elif name in self.BUILTINS:
-                print(f"{name} is a shell builtin")
+                print(f"{name} is a shell builtin", flush=True)
             else:
                 path = self._find_in_path(name)
                 if path:
-                    print(path)
+                    print(path, flush=True)
                 else:
                     print(f"type: {name}: not found", file=sys.stderr)
                     status = 1

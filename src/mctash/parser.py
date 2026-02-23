@@ -144,6 +144,17 @@ class Parser:
     def _token_adjacent(self, left: Token, right: Token) -> bool:
         return left.index + len(left.value) == right.index
 
+    def _is_heredoc_only_andor(self, node: AndOr) -> bool:
+        if len(node.pipelines) != 1 or node.operators:
+            return False
+        pl = node.pipelines[0]
+        if pl.negate or len(pl.commands) != 1:
+            return False
+        cmd = pl.commands[0]
+        if isinstance(cmd, SimpleCommand):
+            return (not cmd.argv) and (not cmd.assignments) and any(r.op == "<<" for r in cmd.redirects)
+        return False
+
     def _is_word(self, tok: Optional[Token]) -> bool:
         return tok is not None and tok.kind in ["WORD", "RESERVED"]
 
@@ -167,12 +178,65 @@ class Parser:
         tok = self._peek()
         background = False
         terminator: str | None = None
+        consumed_trailing_newline = False
         if tok and tok.kind == "OP" and tok.value in ["\n", ";", "&"]:
             background = tok.value == "&"
             terminator = tok.value
             self._advance()
             if tok.value == "\n":
                 self._consume_pending_heredocs()
+                consumed_trailing_newline = True
+            elif tok.value == ";" and self.pending_heredocs:
+                ntok = self._peek()
+                if ntok and ntok.kind == "OP" and ntok.value == "\n":
+                    self._advance()
+                    self._consume_pending_heredocs()
+                    consumed_trailing_newline = True
+            if tok.value == ";" and self._is_heredoc_only_andor(node):
+                ntok = self._peek()
+                if self._is_word(ntok) and ntok.value == "then":
+                    raise ParseError(f'syntax error: unexpected "then" at {self._where(ntok)}')
+        if terminator == ";" and self.pending_heredocs and not consumed_trailing_newline:
+            group_items: List[ListItem] = [ListItem(node=node, background=background)]
+            lst_group_items: List[LstListItem] = [LstListItem(node=lst_node, terminator=terminator)]
+            while True:
+                ntok = self._peek()
+                if ntok is None:
+                    break
+                if ntok.kind == "OP" and ntok.value == "\n":
+                    self._advance()
+                    self._consume_pending_heredocs()
+                    break
+                next_node, next_lst = self.parse_and_or()
+                next_bg = False
+                next_term: str | None = None
+                ntok = self._peek()
+                if ntok and ntok.kind == "OP" and ntok.value in ["\n", ";", "&"]:
+                    next_bg = ntok.value == "&"
+                    next_term = ntok.value
+                    self._advance()
+                    if ntok.value == "\n":
+                        self._consume_pending_heredocs()
+                    elif ntok.value == ";" and self.pending_heredocs:
+                        maybe_nl = self._peek()
+                        if maybe_nl and maybe_nl.kind == "OP" and maybe_nl.value == "\n":
+                            self._advance()
+                            self._consume_pending_heredocs()
+                group_items.append(ListItem(node=next_node, background=next_bg))
+                lst_group_items.append(LstListItem(node=next_lst, terminator=next_term))
+                if next_term != ";":
+                    break
+            group_cmd = GroupCommand(body=ListNode(items=group_items))
+            lst_group_cmd = LstGroupCommand(body=LstListNode(items=lst_group_items))
+            wrapped = AndOr(pipelines=[Pipeline(commands=[group_cmd], negate=False)], operators=[])
+            wrapped_lst = LstAndOr(
+                pipelines=[LstPipeline(commands=[lst_group_cmd], negate=False)],
+                operators=[],
+                op_positions=[],
+            )
+            self.last_lst = wrapped_lst
+            self.last_lst_item = LstListItem(node=wrapped_lst, terminator=None)
+            return ListItem(node=wrapped, background=False)
         self.last_lst_item = LstListItem(node=lst_node, terminator=terminator)
         return ListItem(node=node, background=background)
 
@@ -197,6 +261,15 @@ class Parser:
                 self._advance()
                 if terminator == "\n":
                     self._consume_pending_heredocs()
+                elif terminator == ";" and self.pending_heredocs:
+                    ntok = self._peek()
+                    if ntok and ntok.kind == "OP" and ntok.value == "\n":
+                        self._advance()
+                        self._consume_pending_heredocs()
+                if terminator == ";" and self._is_heredoc_only_andor(item):
+                    ntok = self._peek()
+                    if self._is_word(ntok) and ntok.value == "then":
+                        raise ParseError(f'syntax error: unexpected "then" at {self._where(ntok)}')
             items.append(ListItem(node=item, background=(terminator == "&")))
             lst_items.append(LstListItem(node=lst_item, terminator=terminator))
             if terminator is None:
@@ -229,6 +302,15 @@ class Parser:
                 self._advance()
                 if terminator == "\n":
                     self._consume_pending_heredocs()
+                elif terminator == ";" and self.pending_heredocs:
+                    ntok = self._peek()
+                    if ntok and ntok.kind == "OP" and ntok.value == "\n":
+                        self._advance()
+                        self._consume_pending_heredocs()
+                if terminator == ";" and self._is_heredoc_only_andor(item):
+                    ntok = self._peek()
+                    if self._is_word(ntok) and ntok.value == "then":
+                        raise ParseError(f'syntax error: unexpected "then" at {self._where(ntok)}')
             items.append(ListItem(node=item, background=(terminator == "&")))
             lst_items.append(LstListItem(node=lst_item, terminator=terminator))
             if terminator is None:
@@ -326,6 +408,7 @@ class Parser:
         lst_assignments: List[LstAssignment] = []
         redirects: List[Redirect] = []
         lst_redirects: List[LstRedirect] = []
+        command_line: int | None = None
         while True:
             tok = self._peek()
             if tok is None:
@@ -339,6 +422,8 @@ class Parser:
                     and self._token_adjacent(tok, next_tok)
                 ):
                     fd = int(tok.value)
+                    if command_line is None:
+                        command_line = tok.line
                     self._advance()
                     op_tok = self._advance()
                     target_tok = self._peek()
@@ -354,6 +439,8 @@ class Parser:
                     continue
             if tok.kind == "OP" and tok.value in ["<", ">", ">>", "<>", "<<", "<<-", ">&", "<&"]:
                 op = tok.value
+                if command_line is None:
+                    command_line = tok.line
                 self._advance()
                 target_tok = self._peek()
                 if target_tok is None or not self._is_word(target_tok):
@@ -367,6 +454,8 @@ class Parser:
                 lst_redirects.append(lst_redir)
                 continue
             if self._is_word(tok):
+                if command_line is None:
+                    command_line = tok.line
                 if self._is_assignment(tok.value) and not argv:
                     name, op, value = self._split_assignment(tok.value)
                     assignments.append(Assignment(name=name, value=value, op=op))
@@ -393,7 +482,7 @@ class Parser:
             if tok is not None and tok.kind == "OP":
                 raise ParseError(f'syntax error: unexpected "{tok.value}" at {self._where(tok)}')
             raise ParseError(f"expected command at {self._where(tok)}")
-        simple_cmd = SimpleCommand(argv=argv, assignments=assignments, redirects=redirects)
+        simple_cmd = SimpleCommand(argv=argv, assignments=assignments, redirects=redirects, line=command_line)
         lst_simple_cmd = LstSimpleCommand(argv=lst_argv, assignments=lst_assignments, redirects=lst_redirects)
         if not argv and assignments:
             return simple_cmd, LstShAssignmentCommand(assignments=lst_assignments, redirects=lst_redirects)

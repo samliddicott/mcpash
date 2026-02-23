@@ -74,7 +74,7 @@ def _asdl_command(node: Dict[str, Any]):
                 )
             )
         redirects = [_asdl_redirect(r) for r in node.get("redirects") or []]
-        return SimpleCommand(argv=argv, assignments=assignments, redirects=redirects)
+        return SimpleCommand(argv=argv, assignments=assignments, redirects=redirects, line=_command_line(node))
     if t == "command.Redirect":
         child = _asdl_command(node.get("child") or {})
         redirects = [_asdl_redirect(r) for r in node.get("redirects") or []]
@@ -139,7 +139,7 @@ def _asdl_command(node: Dict[str, Any]):
         arg = node.get("arg_word")
         if arg is not None:
             argv.append(Word(_word_to_text(arg)))
-        return SimpleCommand(argv=argv, assignments=[], redirects=[])
+        return SimpleCommand(argv=argv, assignments=[], redirects=[], line=_command_line(node))
     if t == "command.ShAssignment":
         assignments = []
         for pair in node.get("pairs") or []:
@@ -151,7 +151,7 @@ def _asdl_command(node: Dict[str, Any]):
                 )
             )
         redirects = [_asdl_redirect(r) for r in node.get("redirects") or []]
-        return SimpleCommand(argv=[], assignments=assignments, redirects=redirects)
+        return SimpleCommand(argv=[], assignments=assignments, redirects=redirects, line=_command_line(node))
     raise OshAdapterError(f"unsupported ASDL command node {t}")
 
 
@@ -174,6 +174,9 @@ def _asdl_action_list(action: List[Dict[str, Any]]) -> ListNode:
 def _asdl_redirect(node: Dict[str, Any]) -> Redirect:
     op = node.get("op")
     op = _token_text(op) if isinstance(op, dict) else op
+    strip_tabs = op == "<<-"
+    if op == "<<-":
+        op = "<<"
     loc = node.get("loc") or {}
     fd = loc.get("fd") if isinstance(loc, dict) else None
     arg = node.get("arg") or {}
@@ -181,8 +184,15 @@ def _asdl_redirect(node: Dict[str, Any]) -> Redirect:
         begin = arg.get("here_begin") or {}
         target = _word_to_text(begin)
         parts = arg.get("stdin_parts") or []
-        content = "".join(_word_part_to_text(p) for p in parts)
-        return Redirect(op=op or "<<", target=target, fd=fd, here_doc=content)
+        content = "".join(_word_part_to_heredoc_text(p) for p in parts)
+        return Redirect(
+            op=op or "<<",
+            target=target,
+            fd=fd,
+            here_doc=content,
+            here_doc_expand=bool(arg.get("do_expand", True)),
+            here_doc_strip_tabs=bool(arg.get("strip_tabs", strip_tabs)),
+        )
     target_word = arg.get("word") or {}
     return Redirect(op=op or ">", target=_word_to_text(target_word), fd=fd)
 
@@ -259,3 +269,27 @@ def _word_part_to_double_text(node: Dict[str, Any]) -> str:
         return "".join(out)
     # Other parts remain structural expansions inside double quotes.
     return _word_part_to_text(node)
+
+
+def _word_part_to_heredoc_text(node: Dict[str, Any]) -> str:
+    if node.get("type") == "word_part.Literal":
+        return node.get("tval", "")
+    return _word_part_to_text(node)
+
+
+def _command_line(node: Dict[str, Any]) -> int | None:
+    for w in node.get("words") or []:
+        pos = w.get("pos") if isinstance(w, dict) else None
+        if isinstance(pos, dict):
+            line = pos.get("line")
+            if isinstance(line, int):
+                return line
+    for r in node.get("redirects") or []:
+        op = r.get("op") if isinstance(r, dict) else None
+        if isinstance(op, dict):
+            pos = op.get("pos")
+            if isinstance(pos, dict):
+                line = pos.get("line")
+                if isinstance(line, int):
+                    return line
+    return None
