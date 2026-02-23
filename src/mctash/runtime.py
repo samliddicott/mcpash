@@ -71,6 +71,16 @@ class CommandSubstFailure(Exception):
 
 
 class Runtime:
+    ENV_MUTATING_BUILTINS = {
+        "cd",
+        "read",
+        "set",
+        "shift",
+        "getopts",
+        "alias",
+        "unalias",
+        "trap",
+    }
     SPECIAL_BUILTINS = {
         ":",
         ".",
@@ -421,15 +431,18 @@ class Runtime:
         for i, cmd in enumerate(node.commands):
             if not isinstance(cmd, SimpleCommand):
                 last = i == len(node.commands) - 1
-                force_epipe = (not last) and self._pipeline_sink_is_no_reader(node.commands[i + 1])
-                saved_epipe = self._force_broken_pipe
-                self._force_broken_pipe = force_epipe
-                try:
-                    status = self._exec_command(cmd)
-                finally:
-                    self._force_broken_pipe = saved_epipe
+                if last:
+                    force_epipe = False
+                    saved_epipe = self._force_broken_pipe
+                    self._force_broken_pipe = force_epipe
+                    try:
+                        status = self._exec_command(cmd)
+                    finally:
+                        self._force_broken_pipe = saved_epipe
+                    data = None
+                else:
+                    status, data = self._capture_command_output(cmd)
                 statuses.append(status)
-                data = None
                 continue
             argv = self._expand_argv(cmd.argv)
             if not argv:
@@ -444,6 +457,27 @@ class Runtime:
                 sys.stdout.write(data.decode("utf-8", errors="ignore"))
                 sys.stdout.flush()
         return self._pipeline_result(statuses if statuses else [status])
+
+    def _capture_command_output(self, cmd: Command) -> tuple[int, bytes]:
+        tmp = tempfile.TemporaryFile()
+        saved_stdout = os.dup(1)
+        os.dup2(tmp.fileno(), 1)
+        force_epipe = self._pipeline_sink_is_no_reader(cmd)
+        saved_epipe = self._force_broken_pipe
+        self._force_broken_pipe = force_epipe
+        try:
+            try:
+                status = self._exec_command(cmd)
+            except SystemExit as e:
+                status = int(e.code) if e.code is not None else 0
+        finally:
+            self._force_broken_pipe = saved_epipe
+            os.dup2(saved_stdout, 1)
+            os.close(saved_stdout)
+        tmp.seek(0)
+        data = tmp.read()
+        tmp.close()
+        return status, data
 
     def _pipeline_result(self, statuses: List[int]) -> int:
         if self.options.get("pipefail", False):
@@ -474,7 +508,22 @@ class Runtime:
     def _exec_simple_capture(self, cmd: SimpleCommand, argv: List[str], data: bytes | None, capture: bool) -> tuple[int, bytes | None]:
         name = argv[0]
         input_text = data.decode("utf-8", errors="ignore") if data is not None else None
+        cmd_env = dict(self.env)
+        if cmd.assignments:
+            saved_env = self.env
+            try:
+                self.env = cmd_env
+                for assign in cmd.assignments:
+                    value = self._expand_assignment_word(assign.value)
+                    if assign.op == "+=":
+                        cmd_env[assign.name] = cmd_env.get(assign.name, "") + value
+                    else:
+                        cmd_env[assign.name] = value
+            finally:
+                self.env = saved_env
         if name in self.functions or name in self.BUILTINS:
+            saved_env = self.env
+            self.env = cmd_env
             if capture and self._stdout_redirected_away(cmd.redirects):
                 with self._redirected_fds(cmd.redirects):
                     try:
@@ -488,6 +537,7 @@ class Runtime:
                         status = e.code
                     except (BreakLoop, ContinueLoop):
                         status = 1
+                self.env = saved_env
                 return status, b""
             saved_stdin = sys.stdin
             saved_stdout = sys.stdout
@@ -515,6 +565,7 @@ class Runtime:
             finally:
                 sys.stdin = saved_stdin
                 sys.stdout = saved_stdout
+                self.env = saved_env
 
         try:
             proc = subprocess.run(
@@ -522,7 +573,7 @@ class Runtime:
                 input=data,
                 stdout=subprocess.PIPE if capture else None,
                 stderr=None,
-                env=self.env,
+                env=cmd_env,
                 check=False,
             )
             return proc.returncode, proc.stdout
@@ -618,6 +669,8 @@ class Runtime:
                             self.env[name] = self.env.get(name, "") + value
                         else:
                             self.env[name] = value
+                    saved_env.clear()
+                    saved_env.update(self.env)
                     return 0
                 finally:
                     self.env = saved_env
@@ -662,18 +715,33 @@ class Runtime:
             if not argv:
                 return 0
             name = argv[0]
+            assign_names = {a.name for a in node.assignments}
             if name in self.functions:
-                saved_env = self.env
+                saved_env = dict(self.env)
                 try:
                     self.env = local_env
                     try:
                         with self._redirected_fds(node.redirects):
-                            return self._run_function(name, argv[1:])
+                            status = self._run_function(name, argv[1:])
                     except RuntimeError as e:
                         print(str(e), file=sys.stderr)
                         return 1
                 finally:
-                    self.env = saved_env
+                    result_env = dict(self.env)
+                    merged = dict(saved_env)
+                    for k, v in result_env.items():
+                        if k not in assign_names:
+                            merged[k] = v
+                    for k in list(merged.keys()):
+                        if k not in result_env and k not in assign_names:
+                            merged.pop(k, None)
+                    for k in assign_names:
+                        if k in saved_env:
+                            merged[k] = saved_env[k]
+                        else:
+                            merged.pop(k, None)
+                    self.env = merged
+                return status
             if name in self.BUILTINS:
                 is_special = name in self.SPECIAL_BUILTINS
                 if is_special:
@@ -689,8 +757,22 @@ class Runtime:
                     except RuntimeError as e:
                         print(str(e), file=sys.stderr)
                         return 1
-                    # Builtins like read/set/shift must update shell state.
-                    saved_env.update(self.env)
+                    if name in self.ENV_MUTATING_BUILTINS:
+                        result_env = dict(self.env)
+                        merged = dict(saved_env)
+                        for k, v in result_env.items():
+                            if k not in assign_names:
+                                merged[k] = v
+                        for k in list(merged.keys()):
+                            if k not in result_env and k not in assign_names:
+                                merged.pop(k, None)
+                        for k in assign_names:
+                            if k in saved_env:
+                                merged[k] = saved_env[k]
+                            else:
+                                merged.pop(k, None)
+                        saved_env.clear()
+                        saved_env.update(merged)
                     return status
                 finally:
                     self.env = saved_env
