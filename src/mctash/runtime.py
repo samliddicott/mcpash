@@ -412,11 +412,11 @@ class Runtime:
             self._loop_depth -= 1
 
     def _run_case(self, node: CaseCommand) -> int:
-        value_parts = self._expand_argv([node.value])
-        value = value_parts[0] if value_parts else ""
+        value = self._expand_assignment_word(node.value.text)
         for item in node.items:
             for pat in item.patterns:
-                if fnmatch.fnmatch(value, pat):
+                expanded_pat = self._expand_assignment_word(pat)
+                if fnmatch.fnmatch(value, expanded_pat):
                     return self._exec_list(item.body)
         return 0
 
@@ -1119,12 +1119,14 @@ class Runtime:
             return 0
         i = 0
         search_default_path = False
+        lookup_path: str | None = None
         while i < len(args) and args[i].startswith("-") and args[i] != "-":
             if args[i] == "--":
                 i += 1
                 break
             if args[i] == "-p":
                 search_default_path = True
+                lookup_path = "/usr/bin:/bin"
                 i += 1
                 continue
             if args[i] in ["-v", "-V"]:
@@ -1132,7 +1134,7 @@ class Runtime:
                     return 1
                 name = args[i + 1]
                 if args[i] == "-v":
-                    path = self._find_in_path(name)
+                    path = self._find_in_path(name, lookup_path)
                     if path:
                         print(path)
                         return 0
@@ -1143,7 +1145,7 @@ class Runtime:
                 if name in self.BUILTINS:
                     print(name)
                     return 0
-                path = self._find_in_path(name)
+                path = self._find_in_path(name, lookup_path)
                 if path:
                     print(path)
                     return 0
@@ -1184,8 +1186,8 @@ class Runtime:
                     status = 1
         return status
 
-    def _find_in_path(self, name: str) -> str:
-        path = self.env.get("PATH", os.defpath)
+    def _find_in_path(self, name: str, path_override: str | None = None) -> str:
+        path = path_override if path_override is not None else self.env.get("PATH", os.defpath)
         for d in path.split(os.pathsep):
             candidate = os.path.join(d, name)
             if os.path.isfile(candidate) and os.access(candidate, os.X_OK):

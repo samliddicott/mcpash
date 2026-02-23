@@ -47,7 +47,7 @@ def _asdl_andor(node: Dict[str, Any]) -> AndOr:
     ops = []
     for op in node.get("ops") or []:
         if isinstance(op, dict):
-            value = op.get("value", "")
+            value = _token_text(op)
         else:
             value = str(op)
         if value in ["&&", "||"]:
@@ -107,9 +107,7 @@ def _asdl_command(node: Dict[str, Any]):
         else_body = _asdl_command_list(else_action) if else_action else None
         return IfCommand(cond=cond, then_body=then_body, elifs=elifs, else_body=else_body)
     if t == "command.WhileUntil":
-        kw = node.get("keyword")
-        if isinstance(kw, dict):
-            kw = kw.get("value")
+        kw = _token_text(node.get("keyword"))
         return WhileCommand(
             cond=_asdl_command_list(node.get("cond") or {}),
             body=_asdl_command_list(node.get("body") or {}),
@@ -136,9 +134,7 @@ def _asdl_command(node: Dict[str, Any]):
             items.append(CaseItem(patterns=patterns, body=_asdl_action_list(action)))
         return CaseCommand(value=value, items=items)
     if t == "command.ControlFlow":
-        keyword = node.get("keyword")
-        if isinstance(keyword, dict):
-            keyword = keyword.get("value")
+        keyword = _token_text(node.get("keyword"))
         argv = [Word(keyword or "")]
         arg = node.get("arg_word")
         if arg is not None:
@@ -176,8 +172,7 @@ def _asdl_action_list(action: List[Dict[str, Any]]) -> ListNode:
 
 def _asdl_redirect(node: Dict[str, Any]) -> Redirect:
     op = node.get("op")
-    if isinstance(op, dict):
-        op = op.get("value")
+    op = _token_text(op) if isinstance(op, dict) else op
     loc = node.get("loc") or {}
     fd = loc.get("fd") if isinstance(loc, dict) else None
     arg = node.get("arg") or {}
@@ -189,6 +184,18 @@ def _asdl_redirect(node: Dict[str, Any]) -> Redirect:
         return Redirect(op=op or "<<", target=target, fd=fd, here_doc=content)
     target_word = arg.get("word") or {}
     return Redirect(op=op or ">", target=_word_to_text(target_word), fd=fd)
+
+
+def _token_text(tok: Any) -> str:
+    if isinstance(tok, dict):
+        if "tval" in tok:
+            return str(tok.get("tval") or "")
+        if "value" in tok:
+            return str(tok.get("value") or "")
+        return ""
+    if tok is None:
+        return ""
+    return str(tok)
 
 
 def _rhs_word_to_text(node: Dict[str, Any] | None) -> str:

@@ -499,6 +499,13 @@ class Parser:
             raise ParseError(f"expected name at {self._where(name_tok)}")
         items: List[Word] = []
         lst_items: List = []
+        while True:
+            tok = self._peek()
+            if tok and tok.kind == "OP" and tok.value == "\n":
+                self._advance()
+                continue
+            break
+
         tok = self._peek()
         if tok and self._is_word(tok) and tok.value == "in":
             self._advance()
@@ -506,11 +513,8 @@ class Parser:
                 tok = self._peek()
                 if tok is None:
                     break
-                if self._is_word(tok) and tok.value == "do":
-                    break
                 if tok.kind == "OP" and tok.value in [";", "\n"]:
-                    self._advance()
-                    continue
+                    break
                 if self._is_word(tok):
                     items.append(Word(tok.value))
                     lst_items.append(
@@ -521,6 +525,17 @@ class Parser:
                     self._advance()
                     continue
                 break
+
+        tok = self._peek()
+        if tok and tok.kind == "OP" and tok.value == ";":
+            self._advance()
+        while True:
+            tok = self._peek()
+            if tok and tok.kind == "OP" and tok.value == "\n":
+                self._advance()
+                continue
+            break
+
         do_tok = self._advance()
         if do_tok is None or not self._is_word(do_tok) or do_tok.value != "do":
             raise ParseError(f"expected do at {self._where(do_tok)}")
@@ -555,6 +570,8 @@ class Parser:
             if tok.kind == "OP" and tok.value in ["\n", ";"]:
                 self._advance()
                 continue
+            if tok.kind == "OP" and tok.value == "(":
+                self._advance()
             patterns: List[str] = []
             lst_patterns: List = []
             while True:
