@@ -38,6 +38,13 @@ def parse_word_parts(text: str) -> List[WordPart]:
     while i < len(text):
         ch = text[i]
         if mode == "plain":
+            if ch == "$" and i + 1 < len(text) and text[i + 1] == "'":
+                flush(False)
+                decoded, new_i = _parse_ansi_c_single(text, i)
+                if new_i != i + 1:
+                    parts.append(WordPart("LIT", decoded, quoted=True))
+                    i = new_i
+                    continue
             if ch == "'":
                 flush(False)
                 mode = "single"
@@ -154,6 +161,53 @@ def parse_word_parts(text: str) -> List[WordPart]:
 
     flush(mode != "plain")
     return parts
+
+
+def _parse_ansi_c_single(text: str, start: int) -> Tuple[str, int]:
+    if start + 1 >= len(text) or text[start] != "$" or text[start + 1] != "'":
+        return "", start + 1
+    i = start + 2
+    out: List[str] = []
+    while i < len(text):
+        ch = text[i]
+        if ch == "'":
+            return "".join(out), i + 1
+        if ch == "\\" and i + 1 < len(text):
+            nxt = text[i + 1]
+            if nxt == "n":
+                out.append("\n")
+            elif nxt == "t":
+                out.append("\t")
+            elif nxt == "r":
+                out.append("\r")
+            elif nxt == "a":
+                out.append("\a")
+            elif nxt == "b":
+                out.append("\b")
+            elif nxt == "f":
+                out.append("\f")
+            elif nxt == "v":
+                out.append("\v")
+            elif nxt in ["\\", "'", '"']:
+                out.append(nxt)
+            elif nxt == "x":
+                hx = ""
+                j = i + 2
+                while j < len(text) and len(hx) < 2 and text[j] in "0123456789abcdefABCDEF":
+                    hx += text[j]
+                    j += 1
+                if hx:
+                    out.append(chr(int(hx, 16)))
+                    i = j
+                    continue
+                out.append("x")
+            else:
+                out.append(nxt)
+            i += 2
+            continue
+        out.append(ch)
+        i += 1
+    return "".join(out), start + 1
 
 
 def _protect_glob_meta(s: str) -> str:

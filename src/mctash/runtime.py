@@ -1718,6 +1718,10 @@ class Runtime:
             return self._remove_suffix(value, pattern, longest=(op == "%%"))
         if op == ":substr":
             return self._substring(value, arg_text)
+        if op == "/":
+            if not is_set:
+                return ""
+            return self._replace_pattern(value, arg_text)
         return value
 
     def _substring(self, value: str, arg_text: str) -> str:
@@ -1732,9 +1736,9 @@ class Runtime:
         off = self._to_int_arith(off_text if off_text != "" else "0")
         n = len(value)
         if off < 0:
+            if -off > n:
+                return ""
             off = n + off
-        if off < 0:
-            off = 0
         if off > n:
             return ""
         if not has_len:
@@ -1742,9 +1746,108 @@ class Runtime:
         if len_text == "":
             return ""
         ln = self._to_int_arith(len_text)
-        if ln <= 0:
+        if ln < 0:
+            end = n + ln
+            if end < off:
+                return ""
+            return value[off:end]
+        if ln == 0:
             return ""
         return value[off : off + ln]
+
+    def _replace_pattern(self, value: str, spec: str) -> str:
+        global_replace = False
+        prefix_only = False
+        suffix_only = False
+        text = spec
+        if text.startswith("/"):
+            global_replace = True
+            text = text[1:]
+        elif text.startswith("#"):
+            prefix_only = True
+            text = text[1:]
+        elif text.startswith("%"):
+            suffix_only = True
+            text = text[1:]
+
+        if global_replace and text.startswith("/"):
+            pat_rest, repl_raw = self._split_unescaped_slash(text[1:])
+            pat_raw = "/" + pat_rest
+        else:
+            pat_raw, repl_raw = self._split_unescaped_slash(text)
+        pattern = self._pattern_from_word(pat_raw)
+        repl = self._expand_assignment_word(repl_raw)
+
+        if prefix_only:
+            match_end = self._match_prefix_end(value, pattern)
+            if match_end is None:
+                return value
+            return repl + value[match_end:]
+        if suffix_only:
+            match_start = self._match_suffix_start(value, pattern)
+            if match_start is None:
+                return value
+            return value[:match_start] + repl
+        if global_replace:
+            return self._replace_all_matches(value, pattern, repl)
+        m = self._find_first_match(value, pattern)
+        if m is None:
+            return value
+        i, j = m
+        return value[:i] + repl + value[j:]
+
+    def _split_unescaped_slash(self, text: str) -> tuple[str, str]:
+        i = 0
+        while i < len(text):
+            ch = text[i]
+            if ch == "\\" and i + 1 < len(text):
+                i += 2
+                continue
+            if ch == "/":
+                return text[:i], text[i + 1 :]
+            i += 1
+        return text, ""
+
+    def _find_first_match(self, value: str, pattern: str) -> tuple[int, int] | None:
+        for i in range(len(value) + 1):
+            for j in range(len(value), i - 1, -1):
+                if fnmatch.fnmatchcase(value[i:j], pattern):
+                    return i, j
+        return None
+
+    def _replace_all_matches(self, value: str, pattern: str, repl: str) -> str:
+        out: List[str] = []
+        i = 0
+        while i <= len(value):
+            m = self._find_first_match(value[i:], pattern)
+            if m is None:
+                out.append(value[i:])
+                break
+            a, b = m
+            start = i + a
+            end = i + b
+            out.append(value[i:start])
+            out.append(repl)
+            if end == start:
+                if end >= len(value):
+                    break
+                out.append(value[end])
+                i = end + 1
+            else:
+                i = end
+        return "".join(out)
+
+    def _match_prefix_end(self, value: str, pattern: str) -> int | None:
+        for j in range(len(value), -1, -1):
+            if fnmatch.fnmatchcase(value[:j], pattern):
+                return j
+        return None
+
+    def _match_suffix_start(self, value: str, pattern: str) -> int | None:
+        for i in range(0, len(value) + 1):
+            if fnmatch.fnmatchcase(value[i:], pattern):
+                return i
+        return None
 
     def _to_int_arith(self, expr: str) -> int:
         try:
@@ -1907,9 +2010,9 @@ class Runtime:
                         raise RuntimeError(
                             self._format_error("syntax error: bad substitution", line=self.current_line)
                         )
-                out.append(self._expand_braced_param(name, op, arg, False))
-                i = end + 1
-                continue
+                    out.append(self._expand_braced_param(name, op, arg, False))
+                    i = end + 1
+                    continue
                 if i + 1 < len(text):
                     nxt = text[i + 1]
                     if nxt in "#@*?$!-":
@@ -2058,13 +2161,14 @@ class Runtime:
         return value
 
     def _pattern_from_word(self, text: str) -> str:
+        backslash_marker = "\ue006"
         raw = self._expand_assignment_word_protected(text)
         raw = (
             raw.replace("\ue001", "[*]")
             .replace("\ue002", "[?]")
             .replace("\ue003", "[[]")
             .replace("\ue004", "[]]")
-            .replace("\ue005", "[\\\\]")
+            .replace("\ue005", backslash_marker)
         )
         out: List[str] = []
         i = 0
@@ -2088,7 +2192,7 @@ class Runtime:
                 continue
             out.append(ch)
             i += 1
-        return "".join(out)
+        return "".join(out).replace(backslash_marker, "[\\\\]")
 
     def _set_local(self, name: str, value: str) -> None:
         if not self.local_stack:

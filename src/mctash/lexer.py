@@ -605,19 +605,33 @@ def _scan_arith_sub_from_lparen(source: str, lparen_idx: int) -> tuple[str, int]
         if i + 1 < len(source) and source[i] == "\\" and source[i + 1] == "\n":
             i += 2
             continue
+        # Treat line-continuation between parens as adjacent.
+        j = i
+        if source[j] == "(":
+            k = j + 1
+            while k + 1 < len(source) and source[k] == "\\" and source[k + 1] == "\n":
+                k += 2
+            if k < len(source) and source[k] == "(":
+                depth += 1
+                expr.append("((")
+                i = k + 1
+                continue
         if source.startswith("((", i):
             depth += 1
             expr.append("((")
             i += 2
             continue
-        if source.startswith("))", i):
-            depth -= 1
-            if depth == 0:
-                i += 2
-                return "$((" + "".join(expr) + "))", i
-            expr.append("))")
-            i += 2
-            continue
+        if source[i] == ")":
+            k = i + 1
+            while k + 1 < len(source) and source[k] == "\\" and source[k + 1] == "\n":
+                k += 2
+            if k < len(source) and source[k] == ")":
+                depth -= 1
+                if depth == 0:
+                    return "$((" + "".join(expr) + "))", k + 1
+                expr.append("))")
+                i = k + 1
+                continue
         expr.append(source[i])
         i += 1
     return "$((" + "".join(expr) + "))", len(source)
