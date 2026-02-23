@@ -888,7 +888,11 @@ class Runtime:
             th = self._bg_jobs.get(job_id)
             if th is not None:
                 th.join()
-            return self._bg_status.get(job_id, 0)
+            st = self._bg_status.get(job_id, 0)
+            if st < 0 and "TERM" in self.traps:
+                self._run_trap_action(self.traps["TERM"], 128 + signal.SIGTERM)
+                return 0
+            return st
 
         if not args:
             last = 0
@@ -1090,17 +1094,19 @@ class Runtime:
     def _expand_argv(self, words: List[Word]) -> List[str]:
         argv: List[str] = []
         for w in words:
-            argv.extend(
-                expand_word(
-                    w.text,
-                    self._expand_param,
-                    self._expand_braced_param,
-                    self._expand_command_subst_text,
-                    self._expand_arith,
-                    self._split_ifs,
-                    self._glob_field,
-                )
+            fields = expand_word(
+                w.text,
+                self._expand_param,
+                self._expand_braced_param,
+                self._expand_command_subst_text,
+                self._expand_arith,
+                self._split_ifs,
+                self._glob_field,
             )
+            # Unquoted empty expansions are elided (e.g. $1 when unset).
+            if not any(ch in w.text for ch in ["'", '"', "\\"]):
+                fields = [f for f in fields if f != ""]
+            argv.extend(fields)
         return argv
 
     def _expand_word(self, text: str) -> str:
@@ -1173,6 +1179,8 @@ class Runtime:
     def _expand_param(self, name: str, quoted: bool):
         if name == "@":
             return list(self.positional)
+        if name == "*":
+            return self._ifs_join(self.positional)
         if name == "#":
             return str(len(self.positional))
         if name == "?":
@@ -1421,7 +1429,7 @@ class Runtime:
 
     def _run_eval(self, args: List[str]) -> int:
         source = " ".join(args)
-        return self._eval_source(source)
+        return self._eval_source(source, parse_context="eval", line_offset=1)
 
     def _run_declare(self, args: List[str]) -> int:
         if args and args[0] == "-F":
@@ -1502,31 +1510,61 @@ class Runtime:
             return 0
         fmt = self._decode_backslash_escapes(args[0])
         vals = args[1:]
-        out = []
-        i = 0
-        vi = 0
-        while i < len(fmt):
-            if fmt[i] == "%" and i + 1 < len(fmt):
-                spec = fmt[i + 1]
-                if spec == "%":
-                    out.append("%")
-                else:
-                    val = vals[vi] if vi < len(vals) else ""
-                    vi += 1
-                    if spec == "s":
-                        out.append(val)
-                    elif spec in ["d", "i"]:
-                        try:
-                            out.append(str(int(val)))
-                        except ValueError:
-                            out.append("0")
+        def count_specs(s: str) -> int:
+            i = 0
+            n = 0
+            while i < len(s):
+                if s[i] == "%" and i + 1 < len(s):
+                    if s[i + 1] != "%":
+                        n += 1
+                    i += 2
+                    continue
+                i += 1
+            return n
+
+        def render_once(start_vi: int) -> tuple[str, int]:
+            out = []
+            i = 0
+            vi = start_vi
+            while i < len(fmt):
+                if fmt[i] == "%" and i + 1 < len(fmt):
+                    spec = fmt[i + 1]
+                    if spec == "%":
+                        out.append("%")
                     else:
-                        out.append(val)
-                i += 2
-                continue
-            out.append(fmt[i])
-            i += 1
-        rendered = "".join(out)
+                        val = vals[vi] if vi < len(vals) else ""
+                        vi += 1
+                        if spec == "s":
+                            out.append(val)
+                        elif spec in ["d", "i"]:
+                            try:
+                                out.append(str(int(val)))
+                            except ValueError:
+                                out.append("0")
+                        else:
+                            out.append(val)
+                    i += 2
+                    continue
+                out.append(fmt[i])
+                i += 1
+            return "".join(out), vi
+
+        specs = count_specs(fmt)
+        rendered_parts: List[str] = []
+        vi = 0
+        if specs == 0:
+            text, _ = render_once(0)
+            rendered_parts.append(text)
+        else:
+            while vi < len(vals) or vi == 0:
+                text, next_vi = render_once(vi)
+                rendered_parts.append(text)
+                if next_vi == vi:
+                    break
+                vi = next_vi
+                if not vals:
+                    break
+        rendered = "".join(rendered_parts)
         if isinstance(sys.stdout, io.StringIO) and self._fd_redirect_depth == 0:
             sys.stdout.write(rendered)
             return 0
@@ -1793,6 +1831,8 @@ class Runtime:
         source: str,
         propagate_exit: bool = False,
         propagate_return: bool = False,
+        parse_context: str | None = None,
+        line_offset: int = 0,
     ) -> int:
         parser_impl = Parser(source)
         status = 0
@@ -1826,13 +1866,11 @@ class Runtime:
             if propagate_exit:
                 raise
         except ParseError as e:
-            msg = str(e)
-            if "syntax error:" in msg and " at " in msg:
-                text, where = msg.rsplit(" at ", 1)
-                line = where.split(":", 1)[0]
-                self._report_error(text, line=int(line) if line.isdigit() else self.current_line)
+            text, line_hint = self._normalize_parse_error(str(e))
+            if line_hint is not None:
+                self._report_error(text, line=line_hint + line_offset, context=parse_context)
             else:
-                print(f"parse error: {e}", file=sys.stderr)
+                print(f"parse error: {text}", file=sys.stderr)
             status = 2
         except (AsdlMappingError, OshAdapterError) as e:
             print(f"asdl error: {e}", file=sys.stderr)
@@ -1857,6 +1895,24 @@ class Runtime:
         with os.fdopen(r_fd, "rb") as r:
             data = r.read()
         return data.decode("utf-8", errors="ignore"), status
+
+    def _normalize_parse_error(self, msg: str) -> tuple[str, int | None]:
+        if msg.startswith("expected then at "):
+            where = msg[len("expected then at ") :]
+            line_s = where.split(":", 1)[0]
+            return 'syntax error: unexpected ")"', int(line_s) if line_s.isdigit() else None
+        if msg.startswith("expected done at "):
+            where = msg[len("expected done at ") :]
+            line_s = where.split(":", 1)[0]
+            return (
+                'syntax error: unexpected end of file (expecting "done")',
+                int(line_s) if line_s.isdigit() else self.current_line,
+            )
+        if "syntax error:" in msg and " at " in msg:
+            text, where = msg.rsplit(" at ", 1)
+            line_s = where.split(":", 1)[0]
+            return text, int(line_s) if line_s.isdigit() else self.current_line
+        return msg, None
 
     def _has_unterminated_quote(self, source: str) -> bool:
         in_single = False

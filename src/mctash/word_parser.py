@@ -143,6 +143,9 @@ def _parse_parts(text: str, in_double: bool) -> list[LstWordPart]:
                 continue
         if ch == "\\" and i + 1 < len(text):
             nxt = text[i + 1]
+            if nxt == "\n":
+                i += 2
+                continue
             if in_double and nxt not in ['$', '"', "\\", "`", "\n"]:
                 buf.append(ch)
                 i += 1
@@ -161,6 +164,12 @@ def _find_matching_quote(text: str, start: int) -> int:
     while i < len(text):
         if text[i] == "\\":
             i += 2
+            continue
+        if text[i] == "`":
+            end = _find_backtick(text, i + 1)
+            if end == -1:
+                return -1
+            i = end + 1
             continue
         if text[i] == '"':
             return i

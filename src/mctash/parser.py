@@ -23,7 +23,7 @@ from .ast_nodes import (
     WhileCommand,
     Word,
 )
-from .lexer import LexContext, Token, TokenReader
+from .lexer import LexContext, LexError, Token, TokenReader
 from .lst_nodes import (
     LstAndOr,
     LstArithSubPart,
@@ -90,14 +90,20 @@ class Parser:
 
     def _peek(self) -> Optional[Token]:
         if not self.buffer:
-            tok = self.reader.next(self.ctx)
+            try:
+                tok = self.reader.next(self.ctx)
+            except LexError as e:
+                raise ParseError(str(e))
             if tok is not None:
                 self.buffer.append(tok)
         return self.buffer[0] if self.buffer else None
 
     def _peek_n(self, n: int) -> Optional[Token]:
         while len(self.buffer) <= n:
-            tok = self.reader.next(self.ctx)
+            try:
+                tok = self.reader.next(self.ctx)
+            except LexError as e:
+                raise ParseError(str(e))
             if tok is None:
                 break
             self.buffer.append(tok)
@@ -132,7 +138,7 @@ class Parser:
 
     def _where(self, tok: Optional[Token]) -> str:
         if tok is None:
-            return "eof"
+            return f"{self.reader.line}:{self.reader.col}"
         return f"{tok.line}:{tok.col}"
 
     def _is_word(self, tok: Optional[Token]) -> bool:

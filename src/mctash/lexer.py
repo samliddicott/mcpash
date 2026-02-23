@@ -4,6 +4,10 @@ from dataclasses import dataclass
 from typing import Iterator, List, Optional
 
 
+class LexError(Exception):
+    pass
+
+
 @dataclass
 class Token:
     kind: str
@@ -73,6 +77,14 @@ class TokenReader:
                 if self._queue:
                     return self._queue.pop(0)
                 continue
+            if ch in ["&", "|"] and self._peek(1) == "\\" and self._peek(2) == "\n" and self._peek(3) == ch:
+                tok = Token("OP", ch + ch, self.line, self.col, self.i)
+                self._advance(4)
+                return tok
+            if ch == ";" and self._peek(1) == "\\" and self._peek(2) == "\n" and self._peek(3) == ";":
+                tok = Token("OP", ";;", self.line, self.col, self.i)
+                self._advance(4)
+                return tok
 
             three = ch + self._peek(1) + self._peek(2)
             if three in OPERATORS:
@@ -103,6 +115,7 @@ class TokenReader:
                 if two in OPERATORS or ch in OPERATORS:
                     break
                 if ch == "'":
+                    quote_line, quote_col = self.line, self.col
                     buf.append("'")
                     self._advance()
                     while self.i < len(self.source) and self._peek() != "'":
@@ -111,13 +124,21 @@ class TokenReader:
                     if self._peek() == "'":
                         buf.append("'")
                         self._advance()
+                    else:
+                        raise LexError(f"syntax error: unterminated quoted string at {quote_line}:{quote_col}")
                     continue
                 if ch == '"':
+                    quote_line, quote_col = self.line, self.col
                     buf.append('"')
                     self._advance()
                     while self.i < len(self.source) and self._peek() != '"':
                         if self._peek() == "$" and self._peek(1) == "(":
                             chunk, new_i = _scan_command_sub(self.source, self.i)
+                            buf.append(chunk)
+                            self._advance_to(new_i)
+                            continue
+                        if self._peek() == "`":
+                            chunk, new_i = _scan_backtick_sub(self.source, self.i)
                             buf.append(chunk)
                             self._advance_to(new_i)
                             continue
@@ -132,8 +153,11 @@ class TokenReader:
                     if self._peek() == '"':
                         buf.append('"')
                         self._advance()
+                    else:
+                        raise LexError(f"syntax error: unterminated quoted string at {quote_line}:{quote_col}")
                     continue
                 if ch == "`":
+                    quote_line, quote_col = self.line, self.col
                     buf.append("`")
                     self._advance()
                     while self.i < len(self.source) and self._peek() != "`":
@@ -148,6 +172,8 @@ class TokenReader:
                     if self._peek() == "`":
                         buf.append("`")
                         self._advance()
+                    else:
+                        raise LexError(f"syntax error: unterminated quoted string at {quote_line}:{quote_col}")
                     continue
                 if ch == "$" and self._peek(1) == "(":
                     if self._peek(2) == "(":
@@ -337,5 +363,22 @@ def _scan_arith_sub(source: str, start: int) -> tuple[str, int]:
             if depth == 0:
                 return source[start:i], i
             continue
+        i += 1
+    return source[start:i], i
+
+
+def _scan_backtick_sub(source: str, start: int) -> tuple[str, int]:
+    i = start
+    if not source.startswith("`", start):
+        return source[start:start + 1], start + 1
+    i += 1
+    while i < len(source):
+        ch = source[i]
+        if ch == "\\" and i + 1 < len(source):
+            i += 2
+            continue
+        if ch == "`":
+            i += 1
+            return source[start:i], i
         i += 1
     return source[start:i], i

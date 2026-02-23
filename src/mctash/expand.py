@@ -18,10 +18,11 @@ def parse_word_parts(text: str) -> List[WordPart]:
     buf: List[str] = []
     i = 0
     mode = "plain"
+    quote_has_parts = False
 
-    def flush(quoted: bool) -> None:
+    def flush(quoted: bool, force: bool = False) -> None:
         nonlocal buf
-        if buf:
+        if buf or force:
             parts.append(WordPart("LIT", "".join(buf), quoted))
             buf = []
 
@@ -31,14 +32,19 @@ def parse_word_parts(text: str) -> List[WordPart]:
             if ch == "'":
                 flush(False)
                 mode = "single"
+                quote_has_parts = False
                 i += 1
                 continue
             if ch == '"':
                 flush(False)
                 mode = "double"
+                quote_has_parts = False
                 i += 1
                 continue
             if ch == "\\" and i + 1 < len(text):
+                if text[i + 1] == "\n":
+                    i += 2
+                    continue
                 i += 1
                 buf.append(text[i])
                 i += 1
@@ -69,7 +75,11 @@ def parse_word_parts(text: str) -> List[WordPart]:
             continue
         if mode == "single":
             if ch == "'":
-                flush(True)
+                if buf:
+                    flush(True)
+                    quote_has_parts = True
+                elif not quote_has_parts:
+                    flush(True, force=True)
                 mode = "plain"
                 i += 1
                 continue
@@ -78,7 +88,11 @@ def parse_word_parts(text: str) -> List[WordPart]:
             continue
         if mode == "double":
             if ch == '"':
-                flush(True)
+                if buf:
+                    flush(True)
+                    quote_has_parts = True
+                elif not quote_has_parts:
+                    flush(True, force=True)
                 mode = "plain"
                 i += 1
                 continue
@@ -87,10 +101,14 @@ def parse_word_parts(text: str) -> List[WordPart]:
                 buf.append(text[i])
                 i += 1
                 continue
+            if ch == "\\" and i + 1 < len(text) and text[i + 1] == "\n":
+                i += 2
+                continue
             if ch == "$":
                 flush(True)
                 part, i = _parse_dollar(text, i, quoted=True)
                 parts.append(part)
+                quote_has_parts = True
                 continue
             if ch == "`":
                 flush(True)
@@ -106,6 +124,7 @@ def parse_word_parts(text: str) -> List[WordPart]:
                     cmd.append(text[j])
                     j += 1
                 parts.append(WordPart("CMD", "".join(cmd), quoted=True))
+                quote_has_parts = True
                 i = j + 1 if j < len(text) and text[j] == "`" else j
                 continue
             buf.append(ch)
@@ -230,8 +249,10 @@ def expand_word(
     glob_field: Callable[[str], List[str]],
 ) -> List[str]:
     parts = parse_word_parts(text)
-    fields: List[Tuple[str, bool]] = [("", False)]
-    for part in parts:
+    # field tuple: (text, quoted, active)
+    # active=False means later word parts shouldn't be appended to this field.
+    fields: List[Tuple[str, bool, bool]] = [("", False, True)]
+    for idx, part in enumerate(parts):
         if part.kind == "LIT":
             value: Union[str, List[str]] = part.value
         elif part.kind == "PARAM":
@@ -245,40 +266,69 @@ def expand_word(
         else:
             value = part.value
 
+        if part.kind == "PARAM" and part.value == "@" and part.quoted and isinstance(value, list):
+            new_fields: List[Tuple[str, bool, bool]] = []
+            for f, q, active in fields:
+                if not active:
+                    new_fields.append((f, q, active))
+                    continue
+                if not value:
+                    if f == "" and idx == len(parts) - 1 and not q:
+                        continue
+                    new_fields.append((f, True or q, True))
+                    continue
+                if len(value) == 1:
+                    new_fields.append((f + value[0], True or q, True))
+                    continue
+                new_fields.append((f + value[0], True or q, False))
+                for v in value[1:-1]:
+                    new_fields.append((v, True, False))
+                new_fields.append((value[-1], True, True))
+            fields = new_fields
+            continue
+
         if isinstance(value, list):
-            new_fields: List[Tuple[str, bool]] = []
+            new_fields: List[Tuple[str, bool, bool]] = []
             if part.quoted:
-                for f, q in fields:
+                for f, q, active in fields:
+                    if not active:
+                        new_fields.append((f, q, active))
+                        continue
                     for v in value:
-                        new_fields.append((f + v, True or q))
+                        new_fields.append((f + v, True or q, True))
             else:
-                for f, q in fields:
+                for f, q, active in fields:
+                    if not active:
+                        new_fields.append((f, q, active))
+                        continue
                     for v in value:
                         pieces = split_ifs(v)
                         if not pieces:
-                            if f != "":
-                                new_fields.append((f, q))
+                            new_fields.append((f, q, True))
                         else:
                             for p in pieces:
-                                new_fields.append((f + p, q))
+                                new_fields.append((f + p, q, True))
             fields = new_fields
             continue
 
         if part.quoted:
-            fields = [(f + value, True or q) for f, q in fields]
+            fields = [(f + value, True or q, active) if active else (f, True or q, active) for f, q, active in fields]
         else:
             pieces = split_ifs(value)
             if not pieces:
-                fields = [(f, q) for f, q in fields if f != ""]
+                fields = [(f, q, active) for f, q, active in fields]
             else:
-                new_fields = []
-                for f, q in fields:
+                new_fields: List[Tuple[str, bool, bool]] = []
+                for f, q, active in fields:
+                    if not active:
+                        new_fields.append((f, q, active))
+                        continue
                     for p in pieces:
-                        new_fields.append((f + p, q))
+                        new_fields.append((f + p, q, True))
                 fields = new_fields
 
     expanded: List[str] = []
-    for f, quoted in fields:
+    for f, quoted, _ in fields:
         if quoted:
             expanded.append(f)
         else:

@@ -50,13 +50,11 @@ def main(argv: List[str] | None = None) -> int:
                     raise SystemExit(rt.last_status)
             return rt._run_exit_trap(rt.last_status)
         except ParseError as e:
-            msg = str(e)
-            if "syntax error:" in msg and " at " in msg:
-                text, where = msg.rsplit(" at ", 1)
-                line = where.split(":", 1)[0]
+            text, line = _normalize_parse_error(str(e))
+            if line is not None:
                 print(f"{script_name or 'mctash -c'}: line {line}: {text}", file=sys.stderr)
             else:
-                print(f"parse error: {msg}", file=sys.stderr)
+                print(f"parse error: {text}", file=sys.stderr)
             return 2
         except RuntimeError as e:
             print(str(e), file=sys.stderr)
@@ -122,15 +120,14 @@ def main(argv: List[str] | None = None) -> int:
         return rt._run_exit_trap(rt.last_status)
     except ParseError as e:
         msg = str(e)
+        text, line_hint = _normalize_parse_error(msg)
         if args.script:
-            if "syntax error:" in msg and " at " in msg:
-                text, where = msg.rsplit(" at ", 1)
-                line = where.split(":", 1)[0]
-                print(f"{args.script}: line {line}: {text}", file=sys.stderr)
+            if line_hint is not None:
+                print(f"{args.script}: line {line_hint}: {text}", file=sys.stderr)
             else:
-                print(f"{args.script}: {msg}", file=sys.stderr)
+                print(f"{args.script}: {text}", file=sys.stderr)
         else:
-            print(f"parse error: {msg}", file=sys.stderr)
+            print(f"parse error: {text}", file=sys.stderr)
         return 2
     except (AsdlMappingError, OshAdapterError) as e:
         print(f"asdl error: {e}", file=sys.stderr)
@@ -188,3 +185,19 @@ def _find_mctash_index(tokens: List[str]) -> int | None:
         if base in ["mctash", "mctash.py", "mctash.exe"]:
             return i
     return None
+
+
+def _normalize_parse_error(msg: str) -> tuple[str, int | None]:
+    if msg.startswith("expected then at "):
+        where = msg[len("expected then at ") :]
+        line_s = where.split(":", 1)[0]
+        return 'syntax error: unexpected ")"', int(line_s) if line_s.isdigit() else None
+    if msg.startswith("expected done at "):
+        where = msg[len("expected done at ") :]
+        line_s = where.split(":", 1)[0]
+        return 'syntax error: unexpected end of file (expecting "done")', int(line_s) if line_s.isdigit() else None
+    if "syntax error:" in msg and " at " in msg:
+        text, where = msg.rsplit(" at ", 1)
+        line_s = where.split(":", 1)[0]
+        return text, int(line_s) if line_s.isdigit() else None
+    return msg, None
