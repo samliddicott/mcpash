@@ -3,6 +3,7 @@ from __future__ import annotations
 import glob
 import io
 import os
+import signal
 import shlex
 import subprocess
 import sys
@@ -120,23 +121,96 @@ class Runtime:
         self._cmd_sub_used: bool = False
         self._cmd_sub_status: int = 0
         self._loop_depth: int = 0
+        self.current_line: int | None = None
+        self.source_stack: List[str] = []
+        self.traps: Dict[str, str] = {}
+        self._pending_signals: List[str] = []
+        self._running_trap: bool = False
+        self._trap_entry_status: int | None = None
+        self._subshell_depth: int = 0
+        self._install_signal_handlers()
 
     def set_positional_args(self, args: List[str]) -> None:
         self.positional = list(args)
 
     def set_script_name(self, name: str) -> None:
         self.script_name = name
+        if name:
+            if self.source_stack:
+                self.source_stack[0] = name
+            else:
+                self.source_stack = [name]
 
     def run(self, script: Script) -> int:
         return self._exec_list(script.body)
+
+    def _install_signal_handlers(self) -> None:
+        try:
+            signal.signal(signal.SIGTERM, self._signal_handler)
+        except Exception:
+            pass
+
+    def _signal_handler(self, signum, frame) -> None:
+        if signum == signal.SIGTERM:
+            self._pending_signals.append("TERM")
+
+    def _format_error(self, msg: str, line: int | None = None, context: str | None = None) -> str:
+        if self.source_stack:
+            prefix = ": ".join(self.source_stack)
+        elif self.script_name:
+            prefix = self.script_name
+        else:
+            return msg
+        if context:
+            prefix = f"{prefix}: {context}"
+        if line is not None:
+            prefix = f"{prefix}: line {line}"
+        return f"{prefix}: {msg}"
+
+    def _report_error(self, msg: str, line: int | None = None, context: str | None = None) -> None:
+        print(self._format_error(msg, line=line, context=context), file=sys.stderr)
+
+    def _run_pending_traps(self) -> None:
+        if self._running_trap:
+            return
+        if self._subshell_depth > 0:
+            return
+        while self._pending_signals:
+            sig = self._pending_signals.pop(0)
+            action = self.traps.get(sig)
+            if action:
+                self._run_trap_action(action, self.last_status)
+
+    def _run_trap_action(self, action: str, entry_status: int) -> int:
+        self._running_trap = True
+        saved = self._trap_entry_status
+        self._trap_entry_status = entry_status
+        try:
+            return self._eval_source(action, propagate_exit=True)
+        finally:
+            self._trap_entry_status = saved
+            self._running_trap = False
+
+    def _run_exit_trap(self, status: int) -> int:
+        action = self.traps.get("EXIT")
+        if not action:
+            return status
+        try:
+            trap_status = self._run_trap_action(action, status)
+            return trap_status
+        except SystemExit as e:
+            return int(e.code) if e.code is not None else 0
 
     def _exec_list(self, node: ListNode) -> int:
         status = 0
         for item in node.items:
             status = self._exec_list_item(item)
             self.last_status = status
+            if not getattr(item, "background", False):
+                self._run_pending_traps()
             if status != 0 and self.options.get("e", False):
                 raise SystemExit(status)
+        self._run_pending_traps()
         return status
 
     def _exec_list_item(self, item) -> int:
@@ -363,23 +437,33 @@ class Runtime:
         return 2
 
     def _run_subshell(self, body: ListNode) -> int:
+        self._subshell_depth += 1
         saved_env = dict(self.env)
         saved_local = [dict(s) for s in self.local_stack]
         saved_positional = list(self.positional)
         saved_cwd = os.getcwd()
+        saved_traps = dict(self.traps)
+        # EXIT trap is not inherited by subshells; subshell may define its own.
+        self.traps = {k: v for k, v in self.traps.items() if k != "EXIT"}
         try:
             try:
-                return self._exec_list(body)
+                status = self._exec_list(body)
             except SystemExit as e:
-                return int(e.code) if e.code is not None else 0
+                status = int(e.code) if e.code is not None else 0
             except (BreakLoop, ContinueLoop):
-                return 1
+                status = 1
             except ReturnFromFunction:
-                return 1
+                status = 1
+            except RuntimeError as e:
+                print(str(e), file=sys.stderr)
+                status = 1
+            return self._run_exit_trap(status)
         finally:
+            self._subshell_depth -= 1
             self.env = saved_env
             self.local_stack = saved_local
             self.positional = saved_positional
+            self.traps = saved_traps
             try:
                 os.chdir(saved_cwd)
             except OSError:
@@ -468,7 +552,7 @@ class Runtime:
             if cmd[0] in self.functions:
                 status = self._run_function(cmd[0], cmd[1:])
                 raise SystemExit(status)
-            status = self._run_external(cmd, dict(self.env), [])
+            status = self._run_external(cmd, dict(self.env), [], context="exec")
             raise SystemExit(status)
         if name == "trap":
             return self._run_trap(argv[1:])
@@ -481,10 +565,20 @@ class Runtime:
         if name in ["[", "[[", "test"]:
             return self._run_test(name, argv[1:])
         if name == "exit":
-            code = int(argv[1]) if len(argv) > 1 else self.last_status
+            if len(argv) > 1:
+                code = int(argv[1])
+            elif self._trap_entry_status is not None:
+                code = self._trap_entry_status
+            else:
+                code = self.last_status
             raise SystemExit(code)
         if name == "return":
-            code = int(argv[1]) if len(argv) > 1 else self.last_status
+            if len(argv) > 1:
+                code = int(argv[1])
+            elif self._trap_entry_status is not None:
+                code = self._trap_entry_status
+            else:
+                code = self.last_status
             raise ReturnFromFunction(code)
         if name == ":":
             return 0
@@ -512,6 +606,9 @@ class Runtime:
             return 1
         parser_impl = Parser(source)
         saved_positional = list(self.positional)
+        saved_script_name = self.script_name
+        self.source_stack.append(path)
+        self.script_name = path
         self.set_positional_args(args)
         status = 0
         try:
@@ -519,16 +616,23 @@ class Runtime:
                 node = parser_impl.parse_next()
                 if node is None:
                     break
+                self.current_line = parser_impl.last_line
                 if parser_impl.last_lst_item is None:
                     raise ParseError("internal parse error: missing LST list item")
                 asdl_item = lst_list_item_to_asdl(parser_impl.last_lst_item, strict=True)
                 status = self._exec_list_item(asdl_item_to_list_item(asdl_item))
+                self.last_status = status
+                if not getattr(node, "background", False):
+                    self._run_pending_traps()
         except ReturnFromFunction as e:
             status = e.code
         except (AsdlMappingError, OshAdapterError):
             status = 2
         finally:
             self.set_positional_args(saved_positional)
+            self.script_name = saved_script_name
+            if self.source_stack:
+                self.source_stack.pop()
         return status
 
     def _run_function(self, name: str, args: List[str]) -> int:
@@ -548,11 +652,17 @@ class Runtime:
             self.set_positional_args(saved_positional)
         return status
 
-    def _run_external(self, argv: List[str], env: Dict[str, str], redirects: List[Redirect]) -> int:
+    def _run_external(
+        self,
+        argv: List[str],
+        env: Dict[str, str],
+        redirects: List[Redirect],
+        context: str | None = None,
+    ) -> int:
         if not argv:
             return 127
         if argv[0] == "":
-            print(": Permission denied", file=sys.stderr)
+            self._report_error(": Permission denied", line=self.current_line, context=context)
             return 127
         stdin, stdout = self._apply_redirects(redirects, None, None)
         try:
@@ -560,10 +670,10 @@ class Runtime:
                 proc = subprocess.run(argv, env=env, stdin=stdin, stdout=stdout)
                 return proc.returncode
             except FileNotFoundError:
-                print(f"{argv[0]}: not found", file=sys.stderr)
+                self._report_error(f"{argv[0]}: not found", line=self.current_line, context=context)
                 return 127
             except PermissionError:
-                print(f"{argv[0]}: Permission denied", file=sys.stderr)
+                self._report_error(f"{argv[0]}: Permission denied", line=self.current_line, context=context)
                 return 126
         finally:
             if stdin not in (None, sys.stdin):
@@ -641,19 +751,19 @@ class Runtime:
             if target_fd is None:
                 target_fd = 0 if redir.op in ["<", "<<", "<&"] else 1
             if redir.op == "<":
-                f = open(redir.target, "rb")
+                f = self._open_for_redir(redir.target, "rb", redir.op)
                 if target_fd in (None, 0):
                     stdin = f
                 else:
                     os.dup2(f.fileno(), target_fd)
             elif redir.op == ">":
-                f = open(redir.target, "wb")
+                f = self._open_for_redir(redir.target, "wb", redir.op)
                 if target_fd in (None, 1):
                     stdout = f
                 else:
                     os.dup2(f.fileno(), target_fd)
             elif redir.op == ">>":
-                f = open(redir.target, "ab")
+                f = self._open_for_redir(redir.target, "ab", redir.op)
                 if target_fd in (None, 1):
                     stdout = f
                 else:
@@ -673,6 +783,19 @@ class Runtime:
                 self._dup_fd(redir, is_output=False)
         return stdin, stdout
 
+    def _open_for_redir(self, path: str, mode: str, op: str) -> object:
+        try:
+            return open(path, mode)
+        except OSError as e:
+            reason = (e.strerror or "error").lower()
+            if e.errno == 2:
+                reason = "no such file"
+            if op == "<":
+                msg = f"can't open {path}: {reason}"
+            else:
+                msg = f"{path}: {reason}"
+            raise RuntimeError(self._format_error(msg, line=self.current_line))
+
     @contextmanager
     def _redirected_fds(self, redirects: List[Redirect]):
         saved: List[Tuple[int, int]] = []
@@ -686,15 +809,15 @@ class Runtime:
                     saved_fd = -1
                 saved.append((fd, saved_fd))
                 if redir.op == "<":
-                    f = open(redir.target, "rb")
+                    f = self._open_for_redir(redir.target, "rb", redir.op)
                     os.dup2(f.fileno(), fd)
                     f.close()
                 elif redir.op == ">":
-                    f = open(redir.target, "wb")
+                    f = self._open_for_redir(redir.target, "wb", redir.op)
                     os.dup2(f.fileno(), fd)
                     f.close()
                 elif redir.op == ">>":
-                    f = open(redir.target, "ab")
+                    f = self._open_for_redir(redir.target, "ab", redir.op)
                     os.dup2(f.fileno(), fd)
                     f.close()
                 elif redir.op == "<<":
@@ -806,8 +929,16 @@ class Runtime:
     def _expand_param(self, name: str, quoted: bool):
         if name == "@":
             return list(self.positional)
+        if name == "#":
+            return str(len(self.positional))
         if name == "?":
             return str(self.last_status)
+        if name == "$":
+            return str(os.getpid())
+        if name == "!":
+            return ""
+        if name == "-":
+            return "".join(sorted(k for k, v in self.options.items() if v))
         value, is_set = self._get_param_state(name)
         if (not is_set or value == "") and self.options.get("u", False) and name not in ["@", "*", "#"]:
             raise RuntimeError(f"unbound variable: {name}")
@@ -1165,7 +1296,19 @@ class Runtime:
         return self._run_external(cmd, env, [])
 
     def _run_trap(self, args: List[str]) -> int:
-        # Minimal stub: accept and ignore for now.
+        if not args:
+            for sig, action in sorted(self.traps.items()):
+                print(f"trap -- '{action}' {sig}")
+            return 0
+        if len(args) < 2:
+            return 1
+        action = args[0]
+        for sig in args[1:]:
+            key = sig.upper()
+            if action == "-":
+                self.traps.pop(key, None)
+            else:
+                self.traps[key] = action
         return 0
 
     def _run_type(self, args: List[str]) -> int:
@@ -1241,7 +1384,7 @@ class Runtime:
             result = tokens[0] != ""
         return 0 if (result ^ negate) else 1
 
-    def _eval_source(self, source: str) -> int:
+    def _eval_source(self, source: str, propagate_exit: bool = False) -> int:
         parser_impl = Parser(source)
         status = 0
         try:
@@ -1249,16 +1392,28 @@ class Runtime:
                 node = parser_impl.parse_next()
                 if node is None:
                     break
+                self.current_line = parser_impl.last_line
                 if parser_impl.last_lst_item is None:
                     raise ParseError("internal parse error: missing LST list item")
                 asdl_item = lst_list_item_to_asdl(parser_impl.last_lst_item, strict=True)
                 status = self._exec_list_item(asdl_item_to_list_item(asdl_item))
+                self.last_status = status
+                if not getattr(node, "background", False):
+                    self._run_pending_traps()
         except ReturnFromFunction as e:
             status = e.code
         except SystemExit as e:
             status = int(e.code) if e.code is not None else 0
+            if propagate_exit:
+                raise
         except ParseError as e:
-            print(f"parse error: {e}", file=sys.stderr)
+            msg = str(e)
+            if "syntax error:" in msg and " at " in msg:
+                text, where = msg.rsplit(" at ", 1)
+                line = where.split(":", 1)[0]
+                self._report_error(text, line=int(line) if line.isdigit() else self.current_line)
+            else:
+                print(f"parse error: {e}", file=sys.stderr)
             status = 2
         except (AsdlMappingError, OshAdapterError) as e:
             print(f"asdl error: {e}", file=sys.stderr)

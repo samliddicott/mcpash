@@ -15,6 +15,48 @@ from .runtime import BreakLoop, ContinueLoop, Runtime, RuntimeError
 
 def main(argv: List[str] | None = None) -> int:
     argv = list(argv) if argv is not None else sys.argv[1:]
+    if argv and argv[0] == "-c":
+        if len(argv) < 2:
+            print("mctash: -c requires an argument", file=sys.stderr)
+            return 2
+        source = argv[1]
+        script_name = argv[2] if len(argv) > 2 else ""
+        script_args = argv[3:] if len(argv) > 3 else []
+        rt = Runtime()
+        rt.set_script_name(script_name)
+        rt.set_positional_args(script_args)
+        try:
+            parser_impl = Parser(source)
+            while True:
+                item = parser_impl.parse_next()
+                if item is None:
+                    break
+                rt.current_line = parser_impl.last_line
+                if parser_impl.last_lst_item is None:
+                    raise ParseError("internal parse error: missing LST list item")
+                asdl_item = lst_list_item_to_asdl(parser_impl.last_lst_item, strict=True)
+                rt.last_status = rt._exec_list_item(asdl_item_to_list_item(asdl_item))
+                if not getattr(item, "background", False):
+                    rt._run_pending_traps()
+            return rt._run_exit_trap(rt.last_status)
+        except ParseError as e:
+            msg = str(e)
+            if "syntax error:" in msg and " at " in msg:
+                text, where = msg.rsplit(" at ", 1)
+                line = where.split(":", 1)[0]
+                print(f"{script_name or 'mctash -c'}: line {line}: {text}", file=sys.stderr)
+            else:
+                print(f"parse error: {msg}", file=sys.stderr)
+            return 2
+        except RuntimeError as e:
+            print(f"runtime error: {e}", file=sys.stderr)
+            return 1
+        except (BreakLoop, ContinueLoop):
+            return 1
+        except SystemExit as e:
+            code = int(e.code) if e.code is not None else 0
+            return rt._run_exit_trap(code)
+
     cli_opts, script, script_args = _split_cli_argv(argv)
     shebang_args: List[str] = []
 
@@ -48,13 +90,25 @@ def main(argv: List[str] | None = None) -> int:
             item = parser_impl.parse_next()
             if item is None:
                 break
+            rt.current_line = parser_impl.last_line
             if parser_impl.last_lst_item is None:
                 raise ParseError("internal parse error: missing LST list item")
             asdl_item = lst_list_item_to_asdl(parser_impl.last_lst_item, strict=True)
             rt.last_status = rt._exec_list_item(asdl_item_to_list_item(asdl_item))
-        return rt.last_status
+            if not getattr(item, "background", False):
+                rt._run_pending_traps()
+        return rt._run_exit_trap(rt.last_status)
     except ParseError as e:
-        print(f"parse error: {e}", file=sys.stderr)
+        msg = str(e)
+        if args.script:
+            if "syntax error:" in msg and " at " in msg:
+                text, where = msg.rsplit(" at ", 1)
+                line = where.split(":", 1)[0]
+                print(f"{args.script}: line {line}: {text}", file=sys.stderr)
+            else:
+                print(f"{args.script}: {msg}", file=sys.stderr)
+        else:
+            print(f"parse error: {msg}", file=sys.stderr)
         return 2
     except (AsdlMappingError, OshAdapterError) as e:
         print(f"asdl error: {e}", file=sys.stderr)
@@ -65,7 +119,8 @@ def main(argv: List[str] | None = None) -> int:
     except (BreakLoop, ContinueLoop):
         return 1
     except SystemExit as e:
-        return int(e.code) if e.code is not None else 0
+        code = int(e.code) if e.code is not None else 0
+        return rt._run_exit_trap(code)
 
 
 if __name__ == "__main__":

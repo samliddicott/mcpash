@@ -85,6 +85,7 @@ class Parser:
         self.ctx = LexContext(reserved_words=RESERVED_WORDS, allow_reserved=True, allow_newline=True)
         self.last_lst: Optional[LstAndOr] = None
         self.last_lst_item: Optional[LstListItem] = None
+        self.last_line: int | None = None
         self.pending_heredocs: List[tuple[Redirect, LstRedirect]] = []
 
     def _peek(self) -> Optional[Token]:
@@ -151,6 +152,7 @@ class Parser:
                 self._advance()
                 continue
             break
+        self.last_line = tok.line if tok is not None else None
         node, lst_node = self.parse_and_or()
         self.last_lst = lst_node
         tok = self._peek()
@@ -374,6 +376,8 @@ class Parser:
                 continue
             break
         if not argv and not assignments and not redirects:
+            if tok is not None and tok.kind == "OP":
+                raise ParseError(f'syntax error: unexpected "{tok.value}" at {self._where(tok)}')
             raise ParseError(f"expected command at {self._where(tok)}")
         simple_cmd = SimpleCommand(argv=argv, assignments=assignments, redirects=redirects)
         lst_simple_cmd = LstSimpleCommand(argv=lst_argv, assignments=lst_assignments, redirects=lst_redirects)
