@@ -466,15 +466,24 @@ class Parser:
         return GroupCommand(body=body), LstGroupCommand(body=lst_body)
 
     def parse_function_def(self) -> tuple[FunctionDef, LstFunctionDef]:
+        tok0 = self._peek()
+        saw_function_kw = False
+        if tok0 and self._is_word(tok0) and tok0.value == "function":
+            self._advance()
+            saw_function_kw = True
+
         name_tok = self._advance()
         if name_tok is None or not self._is_word(name_tok):
             raise ParseError(f"expected function name at {self._where(name_tok)}")
         name = name_tok.value
+        if saw_function_kw and name in RESERVED_WORDS:
+            # bash extension: function name may be reserved words
+            pass
         if name.endswith("()"):
             name = name[:-2]
         elif self._peek() and self._is_word(self._peek()) and self._peek().value == "()":
             self._advance()
-        else:
+        elif not saw_function_kw:
             self._expect_group_token("(")
             self._expect_group_token(")")
         while True:
@@ -485,8 +494,21 @@ class Parser:
                     self._consume_pending_heredocs()
                 continue
             break
-        body_cmd, lst_body_cmd = self.parse_group()
-        return FunctionDef(name=name, body=body_cmd.body), LstFunctionDef(name=name, body=lst_body_cmd.body)
+        body_cmd, lst_body_cmd = self.parse_command()
+        body, lst_body = self._command_as_list(body_cmd, lst_body_cmd)
+        return FunctionDef(name=name, body=body), LstFunctionDef(name=name, body=lst_body)
+
+    def _command_as_list(self, command: Command, lst_command: LstCommand) -> tuple[ListNode, LstListNode]:
+        and_or = AndOr(pipelines=[Pipeline(commands=[command], negate=False)], operators=[])
+        lst_and_or = LstAndOr(
+            pipelines=[LstPipeline(commands=[lst_command], negate=False, op_positions=[])],
+            operators=[],
+            op_positions=[],
+        )
+        return (
+            ListNode(items=[ListItem(node=and_or, background=False)]),
+            LstListNode(items=[LstListItem(node=lst_and_or, terminator=None)]),
+        )
 
     def parse_subshell(self) -> tuple[SubshellCommand, LstSubshellCommand]:
         self._expect_group_token("(")
@@ -685,6 +707,9 @@ class Parser:
         tok = self._peek()
         if tok is None or not self._is_word(tok):
             return False
+        if tok.value == "function":
+            tok1 = self._peek_n(1)
+            return tok1 is not None and self._is_word(tok1)
         if tok.value.endswith("()"):
             return True
         tok1 = self._peek_n(1)

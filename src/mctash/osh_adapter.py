@@ -221,7 +221,7 @@ def _word_part_to_text(node: Dict[str, Any]) -> str:
     if t == "word_part.SingleQuoted":
         return "'" + node.get("sval", "") + "'"
     if t == "word_part.DoubleQuoted":
-        inner = "".join(_word_part_to_text(p) for p in node.get("parts") or [])
+        inner = "".join(_word_part_to_double_text(p) for p in node.get("parts") or [])
         return '"' + inner + '"'
     if t == "word_part.SimpleVarSub":
         return "$" + node.get("name", "")
@@ -237,5 +237,19 @@ def _word_part_to_text(node: Dict[str, Any]) -> str:
         src = node.get("child_source") or ""
         return "$(" + src + ")"
     if t == "word_part.ArithSub":
-        return "$((" + (node.get("code") or "") + "))"
+        return "$((" + (node.get("expr_source") or node.get("code") or "") + "))"
     return ""
+
+
+def _word_part_to_double_text(node: Dict[str, Any]) -> str:
+    t = node.get("type")
+    if t == "word_part.Literal":
+        raw = node.get("tval", "")
+        out: list[str] = []
+        for ch in raw:
+            if ch in ['\\', '"', '$', '`']:
+                out.append("\\")
+            out.append(ch)
+        return "".join(out)
+    # Other parts remain structural expansions inside double quotes.
+    return _word_part_to_text(node)

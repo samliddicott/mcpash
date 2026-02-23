@@ -10,6 +10,7 @@ import sys
 import tempfile
 import threading
 import fnmatch
+import re
 from contextlib import contextmanager
 from typing import Dict, Iterable, List, Optional, Tuple
 
@@ -126,7 +127,7 @@ class Runtime:
         self.current_line: int | None = None
         self.source_stack: List[str] = []
         self.traps: Dict[str, str] = {}
-        self._pending_signals: List[str] = []
+        self._pending_signals: List[tuple[str, int]] = []
         self._running_trap: bool = False
         self._trap_entry_status: int | None = None
         self._subshell_depth: int = 0
@@ -161,12 +162,12 @@ class Runtime:
     def _signal_handler(self, signum, frame) -> None:
         if signum == signal.SIGTERM:
             if "TERM" in self.traps:
-                self._pending_signals.append("TERM")
+                self._pending_signals.append(("TERM", self.last_status))
             else:
                 raise SystemExit(128 + signum)
         if signum == signal.SIGINT:
             if "INT" in self.traps:
-                self._pending_signals.append("INT")
+                self._pending_signals.append(("INT", self.last_status))
             else:
                 raise SystemExit(128 + signum)
 
@@ -192,12 +193,9 @@ class Runtime:
         if self._subshell_depth > 0:
             return
         while self._pending_signals:
-            sig = self._pending_signals.pop(0)
+            sig, entry_status = self._pending_signals.pop(0)
             action = self.traps.get(sig)
             if action:
-                entry_status = self._trap_status_hint
-                if entry_status == 0:
-                    entry_status = self.last_status if self.last_status != 0 else self.last_nonzero_status
                 self._run_trap_action(action, entry_status)
 
     def _run_trap_action(self, action: str, entry_status: int) -> int:
@@ -285,6 +283,15 @@ class Runtime:
         for i, cmd in enumerate(node.commands):
             if not isinstance(cmd, SimpleCommand):
                 return self._exec_command(cmd)
+            cmd_env = dict(self.env)
+            for scope in self.local_stack:
+                cmd_env.update(scope)
+            for assign in cmd.assignments:
+                value = self._expand_assignment_word(assign.value)
+                if assign.op == "+=":
+                    cmd_env[assign.name] = cmd_env.get(assign.name, "") + value
+                else:
+                    cmd_env[assign.name] = value
             argv = self._expand_argv(cmd.argv)
             if not argv:
                 return 2
@@ -292,7 +299,7 @@ class Runtime:
             stdout = subprocess.PIPE if i < len(node.commands) - 1 else None
             stdin, stdout = self._apply_redirects(cmd.redirects, stdin, stdout)
             try:
-                proc = subprocess.Popen(argv, stdin=stdin, stdout=stdout, env=self.env)
+                proc = subprocess.Popen(argv, stdin=stdin, stdout=stdout, env=cmd_env)
             except FileNotFoundError:
                 print(f"{argv[0]}: not found", file=sys.stderr)
                 return 127
@@ -420,15 +427,20 @@ class Runtime:
             finally:
                 self._loop_depth -= 1
         if isinstance(node, SimpleCommand):
-            local_env = dict(self.env)
+            expanded_assignments: List[tuple[str, str, str]] = []
             for assign in node.assignments:
                 value = self._expand_assignment_word(assign.value)
-                if assign.op == "+=":
-                    local_env[assign.name] = local_env.get(assign.name, "") + value
-                else:
-                    local_env[assign.name] = value
+                expanded_assignments.append((assign.name, assign.op, value))
 
             argv = self._expand_argv(node.argv)
+            local_env = dict(self.env)
+            for scope in self.local_stack:
+                local_env.update(scope)
+            for name, op, value in expanded_assignments:
+                if op == "+=":
+                    local_env[name] = local_env.get(name, "") + value
+                else:
+                    local_env[name] = value
             if not argv:
                 if node.redirects:
                     with self._redirected_fds(node.redirects):
@@ -443,6 +455,14 @@ class Runtime:
             if not argv:
                 return 0
             name = argv[0]
+            if name in self.functions:
+                saved_env = self.env
+                try:
+                    self.env = local_env
+                    with self._redirected_fds(node.redirects):
+                        return self._run_function(name, argv[1:])
+                finally:
+                    self.env = saved_env
             if name in self.BUILTINS:
                 is_special = name in self.SPECIAL_BUILTINS
                 if is_special:
@@ -457,14 +477,6 @@ class Runtime:
                     # Builtins like read/set/shift must update shell state.
                     saved_env.update(self.env)
                     return status
-                finally:
-                    self.env = saved_env
-            if name in self.functions:
-                saved_env = self.env
-                try:
-                    self.env = local_env
-                    with self._redirected_fds(node.redirects):
-                        return self._run_function(name, argv[1:])
                 finally:
                     self.env = saved_env
             return self._run_external(argv, local_env, node.redirects)
@@ -1003,6 +1015,22 @@ class Runtime:
     ) -> str | List[str]:
         if name == "@" and op is None:
             return list(self.positional)
+        if name.isdigit():
+            value = self._get_positional(name)
+            if op is None:
+                return value
+            # Minimal handling for operators on positional parameters.
+            is_set = value != ""
+            arg_text = arg or ""
+            if op in ["-", ":-"]:
+                if not is_set or (op == ":-" and value == ""):
+                    return self._expand_word(arg_text)
+                return value
+            if op in ["+", ":+"]:
+                if is_set and (op == "+" or value != ""):
+                    return self._expand_word(arg_text)
+                return ""
+            return value
         value, is_set = self._get_param_state(name)
         arg_text = arg or ""
         if op is None:
@@ -1057,8 +1085,43 @@ class Runtime:
             self._glob_field,
         )
         joined = parts[0] if parts else "0"
+        m_post = re.fullmatch(r"\s*([A-Za-z_][A-Za-z0-9_]*)\+\+\s*", joined)
+        if m_post:
+            name = m_post.group(1)
+            try:
+                cur = int(self._get_var(name) or "0")
+            except ValueError:
+                cur = 0
+            self._set_local(name, str(cur + 1))
+            return str(cur)
+        m_pre = re.fullmatch(r"\s*\+\+([A-Za-z_][A-Za-z0-9_]*)\s*", joined)
+        if m_pre:
+            name = m_pre.group(1)
+            try:
+                cur = int(self._get_var(name) or "0")
+            except ValueError:
+                cur = 0
+            cur += 1
+            self._set_local(name, str(cur))
+            return str(cur)
         try:
-            value = int(eval(joined, {"__builtins__": {}}, {}))
+            eval_locals: dict[str, int] = {}
+            for name, raw in self.env.items():
+                if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", name):
+                    continue
+                try:
+                    eval_locals[name] = int(raw)
+                except ValueError:
+                    eval_locals[name] = 0
+            for scope in self.local_stack:
+                for name, raw in scope.items():
+                    if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", name):
+                        continue
+                    try:
+                        eval_locals[name] = int(raw)
+                    except ValueError:
+                        eval_locals[name] = 0
+            value = int(eval(joined, {"__builtins__": {}}, eval_locals))
         except Exception:
             value = 0
         return str(value)
@@ -1155,6 +1218,9 @@ class Runtime:
         self.local_stack[-1][name] = value
 
     def _run_local(self, args: List[str]) -> int:
+        if not self.local_stack:
+            self._report_error("not in a function", line=self.current_line, context="local")
+            return 1
         for arg in args:
             if "=" in arg:
                 name, value = arg.split("=", 1)
@@ -1213,11 +1279,10 @@ class Runtime:
                 if name.endswith("+"):
                     op = "+="
                     name = name[:-1]
-                expanded = self._expand_assignment_word(value)
                 if op == "+=":
-                    self.env[name] = self.env.get(name, "") + expanded
+                    self.env[name] = self.env.get(name, "") + value
                 else:
-                    self.env[name] = expanded
+                    self.env[name] = value
             else:
                 self.env[arg] = self.env.get(arg, "")
         return 0
@@ -1321,7 +1386,13 @@ class Runtime:
         return "".join(out)
 
     def _run_echo(self, args: List[str]) -> int:
-        data = " ".join(args) + "\n"
+        newline = True
+        if args and args[0] == "-n":
+            newline = False
+            args = args[1:]
+        data = " ".join(args)
+        if newline:
+            data += "\n"
         try:
             os.write(1, data.encode("utf-8", errors="ignore"))
             return 0

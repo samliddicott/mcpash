@@ -150,7 +150,10 @@ class TokenReader:
                         self._advance()
                     continue
                 if ch == "$" and self._peek(1) == "(":
-                    chunk, new_i = _scan_command_sub(self.source, self.i)
+                    if self._peek(2) == "(":
+                        chunk, new_i = _scan_arith_sub(self.source, self.i)
+                    else:
+                        chunk, new_i = _scan_command_sub(self.source, self.i)
                     buf.append(chunk)
                     self._advance_to(new_i)
                     continue
@@ -286,6 +289,51 @@ def _scan_command_sub(source: str, start: int) -> tuple[str, int]:
         if ch == ")":
             depth -= 1
             i += 1
+            if depth == 0:
+                return source[start:i], i
+            continue
+        i += 1
+    return source[start:i], i
+
+
+def _scan_arith_sub(source: str, start: int) -> tuple[str, int]:
+    i = start
+    if not source.startswith("$((", start):
+        return source[start:start + 1], start + 1
+    i += 3
+    depth = 1
+    in_single = False
+    in_double = False
+    while i < len(source):
+        ch = source[i]
+        if in_single:
+            if ch == "'":
+                in_single = False
+            i += 1
+            continue
+        if in_double:
+            if ch == "\\" and i + 1 < len(source):
+                i += 2
+                continue
+            if ch == '"':
+                in_double = False
+            i += 1
+            continue
+        if ch == "'":
+            in_single = True
+            i += 1
+            continue
+        if ch == '"':
+            in_double = True
+            i += 1
+            continue
+        if source.startswith("$((", i):
+            depth += 1
+            i += 3
+            continue
+        if source.startswith("))", i):
+            depth -= 1
+            i += 2
             if depth == 0:
                 return source[start:i], i
             continue
