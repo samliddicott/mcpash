@@ -3,12 +3,14 @@ from __future__ import annotations
 import glob
 import io
 import os
+import select
 import signal
 import shlex
 import subprocess
 import sys
 import tempfile
 import threading
+import time
 import fnmatch
 import re
 import uuid
@@ -180,6 +182,7 @@ class Runtime:
         self._procsub_paths: set[str] = set()
         self._line_offset: int = 0
         self._last_eval_hard_error: bool = False
+        self._pipeline_input_latency: float | None = None
         # Align with ash test assumptions: shell starts with only stdio fds open.
         try:
             os.close(3)
@@ -436,6 +439,7 @@ class Runtime:
 
     def _exec_pipeline_inprocess(self, node: Pipeline) -> int:
         data: bytes | None = None
+        data_latency: float | None = None
         status = 0
         statuses: List[int] = []
         for i, cmd in enumerate(node.commands):
@@ -445,16 +449,26 @@ class Runtime:
                     force_epipe = False
                     saved_epipe = self._force_broken_pipe
                     self._force_broken_pipe = force_epipe
+                    saved_stdin = sys.stdin
+                    saved_latency = self._pipeline_input_latency
                     try:
+                        if data is not None:
+                            sys.stdin = io.StringIO(data.decode("utf-8", errors="ignore"))
+                        self._pipeline_input_latency = data_latency
                         status = self._exec_command(cmd)
                     finally:
+                        sys.stdin = saved_stdin
+                        self._pipeline_input_latency = saved_latency
                         self._force_broken_pipe = saved_epipe
                     data = None
+                    data_latency = None
                 else:
                     sink_is_no_reader = False
                     if i + 1 < len(node.commands):
                         sink_is_no_reader = self._pipeline_sink_is_no_reader(node.commands[i + 1])
-                    status, data = self._capture_command_output(cmd, force_epipe=sink_is_no_reader)
+                    status, data, data_latency = self._capture_command_output(
+                        cmd, data=data, force_epipe=sink_is_no_reader
+                    )
                 statuses.append(status)
                 continue
             argv = self._expand_argv(cmd.argv)
@@ -462,34 +476,45 @@ class Runtime:
                 status = self._run_subshell(ListNode(items=[ListItem(node=AndOr(pipelines=[Pipeline(commands=[cmd], negate=False)], operators=[]), background=False)]))
                 statuses.append(status)
                 data = b""
+                data_latency = 0.0
                 continue
             last = i == len(node.commands) - 1
-            status, data = self._exec_simple_capture(cmd, argv, data, capture=not last)
+            saved_latency = self._pipeline_input_latency
+            self._pipeline_input_latency = data_latency
+            status, data, data_latency = self._exec_simple_capture(cmd, argv, data, capture=not last)
+            self._pipeline_input_latency = saved_latency
             statuses.append(status)
             if last and data is not None:
                 sys.stdout.write(data.decode("utf-8", errors="ignore"))
                 sys.stdout.flush()
         return self._pipeline_result(statuses if statuses else [status])
 
-    def _capture_command_output(self, cmd: Command, force_epipe: bool = False) -> tuple[int, bytes]:
+    def _capture_command_output(
+        self, cmd: Command, data: bytes | None = None, force_epipe: bool = False
+    ) -> tuple[int, bytes, float]:
+        start = time.monotonic()
         tmp = tempfile.TemporaryFile()
         saved_stdout = os.dup(1)
+        saved_stdin = sys.stdin
         os.dup2(tmp.fileno(), 1)
         saved_epipe = self._force_broken_pipe
         self._force_broken_pipe = force_epipe
         try:
             try:
+                if data is not None:
+                    sys.stdin = io.StringIO(data.decode("utf-8", errors="ignore"))
                 status = self._exec_command(cmd)
             except SystemExit as e:
                 status = int(e.code) if e.code is not None else 0
         finally:
+            sys.stdin = saved_stdin
             self._force_broken_pipe = saved_epipe
             os.dup2(saved_stdout, 1)
             os.close(saved_stdout)
         tmp.seek(0)
         data = tmp.read()
         tmp.close()
-        return status, data
+        return status, data, time.monotonic() - start
 
     def _pipeline_result(self, statuses: List[int]) -> int:
         if self.options.get("pipefail", False):
@@ -517,7 +542,10 @@ class Runtime:
             return argv == ["true"]
         return False
 
-    def _exec_simple_capture(self, cmd: SimpleCommand, argv: List[str], data: bytes | None, capture: bool) -> tuple[int, bytes | None]:
+    def _exec_simple_capture(
+        self, cmd: SimpleCommand, argv: List[str], data: bytes | None, capture: bool
+    ) -> tuple[int, bytes | None, float | None]:
+        start = time.monotonic() if capture else None
         name = argv[0]
         input_text = data.decode("utf-8", errors="ignore") if data is not None else None
         cmd_env = dict(self.env)
@@ -550,7 +578,7 @@ class Runtime:
                     except (BreakLoop, ContinueLoop):
                         status = 1
                 self.env = saved_env
-                return status, b""
+                return status, b"", (time.monotonic() - start) if start is not None else None
             saved_stdin = sys.stdin
             saved_stdout = sys.stdout
             try:
@@ -573,7 +601,7 @@ class Runtime:
                 except (BreakLoop, ContinueLoop):
                     status = 1
                 out_text = output.getvalue()
-                return status, out_text.encode("utf-8")
+                return status, out_text.encode("utf-8"), (time.monotonic() - start) if start is not None else None
             finally:
                 sys.stdin = saved_stdin
                 sys.stdout = saved_stdout
@@ -589,7 +617,7 @@ class Runtime:
                     out, _ = proc.communicate(data if data is not None else b"")
                 else:
                     out, _ = proc.communicate()
-                return proc.returncode, out
+                return proc.returncode, out, (time.monotonic() - start) if start is not None else None
             finally:
                 for f in to_close:
                     try:
@@ -598,7 +626,7 @@ class Runtime:
                         pass
         except FileNotFoundError:
             print(f"{argv[0]}: not found", file=sys.stderr)
-            return 127, b""
+            return 127, b"", (time.monotonic() - start) if start is not None else None
 
     def _stdout_redirected_away(self, redirects: List[Redirect]) -> bool:
         for redir in redirects:
@@ -2921,39 +2949,254 @@ class Runtime:
             return 1
 
     def _run_read(self, args: List[str]) -> int:
-        if not args:
-            args = ["REPLY"]
-        line = self._readline_fd0()
-        if line is None:
-            return 1
-        raw = line.rstrip("\n")
-        if len(args) == 1:
-            self.env[args[0]] = raw
-            return 0
-        parts = raw.split()
-        for i, name in enumerate(args):
-            if i < len(args) - 1:
-                value = parts[i] if i < len(parts) else ""
-            else:
-                value = " ".join(parts[i:]) if i < len(parts) else ""
-            self.env[name] = value
-        return 0
+        raw_mode = False
+        n_chars: int | None = None
+        delimiter = "\n"
+        timeout_sec: float | None = None
+        prompt: str | None = None
 
-    def _readline_fd0(self) -> str | None:
+        names: List[str] = []
+        i = 0
+        while i < len(args):
+            a = args[i]
+            if a == "--":
+                names = args[i + 1 :]
+                break
+            if not a.startswith("-") or a == "-":
+                names = args[i:]
+                break
+            if a == "-r":
+                raw_mode = True
+                i += 1
+                continue
+            if a == "-p":
+                if i + 1 >= len(args):
+                    self._report_error("read: option requires an argument -- p")
+                    return 2
+                prompt = args[i + 1]
+                i += 2
+                continue
+            if a == "-n":
+                if i + 1 >= len(args):
+                    self._report_error("read: option requires an argument -- n")
+                    return 2
+                try:
+                    n_chars = int(args[i + 1])
+                except ValueError:
+                    self._report_error("read: invalid number")
+                    return 2
+                i += 2
+                continue
+            if a.startswith("-n") and len(a) > 2:
+                try:
+                    n_chars = int(a[2:])
+                except ValueError:
+                    self._report_error("read: invalid number")
+                    return 2
+                i += 1
+                continue
+            if a == "-d":
+                if i + 1 >= len(args):
+                    self._report_error("read: option requires an argument -- d")
+                    return 2
+                d = args[i + 1]
+                delimiter = "\0" if d == "" else d[0]
+                i += 2
+                continue
+            if a == "-t":
+                if i + 1 >= len(args):
+                    self._report_error("read: option requires an argument -- t")
+                    return 2
+                try:
+                    timeout_sec = float(args[i + 1])
+                except ValueError:
+                    self._report_error("read: invalid timeout")
+                    return 2
+                i += 2
+                continue
+            self._report_error(f"read: unknown option {a}")
+            return 2
+        else:
+            names = []
+
+        implicit_reply = not names
+        if not names:
+            names = ["REPLY"]
+
+        if prompt is not None and os.isatty(0):
+            os.write(2, prompt.encode("utf-8", errors="surrogateescape"))
+
+        if timeout_sec == 0:
+            ready = self._stdin_ready_now()
+            if len(names) == 1:
+                self.env[names[0]] = ""
+            else:
+                for name in names:
+                    self.env[name] = ""
+            return 0 if ready else 1
+
+        text, ok = self._read_from_fd0(
+            delimiter=delimiter,
+            raw_mode=raw_mode,
+            n_chars=n_chars,
+            timeout_sec=timeout_sec,
+        )
+        if not ok and text == "":
+            return 1
+
+        if implicit_reply and len(names) == 1 and names[0] == "REPLY":
+            self.env[names[0]] = text
+            return 0 if ok or text != "" else 1
+
+        values = self._split_read_fields(text, names)
+        for name, value in zip(names, values):
+            self.env[name] = value
+        return 0 if ok or text != "" else 1
+
+    def _stdin_ready_now(self) -> bool:
         if isinstance(sys.stdin, io.StringIO):
-            line = sys.stdin.readline()
-            return line if line != "" else None
-        buf = bytearray()
+            pos = sys.stdin.tell()
+            ch = sys.stdin.read(1)
+            sys.stdin.seek(pos)
+            if ch != "":
+                return True
+            # In real pipelines EOF on a closed upstream is considered readable
+            # by read -t 0; approximate using captured upstream latency.
+            if self._pipeline_input_latency is not None and self._pipeline_input_latency <= 0.05:
+                return True
+            return False
+        try:
+            r, _, _ = select.select([0], [], [], 0)
+            return bool(r)
+        except Exception:
+            return False
+
+    def _read_one_stdin_char(self, timeout_sec: float | None, deadline: float | None) -> str | None:
+        if isinstance(sys.stdin, io.StringIO):
+            ch = sys.stdin.read(1)
+            if ch == "":
+                return ""
+            return ch
+        if timeout_sec is not None:
+            now = time.monotonic()
+            remaining = timeout_sec if deadline is None else (deadline - now)
+            if remaining <= 0:
+                return None
+            r, _, _ = select.select([0], [], [], remaining)
+            if not r:
+                return None
+        chunk = os.read(0, 1)
+        if not chunk:
+            return ""
+        return chunk.decode("utf-8", errors="surrogateescape")
+
+    def _read_from_fd0(
+        self,
+        delimiter: str = "\n",
+        raw_mode: bool = False,
+        n_chars: int | None = None,
+        timeout_sec: float | None = None,
+    ) -> Tuple[str, bool]:
+        buf: List[str] = []
+        saw_input = False
+        saw_delim = False
+        deadline = time.monotonic() + timeout_sec if timeout_sec is not None else None
+        if (
+            timeout_sec is not None
+            and isinstance(sys.stdin, io.StringIO)
+            and self._pipeline_input_latency is not None
+            and self._pipeline_input_latency > timeout_sec
+        ):
+            return "", False
+
         while True:
-            chunk = os.read(0, 1)
-            if not chunk:
-                if not buf:
-                    return None
+            if n_chars is not None and len(buf) >= n_chars:
                 break
-            buf.extend(chunk)
-            if chunk == b"\n":
+            ch = self._read_one_stdin_char(timeout_sec, deadline)
+            if ch is None:
+                # Timeout.
+                return "", False
+            if ch == "":
                 break
-        return buf.decode("utf-8", errors="ignore")
+            saw_input = True
+            if ch == delimiter:
+                saw_delim = True
+                break
+            if not raw_mode and ch == "\\":
+                nxt = self._read_one_stdin_char(timeout_sec, deadline)
+                if nxt is None:
+                    return "", False
+                if nxt == "":
+                    break
+                saw_input = True
+                if nxt == "\n":
+                    continue
+                buf.append(nxt)
+                continue
+            buf.append(ch)
+
+        if not saw_input and not saw_delim:
+            return "", False
+        return "".join(buf), True
+
+    def _split_read_fields(self, text: str, names: List[str]) -> List[str]:
+        ifs = self.env.get("IFS", " \t\n")
+        if ifs == "":
+            out = ["" for _ in names]
+            out[0] = text
+            return out
+
+        ifs_ws = "".join(ch for ch in ifs if ch in " \t\n")
+        ifs_other = "".join(ch for ch in ifs if ch not in " \t\n")
+
+        def _skip_ws(s: str, pos: int) -> int:
+            while pos < len(s) and s[pos] in ifs_ws:
+                pos += 1
+            return pos
+
+        def _consume_one_separator(s: str, pos: int) -> int:
+            if pos >= len(s) or s[pos] not in ifs:
+                return pos
+            if s[pos] in ifs_ws:
+                pos = _skip_ws(s, pos)
+                if pos < len(s) and s[pos] in ifs_other:
+                    pos += 1
+                    pos = _skip_ws(s, pos)
+                return pos
+            # Non-whitespace IFS char delimiter (plus following IFS whitespace).
+            pos += 1
+            pos = _skip_ws(s, pos)
+            return pos
+
+        def _next_field(s: str, pos: int) -> Tuple[str, int, bool]:
+            start = pos
+            while pos < len(s) and s[pos] not in ifs:
+                pos += 1
+            field = s[start:pos]
+            if pos >= len(s):
+                return field, pos, True
+            pos = _consume_one_separator(s, pos)
+            return field, pos, False
+
+        pos = _skip_ws(text, 0)
+        if len(names) == 1:
+            rem = text[pos:]
+            if ifs_ws:
+                rem = rem.rstrip(ifs_ws)
+            return [rem]
+
+        out: List[str] = []
+        for _ in range(len(names) - 1):
+            field, pos, end = _next_field(text, pos)
+            out.append(field)
+            if end:
+                out.extend("" for _ in range(len(names) - len(out)))
+                return out
+        rem = text[pos:]
+        if ifs_ws:
+            rem = rem.rstrip(ifs_ws)
+        out.append(rem)
+        return out
 
     def _run_command_builtin(self, args: List[str]) -> int:
         if not args:
