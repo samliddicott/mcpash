@@ -43,6 +43,22 @@ def parse_word_parts(text: str) -> List[WordPart]:
                 buf.append(text[i])
                 i += 1
                 continue
+            if ch == "`":
+                flush(False)
+                j = i + 1
+                cmd: List[str] = []
+                while j < len(text):
+                    if text[j] == "\\" and j + 1 < len(text):
+                        cmd.append(text[j + 1])
+                        j += 2
+                        continue
+                    if text[j] == "`":
+                        break
+                    cmd.append(text[j])
+                    j += 1
+                parts.append(WordPart("CMD", "".join(cmd), quoted=False))
+                i = j + 1 if j < len(text) and text[j] == "`" else j
+                continue
             if ch == "$":
                 flush(False)
                 part, i = _parse_dollar(text, i, quoted=False)
@@ -76,6 +92,22 @@ def parse_word_parts(text: str) -> List[WordPart]:
                 part, i = _parse_dollar(text, i, quoted=True)
                 parts.append(part)
                 continue
+            if ch == "`":
+                flush(True)
+                j = i + 1
+                cmd: List[str] = []
+                while j < len(text):
+                    if text[j] == "\\" and j + 1 < len(text):
+                        cmd.append(text[j + 1])
+                        j += 2
+                        continue
+                    if text[j] == "`":
+                        break
+                    cmd.append(text[j])
+                    j += 1
+                parts.append(WordPart("CMD", "".join(cmd), quoted=True))
+                i = j + 1 if j < len(text) and text[j] == "`" else j
+                continue
             buf.append(ch)
             i += 1
             continue
@@ -102,7 +134,7 @@ def _parse_dollar(text: str, i: int, quoted: bool) -> Tuple[WordPart, int]:
         return WordPart("BRACED", name, quoted, op=op, arg=arg), end + 1
     if i + 1 < len(text):
         ch = text[i + 1]
-        if ch in "#@*":
+        if ch in "#@*?$!-":
             return WordPart("PARAM", ch, quoted), i + 2
         if ch.isdigit():
             return WordPart("PARAM", ch, quoted), i + 2

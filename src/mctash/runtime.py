@@ -3,6 +3,7 @@ from __future__ import annotations
 import glob
 import io
 import os
+import shlex
 import subprocess
 import sys
 import tempfile
@@ -32,7 +33,7 @@ from .ast_nodes import (
     Word,
 )
 from .expand import expand_word
-from .parser import Parser
+from .parser import ParseError, Parser
 
 
 class RuntimeError(Exception):
@@ -74,16 +75,49 @@ class Runtime:
         "trap",
         "unset",
     }
+    BUILTINS = {
+        "cd",
+        "exit",
+        ":",
+        "return",
+        ".",
+        "source",
+        "local",
+        "eval",
+        "declare",
+        "[",
+        "[[",
+        "test",
+        "set",
+        "export",
+        "unset",
+        "shift",
+        "printf",
+        "read",
+        "true",
+        "false",
+        "command",
+        "exec",
+        "break",
+        "continue",
+        "trap",
+        "type",
+        "alias",
+        "unalias",
+    }
+
     def __init__(self) -> None:
         self.last_status = 0
         self.env: Dict[str, str] = dict(os.environ)
         self.positional: List[str] = []
         self.functions: Dict[str, ListNode] = {}
+        self.aliases: Dict[str, str] = {}
         self.local_stack: List[Dict[str, str]] = []
         self.script_name: str = ""
         self.options: Dict[str, bool] = {}
         self._cmd_sub_used: bool = False
         self._cmd_sub_status: int = 0
+        self._loop_depth: int = 0
 
     def set_positional_args(self, args: List[str]) -> None:
         self.positional = list(args)
@@ -113,13 +147,16 @@ class Runtime:
 
     def _exec_and_or(self, node: AndOr) -> int:
         status = self._exec_pipeline(node.pipelines[0])
+        self.last_status = status
         for op, pipeline in zip(node.operators, node.pipelines[1:]):
             if op == "&&":
                 if status == 0:
                     status = self._exec_pipeline(pipeline)
+                    self.last_status = status
             elif op == "||":
                 if status != 0:
                     status = self._exec_pipeline(pipeline)
+                    self.last_status = status
         return status
 
     def _exec_pipeline(self, node: Pipeline) -> int:
@@ -142,7 +179,11 @@ class Runtime:
             stdin = prev.stdout if prev is not None else None
             stdout = subprocess.PIPE if i < len(node.commands) - 1 else None
             stdin, stdout = self._apply_redirects(cmd.redirects, stdin, stdout)
-            proc = subprocess.Popen(argv, stdin=stdin, stdout=stdout, env=self.env)
+            try:
+                proc = subprocess.Popen(argv, stdin=stdin, stdout=stdout, env=self.env)
+            except FileNotFoundError:
+                print(f"{argv[0]}: not found", file=sys.stderr)
+                return 127
             procs.append(proc)
             if prev is not None:
                 prev.stdout.close()
@@ -161,32 +202,7 @@ class Runtime:
         if not argv:
             return False
         name = argv[0]
-        return name in [
-            "cd",
-            "exit",
-            ":",
-            "return",
-            ".",
-            "source",
-            "local",
-            "eval",
-            "declare",
-            "[",
-            "[[",
-            "test",
-            "set",
-            "export",
-            "unset",
-            "shift",
-            "printf",
-            "read",
-            "true",
-            "false",
-            "command",
-            "break",
-            "continue",
-            "trap",
-        ] or name in self.functions
+        return name in self.BUILTINS or name in self.functions
 
     def _exec_pipeline_inprocess(self, node: Pipeline) -> int:
         data: bytes | None = None
@@ -211,32 +227,7 @@ class Runtime:
     def _exec_simple_capture(self, cmd: SimpleCommand, argv: List[str], data: bytes | None, capture: bool) -> tuple[int, bytes | None]:
         name = argv[0]
         input_text = data.decode("utf-8", errors="ignore") if data is not None else None
-        if name in self.functions or name in [
-            "cd",
-            "exit",
-            ":",
-            "return",
-            ".",
-            "source",
-            "local",
-            "eval",
-            "declare",
-            "[",
-            "[[",
-            "test",
-            "set",
-            "export",
-            "unset",
-            "shift",
-            "printf",
-            "read",
-            "true",
-            "false",
-            "command",
-            "break",
-            "continue",
-            "trap",
-        ]:
+        if name in self.functions or name in self.BUILTINS:
             saved_stdin = sys.stdin
             saved_stdout = sys.stdout
             try:
@@ -256,14 +247,19 @@ class Runtime:
                 sys.stdin = saved_stdin
                 sys.stdout = saved_stdout
 
-        proc = subprocess.run(
-            argv,
-            input=data,
-            stdout=subprocess.PIPE if capture else None,
-            stderr=None,
-            env=self.env,
-        )
-        return proc.returncode, proc.stdout
+        try:
+            proc = subprocess.run(
+                argv,
+                input=data,
+                stdout=subprocess.PIPE if capture else None,
+                stderr=None,
+                env=self.env,
+                check=False,
+            )
+            return proc.returncode, proc.stdout
+        except FileNotFoundError:
+            print(f"{argv[0]}: not found", file=sys.stderr)
+            return 127, b""
 
     def _exec_command(self, node: Command) -> int:
         if isinstance(node, GroupCommand):
@@ -289,21 +285,27 @@ class Runtime:
                 return self._exec_list(node.else_body)
             return status
         if isinstance(node, WhileCommand):
+            self._loop_depth += 1
             last = 0
-            while True:
-                cond_status = self._exec_list(node.cond)
-                should_run = cond_status != 0 if node.until else cond_status == 0
-                if not should_run:
-                    break
-                try:
-                    last = self._exec_list(node.body)
-                except ContinueLoop:
-                    continue
-                except BreakLoop as e:
-                    if e.count > 1:
-                        raise BreakLoop(e.count - 1)
-                    break
-            return last
+            try:
+                while True:
+                    cond_status = self._exec_list(node.cond)
+                    should_run = cond_status != 0 if node.until else cond_status == 0
+                    if not should_run:
+                        break
+                    try:
+                        last = self._exec_list(node.body)
+                    except ContinueLoop as e:
+                        if e.count > 1:
+                            raise ContinueLoop(e.count - 1)
+                        continue
+                    except BreakLoop as e:
+                        if e.count > 1:
+                            raise BreakLoop(e.count - 1)
+                        break
+                return last
+            finally:
+                self._loop_depth -= 1
         if isinstance(node, SimpleCommand):
             local_env = dict(self.env)
             for assign in node.assignments:
@@ -324,8 +326,11 @@ class Runtime:
                     self._cmd_sub_used = False
                     return status
                 return 0
+            argv = self._expand_aliases(argv)
+            if not argv:
+                return 0
             name = argv[0]
-            if name in ["cd", "exit", ":", "return", ".", "source", "local", "eval", "declare", "[", "[[", "test", "set", "export", "unset", "shift", "printf", "read", "true", "false", "command", "break", "continue", "trap"]:
+            if name in self.BUILTINS:
                 is_special = name in self.SPECIAL_BUILTINS
                 if is_special:
                     self.env = local_env
@@ -335,7 +340,10 @@ class Runtime:
                 try:
                     self.env = local_env
                     with self._redirected_fds(node.redirects):
-                        return self._run_builtin(name, argv)
+                        status = self._run_builtin(name, argv)
+                    # Builtins like read/set/shift must update shell state.
+                    saved_env.update(self.env)
+                    return status
                 finally:
                     self.env = saved_env
             if name in self.functions:
@@ -358,7 +366,14 @@ class Runtime:
         saved_positional = list(self.positional)
         saved_cwd = os.getcwd()
         try:
-            return self._exec_list(body)
+            try:
+                return self._exec_list(body)
+            except SystemExit as e:
+                return int(e.code) if e.code is not None else 0
+            except (BreakLoop, ContinueLoop):
+                return 1
+            except ReturnFromFunction:
+                return 1
         finally:
             self.env = saved_env
             self.local_stack = saved_local
@@ -376,17 +391,23 @@ class Runtime:
         else:
             items = list(self.positional)
         status = 0
-        for item in items:
-            self.env[node.name] = item
-            try:
-                status = self._exec_list(node.body)
-            except ContinueLoop:
-                continue
-            except BreakLoop as e:
-                if e.count > 1:
-                    raise BreakLoop(e.count - 1)
-                break
-        return status
+        self._loop_depth += 1
+        try:
+            for item in items:
+                self.env[node.name] = item
+                try:
+                    status = self._exec_list(node.body)
+                except ContinueLoop as e:
+                    if e.count > 1:
+                        raise ContinueLoop(e.count - 1)
+                    continue
+                except BreakLoop as e:
+                    if e.count > 1:
+                        raise BreakLoop(e.count - 1)
+                    break
+            return status
+        finally:
+            self._loop_depth -= 1
 
     def _run_case(self, node: CaseCommand) -> int:
         value_parts = self._expand_argv([node.value])
@@ -435,8 +456,26 @@ class Runtime:
             return 1
         if name == "command":
             return self._run_command_builtin(argv[1:])
+        if name == "exec":
+            if len(argv) <= 1:
+                return 0
+            cmd = argv[1:]
+            if cmd[0] in self.BUILTINS:
+                status = self._run_builtin(cmd[0], cmd)
+                raise SystemExit(status)
+            if cmd[0] in self.functions:
+                status = self._run_function(cmd[0], cmd[1:])
+                raise SystemExit(status)
+            status = self._run_external(cmd, dict(self.env), [])
+            raise SystemExit(status)
         if name == "trap":
             return self._run_trap(argv[1:])
+        if name == "type":
+            return self._run_type(argv[1:])
+        if name == "alias":
+            return self._run_alias(argv[1:])
+        if name == "unalias":
+            return self._run_unalias(argv[1:])
         if name in ["[", "[[", "test"]:
             return self._run_test(name, argv[1:])
         if name == "exit":
@@ -449,9 +488,17 @@ class Runtime:
             return 0
         if name == "break":
             count = int(argv[1]) if len(argv) > 1 else 1
+            if self._loop_depth <= 0:
+                return 1
+            count = max(1, min(count, self._loop_depth))
+            self.last_status = 0
             raise BreakLoop(count)
         if name == "continue":
             count = int(argv[1]) if len(argv) > 1 else 1
+            if self._loop_depth <= 0:
+                return 1
+            count = max(1, min(count, self._loop_depth))
+            self.last_status = 0
             raise ContinueLoop(count)
         return 2
 
@@ -495,15 +542,86 @@ class Runtime:
         return status
 
     def _run_external(self, argv: List[str], env: Dict[str, str], redirects: List[Redirect]) -> int:
+        if not argv:
+            return 127
+        if argv[0] == "":
+            print(": Permission denied", file=sys.stderr)
+            return 127
         stdin, stdout = self._apply_redirects(redirects, None, None)
         try:
-            proc = subprocess.run(argv, env=env, stdin=stdin, stdout=stdout)
-            return proc.returncode
+            try:
+                proc = subprocess.run(argv, env=env, stdin=stdin, stdout=stdout)
+                return proc.returncode
+            except FileNotFoundError:
+                print(f"{argv[0]}: not found", file=sys.stderr)
+                return 127
+            except PermissionError:
+                print(f"{argv[0]}: Permission denied", file=sys.stderr)
+                return 126
         finally:
             if stdin not in (None, sys.stdin):
                 stdin.close()
             if stdout not in (None, sys.stdout):
                 stdout.close()
+
+    def _run_alias(self, args: List[str]) -> int:
+        status = 0
+        if not args:
+            for name in sorted(self.aliases):
+                print(f"alias {name}='{self.aliases[name]}'")
+            return 0
+        for arg in args:
+            if "=" in arg:
+                name, value = arg.split("=", 1)
+                self.aliases[name] = value
+                continue
+            if arg in self.aliases:
+                print(f"alias {arg}='{self.aliases[arg]}'")
+            else:
+                print(f"alias: {arg}: not found", file=sys.stderr)
+                status = 1
+        return status
+
+    def _run_unalias(self, args: List[str]) -> int:
+        if not args:
+            print("unalias: usage: unalias [-a] name ...", file=sys.stderr)
+            return 2
+        if args[0] == "-a":
+            self.aliases.clear()
+            return 0
+        status = 0
+        for name in args:
+            if name in self.aliases:
+                del self.aliases[name]
+            else:
+                print(f"unalias: {name}: not found", file=sys.stderr)
+                status = 1
+        return status
+
+    def _expand_aliases(self, argv: List[str]) -> List[str]:
+        if not argv:
+            return argv
+        out, trailing = self._expand_alias_at(list(argv), 0)
+        if trailing and len(out) > 1:
+            out, _ = self._expand_alias_at(out, 1)
+        return out
+
+    def _expand_alias_at(self, argv: List[str], idx: int) -> Tuple[List[str], bool]:
+        seen: set[str] = set()
+        trailing = False
+        while idx < len(argv):
+            word = argv[idx]
+            value = self.aliases.get(word)
+            if value is None or word in seen:
+                break
+            seen.add(word)
+            trailing = value.endswith(" ")
+            parts = shlex.split(value)
+            if not parts:
+                argv = argv[:idx] + argv[idx + 1 :]
+                break
+            argv = argv[:idx] + parts + argv[idx + 1 :]
+        return argv, trailing
 
     def _apply_redirects(
         self,
@@ -513,6 +631,8 @@ class Runtime:
     ) -> Tuple[Optional[object], Optional[object]]:
         for redir in redirects:
             target_fd = redir.fd
+            if target_fd is None:
+                target_fd = 0 if redir.op in ["<", "<<", "<&"] else 1
             if redir.op == "<":
                 f = open(redir.target, "rb")
                 if target_fd in (None, 0):
@@ -551,8 +671,12 @@ class Runtime:
         saved: List[Tuple[int, int]] = []
         try:
             for redir in redirects:
-                fd = redir.fd if redir.fd is not None else (0 if redir.op in ["<", "<<"] else 1)
-                saved_fd = os.dup(fd)
+                fd = redir.fd if redir.fd is not None else (0 if redir.op in ["<", "<<", "<&"] else 1)
+                try:
+                    saved_fd = os.dup(fd)
+                except OSError:
+                    # Descriptor may be closed before redirection (e.g. fd 3).
+                    saved_fd = -1
                 saved.append((fd, saved_fd))
                 if redir.op == "<":
                     f = open(redir.target, "rb")
@@ -580,8 +704,14 @@ class Runtime:
             yield
         finally:
             for fd, saved_fd in saved:
-                os.dup2(saved_fd, fd)
-                os.close(saved_fd)
+                if saved_fd >= 0:
+                    os.dup2(saved_fd, fd)
+                    os.close(saved_fd)
+                else:
+                    try:
+                        os.close(fd)
+                    except OSError:
+                        pass
 
     def _expand_argv(self, words: List[Word]) -> List[str]:
         argv: List[str] = []
@@ -751,8 +881,8 @@ class Runtime:
             self._expand_braced_param,
             self._expand_command_subst_text,
             self._expand_arith,
-            self._split_ifs,
-            self._glob_field,
+            lambda s: [s],
+            lambda s: [s],
         )
         return fields[0] if fields else ""
 
@@ -955,8 +1085,8 @@ class Runtime:
     def _run_read(self, args: List[str]) -> int:
         if not args:
             return 1
-        line = sys.stdin.readline()
-        if line == "":
+        line = self._readline_fd0()
+        if line is None:
             return 1
         parts = line.rstrip("\n").split()
         for i, name in enumerate(args):
@@ -964,14 +1094,96 @@ class Runtime:
             self.env[name] = value
         return 0
 
+    def _readline_fd0(self) -> str | None:
+        buf = bytearray()
+        while True:
+            chunk = os.read(0, 1)
+            if not chunk:
+                if not buf:
+                    return None
+                break
+            buf.extend(chunk)
+            if chunk == b"\n":
+                break
+        return buf.decode("utf-8", errors="ignore")
+
     def _run_command_builtin(self, args: List[str]) -> int:
         if not args:
             return 0
-        return self._run_external(args, dict(self.env), [])
+        i = 0
+        search_default_path = False
+        while i < len(args) and args[i].startswith("-") and args[i] != "-":
+            if args[i] == "--":
+                i += 1
+                break
+            if args[i] == "-p":
+                search_default_path = True
+                i += 1
+                continue
+            if args[i] in ["-v", "-V"]:
+                if i + 1 >= len(args):
+                    return 1
+                name = args[i + 1]
+                if args[i] == "-v":
+                    path = self._find_in_path(name)
+                    if path:
+                        print(path)
+                        return 0
+                    return 1
+                if name in self.functions:
+                    print(name)
+                    return 0
+                if name in self.BUILTINS:
+                    print(name)
+                    return 0
+                path = self._find_in_path(name)
+                if path:
+                    print(path)
+                    return 0
+                print(f"{name}: not found", file=sys.stderr)
+                return 1
+            break
+        cmd = args[i:]
+        if not cmd:
+            return 0
+        if cmd[0] in self.BUILTINS:
+            return self._run_builtin(cmd[0], cmd)
+        if cmd[0] in self.functions:
+            return self._run_function(cmd[0], cmd[1:])
+        env = dict(self.env)
+        if search_default_path:
+            env["PATH"] = "/usr/bin:/bin"
+        return self._run_external(cmd, env, [])
 
     def _run_trap(self, args: List[str]) -> int:
         # Minimal stub: accept and ignore for now.
         return 0
+
+    def _run_type(self, args: List[str]) -> int:
+        if not args:
+            return 1
+        status = 0
+        for name in args:
+            if name in self.functions:
+                print(f"{name} is a function")
+            elif name in self.BUILTINS:
+                print(f"{name} is a shell builtin")
+            else:
+                path = self._find_in_path(name)
+                if path:
+                    print(path)
+                else:
+                    print(f"type: {name}: not found", file=sys.stderr)
+                    status = 1
+        return status
+
+    def _find_in_path(self, name: str) -> str:
+        path = self.env.get("PATH", os.defpath)
+        for d in path.split(os.pathsep):
+            candidate = os.path.join(d, name)
+            if os.path.isfile(candidate) and os.access(candidate, os.X_OK):
+                return candidate
+        return ""
 
     def _run_test(self, name: str, args: List[str]) -> int:
         tokens = list(args)
@@ -1031,6 +1243,14 @@ class Runtime:
                 status = self._exec_list_item(node)
         except ReturnFromFunction as e:
             status = e.code
+        except SystemExit as e:
+            status = int(e.code) if e.code is not None else 0
+        except ParseError as e:
+            print(f"parse error: {e}", file=sys.stderr)
+            status = 2
+        except RuntimeError as e:
+            print(str(e), file=sys.stderr)
+            status = 1
         return status
 
     def _capture_eval(self, source: str) -> tuple[str, int]:

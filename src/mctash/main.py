@@ -9,7 +9,7 @@ from typing import List, Tuple
 
 from .parser import ParseError, Parser
 from .asdl_map import lst_script_to_asdl
-from .runtime import Runtime
+from .runtime import BreakLoop, ContinueLoop, Runtime, RuntimeError
 
 
 def main(argv: List[str] | None = None) -> int:
@@ -52,6 +52,11 @@ def main(argv: List[str] | None = None) -> int:
     except ParseError as e:
         print(f"parse error: {e}", file=sys.stderr)
         return 2
+    except RuntimeError as e:
+        print(f"runtime error: {e}", file=sys.stderr)
+        return 1
+    except (BreakLoop, ContinueLoop):
+        return 1
     except SystemExit as e:
         return int(e.code) if e.code is not None else 0
 

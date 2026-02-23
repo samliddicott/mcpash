@@ -84,6 +84,7 @@ class Parser:
         self.buffer: list[Token] = []
         self.ctx = LexContext(reserved_words=RESERVED_WORDS, allow_reserved=True, allow_newline=True)
         self.last_lst: Optional[LstAndOr] = None
+        self.pending_heredocs: List[tuple[Redirect, LstRedirect]] = []
 
     def _peek(self) -> Optional[Token]:
         if not self.buffer:
@@ -156,6 +157,8 @@ class Parser:
         if tok and tok.kind == "OP" and tok.value in ["\n", ";", "&"]:
             background = tok.value == "&"
             self._advance()
+            if tok.value == "\n":
+                self._consume_pending_heredocs()
         return ListItem(node=node, background=background)
 
     def parse_list(self) -> tuple[ListNode, LstListNode]:
@@ -177,6 +180,8 @@ class Parser:
             if tok.kind == "OP" and tok.value in [";", "\n", "&"]:
                 terminator = tok.value
                 self._advance()
+                if terminator == "\n":
+                    self._consume_pending_heredocs()
             items.append(ListItem(node=item, background=(terminator == "&")))
             lst_items.append(LstListItem(node=lst_item, terminator=terminator))
             if terminator is None:
@@ -207,6 +212,8 @@ class Parser:
             if tok.kind == "OP" and tok.value in [";", "\n", "&"]:
                 terminator = tok.value
                 self._advance()
+                if terminator == "\n":
+                    self._consume_pending_heredocs()
             items.append(ListItem(node=item, background=(terminator == "&")))
             lst_items.append(LstListItem(node=lst_item, terminator=terminator))
             if terminator is None:
@@ -225,6 +232,13 @@ class Parser:
                 operators.append(tok.value)
                 op_positions.append(self._tok_pos(tok))
                 self._advance()
+                while True:
+                    ntok = self._peek()
+                    if ntok and ntok.kind == "OP" and ntok.value == "\n":
+                        self._advance()
+                        self._consume_pending_heredocs()
+                        continue
+                    break
                 pipeline, lst_pipeline = self.parse_pipeline()
                 pipelines.append(pipeline)
                 lst_pipelines.append(lst_pipeline)
@@ -250,6 +264,13 @@ class Parser:
             if tok and tok.kind == "OP" and tok.value == "|":
                 op_positions.append(self._tok_pos(tok))
                 self._advance()
+                while True:
+                    ntok = self._peek()
+                    if ntok and ntok.kind == "OP" and ntok.value == "\n":
+                        self._advance()
+                        self._consume_pending_heredocs()
+                        continue
+                    break
                 command, lst_command = self.parse_command()
                 commands.append(command)
                 lst_commands.append(lst_command)
@@ -307,15 +328,7 @@ class Parser:
                     lst_redir = self._make_lst_redirect(op_tok, target_tok, fd)
                     self._advance()
                     if redir.op == "<<":
-                        here_tok = self._peek()
-                        if here_tok and here_tok.kind == "HEREDOC":
-                            self._apply_heredoc_token(redir, lst_redir, here_tok.value)
-                            self._advance()
-                    if redir.op == "<<-":
-                        here_tok = self._peek()
-                        if here_tok and here_tok.kind == "HEREDOC":
-                            self._apply_heredoc_token(redir, lst_redir, here_tok.value)
-                            self._advance()
+                        self.pending_heredocs.append((redir, lst_redir))
                     redirects.append(redir)
                     lst_redirects.append(lst_redir)
                     continue
@@ -329,10 +342,7 @@ class Parser:
                 lst_redir = self._make_lst_redirect(tok, target_tok, None)
                 self._advance()
                 if redir.op in ["<<", "<<-"]:
-                    here_tok = self._peek()
-                    if here_tok and here_tok.kind == "HEREDOC":
-                        self._apply_heredoc_token(redir, lst_redir, here_tok.value)
-                        self._advance()
+                    self.pending_heredocs.append((redir, lst_redir))
                 redirects.append(redir)
                 lst_redirects.append(lst_redir)
                 continue
@@ -454,9 +464,19 @@ class Parser:
         name = name_tok.value
         if name.endswith("()"):
             name = name[:-2]
+        elif self._peek() and self._is_word(self._peek()) and self._peek().value == "()":
+            self._advance()
         else:
             self._expect_group_token("(")
             self._expect_group_token(")")
+        while True:
+            tok = self._peek()
+            if tok and tok.kind == "OP" and tok.value in ["\n", ";"]:
+                self._advance()
+                if tok.value == "\n":
+                    self._consume_pending_heredocs()
+                continue
+            break
         body_cmd, lst_body_cmd = self.parse_group()
         return FunctionDef(name=name, body=body_cmd.body), LstFunctionDef(name=name, body=lst_body_cmd.body)
 
@@ -644,7 +664,14 @@ class Parser:
             return True
         tok1 = self._peek_n(1)
         tok2 = self._peek_n(2)
-        if tok1 and self._is_word(tok1) and tok1.value == "(" and tok2 and self._is_word(tok2) and tok2.value == ")":
+        if tok1 and self._is_word(tok1) and tok1.value == "()":
+            return True
+        if (
+            tok1
+            and ((self._is_word(tok1) and tok1.value == "(") or (tok1.kind == "OP" and tok1.value == "("))
+            and tok2
+            and ((self._is_word(tok2) and tok2.value == ")") or (tok2.kind == "OP" and tok2.value == ")"))
+        ):
             return True
         return False
 
@@ -683,6 +710,23 @@ class Parser:
             tok = self._peek()
             if tok is None:
                 break
+            if self._is_word(tok) and tok.value.isdigit():
+                next_tok = self._peek_n(1)
+                if next_tok and next_tok.kind == "OP" and next_tok.value in ["<", ">", ">>", "<<", "<<-", ">&", "<&"]:
+                    fd = int(tok.value)
+                    self._advance()
+                    op_tok = self._advance()
+                    target_tok = self._peek()
+                    if target_tok is None or not self._is_word(target_tok):
+                        raise ParseError(f"expected redirection target at {self._where(target_tok)}")
+                    redir = self._make_redirect(op_tok.value, target_tok.value, fd)
+                    lst_redir = self._make_lst_redirect(op_tok, target_tok, fd)
+                    self._advance()
+                    if redir.op in ["<<", "<<-"]:
+                        self.pending_heredocs.append((redir, lst_redir))
+                    redirects.append(redir)
+                    lst_redirects.append(lst_redir)
+                    continue
             if tok.kind == "OP" and tok.value in ["<", ">", ">>", "<<", "<<-", ">&", "<&"]:
                 op_tok = tok
                 self._advance()
@@ -693,10 +737,7 @@ class Parser:
                 lst_redir = self._make_lst_redirect(op_tok, target_tok, None)
                 self._advance()
                 if redir.op in ["<<", "<<-"]:
-                    here_tok = self._peek()
-                    if here_tok and here_tok.kind == "HEREDOC":
-                        self._apply_heredoc_token(redir, lst_redir, here_tok.value)
-                        self._advance()
+                    self.pending_heredocs.append((redir, lst_redir))
                 redirects.append(redir)
                 lst_redirects.append(lst_redir)
                 continue
@@ -706,6 +747,15 @@ class Parser:
         return RedirectCommand(child=command, redirects=redirects), LstRedirectCommand(
             child=lst_command, redirects=lst_redirects
         )
+
+    def _consume_pending_heredocs(self) -> None:
+        while self.pending_heredocs:
+            tok = self._peek()
+            if tok is None or tok.kind != "HEREDOC":
+                break
+            redir, lst_redir = self.pending_heredocs.pop(0)
+            self._apply_heredoc_token(redir, lst_redir, tok.value)
+            self._advance()
 
 
 def parse(source: str) -> Script:

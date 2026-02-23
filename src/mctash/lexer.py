@@ -22,6 +22,8 @@ OPERATORS = {
     ">&",
     "<&",
     ";;",
+    "(",
+    ")",
     ";",
     "|",
     "&",
@@ -131,10 +133,29 @@ class TokenReader:
                         buf.append('"')
                         self._advance()
                     continue
+                if ch == "`":
+                    buf.append("`")
+                    self._advance()
+                    while self.i < len(self.source) and self._peek() != "`":
+                        if self._peek() == "\\" and self._peek(1):
+                            buf.append("\\")
+                            self._advance()
+                            buf.append(self._peek())
+                            self._advance()
+                            continue
+                        buf.append(self._peek())
+                        self._advance()
+                    if self._peek() == "`":
+                        buf.append("`")
+                        self._advance()
+                    continue
                 if ch == "$" and self._peek(1) == "(":
                     chunk, new_i = _scan_command_sub(self.source, self.i)
                     buf.append(chunk)
                     self._advance_to(new_i)
+                    continue
+                if ch == "\\" and self._peek(1) == "\n":
+                    self._advance(2)
                     continue
                 buf.append(ch)
                 self._advance()
@@ -147,6 +168,10 @@ class TokenReader:
             if ctx.allow_reserved and word in ctx.reserved_words:
                 kind = "RESERVED"
             return Token(kind, word, start_line, start_col, start_index)
+        if self._pending_heredocs:
+            self._capture_heredocs()
+            if self._queue:
+                return self._queue.pop(0)
         return None
 
     def _advance(self, n: int = 1) -> None:
