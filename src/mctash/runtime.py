@@ -80,6 +80,7 @@ class Runtime:
         "alias",
         "unalias",
         "trap",
+        "let",
     }
     SPECIAL_BUILTINS = {
         ":",
@@ -443,7 +444,10 @@ class Runtime:
                         self._force_broken_pipe = saved_epipe
                     data = None
                 else:
-                    status, data = self._capture_command_output(cmd)
+                    sink_is_no_reader = False
+                    if i + 1 < len(node.commands):
+                        sink_is_no_reader = self._pipeline_sink_is_no_reader(node.commands[i + 1])
+                    status, data = self._capture_command_output(cmd, force_epipe=sink_is_no_reader)
                 statuses.append(status)
                 continue
             argv = self._expand_argv(cmd.argv)
@@ -460,11 +464,10 @@ class Runtime:
                 sys.stdout.flush()
         return self._pipeline_result(statuses if statuses else [status])
 
-    def _capture_command_output(self, cmd: Command) -> tuple[int, bytes]:
+    def _capture_command_output(self, cmd: Command, force_epipe: bool = False) -> tuple[int, bytes]:
         tmp = tempfile.TemporaryFile()
         saved_stdout = os.dup(1)
         os.dup2(tmp.fileno(), 1)
-        force_epipe = self._pipeline_sink_is_no_reader(cmd)
         saved_epipe = self._force_broken_pipe
         self._force_broken_pipe = force_epipe
         try:
@@ -2670,12 +2673,12 @@ class Runtime:
         data = " ".join(args)
         if newline:
             data += "\n"
-        if isinstance(sys.stdout, io.StringIO) and self._fd_redirect_depth == 0:
-            sys.stdout.write(data)
-            return 0
         if self._force_broken_pipe and self._fd_redirect_depth == 0:
             print("ash: write error: Broken pipe", file=sys.stderr)
             return 1
+        if isinstance(sys.stdout, io.StringIO) and self._fd_redirect_depth == 0:
+            sys.stdout.write(data)
+            return 0
         try:
             os.write(1, data.encode("utf-8", errors="ignore"))
             return 0

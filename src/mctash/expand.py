@@ -254,6 +254,61 @@ def _extract_balanced(text: str, start: int, closing: str) -> Tuple[str, int]:
     in_single = False
     in_double = False
     paren_depth = 0
+    if closing == "))":
+        while i < len(text):
+            ch = text[i]
+            if in_single:
+                if ch == "'":
+                    in_single = False
+                i += 1
+                continue
+            if in_double:
+                if ch == "\\" and i + 1 < len(text):
+                    i += 2
+                    continue
+                if ch == '"':
+                    in_double = False
+                i += 1
+                continue
+            if ch == "'":
+                in_single = True
+                i += 1
+                continue
+            if ch == '"':
+                in_double = True
+                i += 1
+                continue
+            if ch == "\\" and i + 1 < len(text):
+                i += 2
+                continue
+            if text.startswith("$((", i):
+                depth += 1
+                i += 3
+                continue
+            if ch == "(":
+                paren_depth += 1
+                i += 1
+                continue
+            if text.startswith("))", i):
+                if depth > 1:
+                    depth -= 1
+                    i += 2
+                    continue
+                if paren_depth > 0:
+                    paren_depth -= 1
+                    i += 1
+                    continue
+                depth -= 1
+                if depth == 0:
+                    return text[start:i], i + 2
+                i += 2
+                continue
+            if ch == ")" and paren_depth > 0:
+                paren_depth -= 1
+                i += 1
+                continue
+            i += 1
+        return text[start:], len(text)
     while i < len(text):
         ch = text[i]
         if in_single:
