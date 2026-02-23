@@ -79,6 +79,7 @@ class Runtime:
         "shift",
         "trap",
         "unset",
+        "getopts",
     }
     BUILTINS = {
         "cd",
@@ -113,6 +114,7 @@ class Runtime:
         "wait",
         "kill",
         "let",
+        "getopts",
     }
 
     def __init__(self) -> None:
@@ -147,6 +149,7 @@ class Runtime:
         self._force_broken_pipe: bool = False
         self._user_fds: set[int] = set()
         self._active_temp_fds: set[int] = set()
+        self._getopts_state: tuple[tuple[str, ...], int, int] | None = None
         # Align with ash test assumptions: shell starts with only stdio fds open.
         try:
             os.close(3)
@@ -777,6 +780,8 @@ class Runtime:
             return self._run_kill(argv[1:])
         if name == "let":
             return self._run_let(argv[1:])
+        if name == "getopts":
+            return self._run_getopts(argv[1:])
         if name in ["[", "[[", "test"]:
             return self._run_test(name, argv[1:])
         if name == "exit":
@@ -1799,6 +1804,8 @@ class Runtime:
                 del self.env[name]
             for scope in self.local_stack:
                 scope.pop(name, None)
+            if name == "OPTIND":
+                self._getopts_state = None
         return 0
 
     def _run_shift(self, args: List[str]) -> int:
@@ -1816,6 +1823,106 @@ class Runtime:
             return 1
         self.positional = self.positional[n:]
         return 0
+
+    def _set_var(self, name: str, value: str) -> None:
+        for scope in reversed(self.local_stack):
+            if name in scope:
+                scope[name] = value
+                return
+        self.env[name] = value
+
+    def _run_getopts(self, args: List[str]) -> int:
+        if len(args) < 2:
+            self._report_error("usage: getopts optstring var [arg ...]", line=self.current_line, context="getopts")
+            return 2
+        optspec = args[0]
+        var_name = args[1]
+        argv = args[2:] if len(args) > 2 else list(self.positional)
+        argv_sig = tuple(argv)
+        silent = optspec.startswith(":")
+        if silent:
+            optspec = optspec[1:]
+
+        optind_raw, optind_is_set = self._get_var_with_state("OPTIND")
+        try:
+            optind = int(optind_raw) if optind_is_set and optind_raw != "" else 1
+        except ValueError:
+            optind = 1
+        if optind <= 0:
+            optind = 1
+
+        pos = 1
+        if self._getopts_state is not None:
+            prev_sig, prev_optind, prev_pos = self._getopts_state
+            if prev_sig == argv_sig and prev_optind == optind:
+                pos = prev_pos
+
+        def finish(status: int, out_var: str = "?", optarg: str = "") -> int:
+            self._set_var("OPTIND", str(optind))
+            self._set_var(var_name, out_var)
+            self._set_var("OPTARG", optarg)
+            self._getopts_state = (argv_sig, optind, pos)
+            return status
+
+        if optind > len(argv):
+            return finish(1)
+
+        arg = argv[optind - 1]
+        if arg == "--":
+            optind += 1
+            pos = 1
+            return finish(1)
+        if not arg.startswith("-") or arg == "-":
+            pos = 1
+            return finish(1)
+
+        if pos >= len(arg):
+            optind += 1
+            pos = 1
+            if optind > len(argv):
+                return finish(1)
+            arg = argv[optind - 1]
+            if arg == "--":
+                optind += 1
+                return finish(1)
+            if not arg.startswith("-") or arg == "-":
+                return finish(1)
+
+        ch = arg[pos]
+        pos += 1
+        idx = optspec.find(ch)
+        if idx < 0 or ch == ":":
+            if pos >= len(arg):
+                optind += 1
+                pos = 1
+            if not silent and self._get_var("OPTERR") != "0":
+                print(f"Illegal option -{ch}", file=sys.stderr)
+            return finish(0, "?", ch if silent else "")
+
+        needs_arg = idx + 1 < len(optspec) and optspec[idx + 1] == ":"
+        if needs_arg:
+            if pos < len(arg):
+                optarg = arg[pos:]
+                optind += 1
+                pos = 1
+                return finish(0, ch, optarg)
+            if optind < len(argv):
+                optarg = argv[optind]
+                optind += 2
+                pos = 1
+                return finish(0, ch, optarg)
+            optind += 1
+            pos = 1
+            if silent:
+                return finish(0, ":", ch)
+            if self._get_var("OPTERR") != "0":
+                print(f"No arg for -{ch} option", file=sys.stderr)
+            return finish(0, "?", "")
+
+        if pos >= len(arg):
+            optind += 1
+            pos = 1
+        return finish(0, ch, "")
 
     def _run_printf(self, args: List[str]) -> int:
         if not args:
