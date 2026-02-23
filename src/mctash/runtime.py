@@ -112,6 +112,7 @@ class Runtime:
         "unalias",
         "wait",
         "kill",
+        "let",
     }
 
     def __init__(self) -> None:
@@ -345,6 +346,11 @@ class Runtime:
             except FileNotFoundError:
                 print(f"{argv[0]}: not found", file=sys.stderr)
                 return 127
+            except OSError as e:
+                if getattr(e, "errno", None) == 8 and os.path.isfile(argv[0]) and len(node.commands) == 1:
+                    return self._run_source(argv[0], argv[1:])
+                print(f"{argv[0]}: {e.strerror}", file=sys.stderr)
+                return 126
             finally:
                 for f in to_close:
                     try:
@@ -769,6 +775,8 @@ class Runtime:
             return self._run_wait(argv[1:])
         if name == "kill":
             return self._run_kill(argv[1:])
+        if name == "let":
+            return self._run_let(argv[1:])
         if name in ["[", "[[", "test"]:
             return self._run_test(name, argv[1:])
         if name == "exit":
@@ -901,6 +909,11 @@ class Runtime:
                     return 127
                 except PermissionError:
                     self._report_error(f"{argv[0]}: Permission denied", line=self.current_line, context=context)
+                    return 126
+                except OSError as e:
+                    if getattr(e, "errno", None) == 8 and os.path.isfile(argv[0]):
+                        return self._run_source(argv[0], argv[1:])
+                    self._report_error(f"{argv[0]}: {e.strerror}", line=self.current_line, context=context)
                     return 126
                 except KeyboardInterrupt:
                     return 130
@@ -1424,50 +1437,71 @@ class Runtime:
             self._expand_braced_param,
             self._expand_command_subst_text,
             lambda s: s,
-            self._split_ifs,
-            self._glob_field,
+            lambda s: [s],
+            lambda s: [s],
         )
         joined = parts[0] if parts else "0"
-        m_post = re.fullmatch(r"\s*([A-Za-z_][A-Za-z0-9_]*)\+\+\s*", joined)
-        if m_post:
-            name = m_post.group(1)
-            try:
-                cur = int(self._get_var(name) or "0")
-            except ValueError:
-                cur = 0
-            self._set_local(name, str(cur + 1))
-            return str(cur)
-        m_pre = re.fullmatch(r"\s*\+\+([A-Za-z_][A-Za-z0-9_]*)\s*", joined)
-        if m_pre:
-            name = m_pre.group(1)
-            try:
-                cur = int(self._get_var(name) or "0")
-            except ValueError:
-                cur = 0
-            cur += 1
-            self._set_local(name, str(cur))
-            return str(cur)
         try:
-            eval_locals: dict[str, int] = {}
-            for name, raw in self.env.items():
-                if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", name):
-                    continue
-                try:
-                    eval_locals[name] = int(raw)
-                except ValueError:
-                    eval_locals[name] = 0
-            for scope in self.local_stack:
-                for name, raw in scope.items():
-                    if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", name):
-                        continue
-                    try:
-                        eval_locals[name] = int(raw)
-                    except ValueError:
-                        eval_locals[name] = 0
-            value = int(eval(joined, {"__builtins__": {}}, eval_locals))
+            return self._expand_arith_with_bash(joined)
         except Exception:
-            value = 0
-        return str(value)
+            return "0"
+
+    def _expand_arith_with_bash(self, expr: str) -> str:
+        merged_env = dict(self.env)
+        for scope in self.local_stack:
+            merged_env.update(scope)
+        names = self._arith_capture_names(expr, merged_env)
+        lines = [
+            "set +u",
+            f"__mctash_result=$(({expr}))",
+            'printf "__MCTASH_RESULT__=%s\\n" "$__mctash_result"',
+        ]
+        for name in names:
+            lines.append(f'printf "__MCTASH_VAR__{name}=%s\\n" "${{{name}-}}"')
+        proc = subprocess.run(
+            ["bash", "-c", "\n".join(lines)],
+            env=merged_env,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            check=False,
+        )
+        result = "0"
+        saw_result = False
+        for line in proc.stdout.splitlines():
+            if line.startswith("__MCTASH_RESULT__="):
+                result = line.split("=", 1)[1]
+                saw_result = True
+                continue
+            if line.startswith("__MCTASH_VAR__"):
+                payload = line[len("__MCTASH_VAR__") :]
+                if "=" in payload:
+                    name, value = payload.split("=", 1)
+                    self._set_local(name, value)
+        if not saw_result:
+            err = (proc.stderr or "").lower()
+            if "division by 0" in err or "divide by 0" in err:
+                self._report_error("divide by zero", line=self.current_line)
+            else:
+                self._report_error("arithmetic syntax error", line=self.current_line)
+        return result
+
+    def _arith_capture_names(self, expr: str, env: Dict[str, str]) -> List[str]:
+        seen: set[str] = set()
+        queue: List[str] = list(re.findall(r"[A-Za-z_][A-Za-z0-9_]*", expr))
+        while queue:
+            name = queue.pop(0)
+            if name in seen:
+                continue
+            seen.add(name)
+            raw = env.get(name)
+            if raw is None:
+                continue
+            # Variables used as arithmetic names can themselves contain expressions.
+            for sub in re.findall(r"[A-Za-z_][A-Za-z0-9_]*", raw):
+                if sub not in seen:
+                    queue.append(sub)
+        return sorted(seen)
 
     def _expand_heredoc(self, redir: Redirect) -> str:
         content = redir.here_doc or ""
@@ -1806,22 +1840,38 @@ class Runtime:
             vi = start_vi
             while i < len(fmt):
                 if fmt[i] == "%" and i + 1 < len(fmt):
-                    spec = fmt[i + 1]
-                    if spec == "%":
+                    if fmt[i + 1] == "%":
                         out.append("%")
-                    else:
-                        val = vals[vi] if vi < len(vals) else ""
-                        vi += 1
-                        if spec == "s":
-                            out.append(val)
-                        elif spec in ["d", "i"]:
-                            try:
-                                out.append(str(int(val)))
-                            except ValueError:
-                                out.append("0")
+                        i += 2
+                        continue
+                    j = i + 1
+                    while j < len(fmt) and fmt[j] not in "diouxXs":
+                        j += 1
+                    if j >= len(fmt):
+                        out.append(fmt[i:])
+                        break
+                    directive = fmt[i : j + 1]
+                    spec = fmt[j]
+                    val = vals[vi] if vi < len(vals) else ""
+                    vi += 1
+                    if spec == "s":
+                        out.append(directive % val)
+                    elif spec in ["d", "i", "o", "u", "x", "X"]:
+                        try:
+                            num = int(val, 0)
+                        except ValueError:
+                            num = 0
+                        if spec == "u":
+                            num &= (1 << 64) - 1
+                            out.append((directive[:-1] + "d") % num)
+                        elif spec in ["x", "X", "o"] and num < 0:
+                            num &= (1 << 64) - 1
+                            out.append(directive % num)
                         else:
-                            out.append(val)
-                    i += 2
+                            out.append(directive % num)
+                    else:
+                        out.append(val)
+                    i = j + 1
                     continue
                 out.append(fmt[i])
                 i += 1
@@ -2051,6 +2101,17 @@ class Runtime:
                     status = 1
         return status
 
+    def _run_let(self, args: List[str]) -> int:
+        if not args:
+            return 1
+        last = "0"
+        for expr in args:
+            last = self._expand_arith(expr)
+        try:
+            return 1 if int(last) == 0 else 0
+        except ValueError:
+            return 1
+
     def _find_in_path(self, name: str, path_override: str | None = None) -> str:
         path = path_override if path_override is not None else self.env.get("PATH", os.defpath)
         for d in path.split(os.pathsep):
@@ -2067,6 +2128,20 @@ class Runtime:
         if name == "[[":
             if tokens and tokens[-1] == "]]":
                 tokens = tokens[:-1]
+            if "||" in tokens:
+                idx = tokens.index("||")
+                left = self._run_test("[[", tokens[:idx] + ["]]"])
+                if left == 0:
+                    return 0
+                right = self._run_test("[[", tokens[idx + 1 :] + ["]]"])
+                return right
+            if "&&" in tokens:
+                idx = tokens.index("&&")
+                left = self._run_test("[[", tokens[:idx] + ["]]"])
+                if left != 0:
+                    return left
+                right = self._run_test("[[", tokens[idx + 1 :] + ["]]"])
+                return right
         negate = False
         if tokens and tokens[0] == "!":
             negate = True

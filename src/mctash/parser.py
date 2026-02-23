@@ -468,6 +468,24 @@ class Parser:
             tok = self._peek()
             if tok is None:
                 break
+            in_dbl_bracket = bool(argv) and argv[0].text == "[["
+            if in_dbl_bracket:
+                if self._is_word(tok):
+                    argv.append(Word(tok.value))
+                    lst_argv.append(
+                        self._resolve_word(parse_word(tok.value, line=tok.line, col=tok.col, index=tok.index))
+                    )
+                    self._advance()
+                    if tok.value == "]]":
+                        break
+                    continue
+                if tok.kind == "OP":
+                    if tok.value in ["\n", ";", "&"]:
+                        break
+                    argv.append(Word(tok.value))
+                    lst_argv.append(self._resolve_word(parse_word(tok.value, line=tok.line, col=tok.col, index=tok.index)))
+                    self._advance()
+                    continue
             if self._is_word(tok) and tok.value.isdigit():
                 next_tok = self._peek_n(1)
                 if (

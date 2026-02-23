@@ -445,6 +445,7 @@ def _scan_arith_sub(source: str, start: int) -> tuple[str, int]:
         return source[start:start + 1], start + 1
     i += 3
     depth = 1
+    paren_depth = 0
     in_single = False
     in_double = False
     while i < len(source):
@@ -474,12 +475,21 @@ def _scan_arith_sub(source: str, start: int) -> tuple[str, int]:
             depth += 1
             i += 3
             continue
-        if source.startswith("))", i):
+        if source.startswith("))", i) and (depth > 1 or paren_depth == 0):
             depth -= 1
             i += 2
             if depth == 0:
                 return source[start:i], i
             continue
+        if ch == "(":
+            paren_depth += 1
+            i += 1
+            continue
+        if ch == ")":
+            if paren_depth > 0:
+                paren_depth -= 1
+                i += 1
+                continue
         i += 1
     return source[start:i], i
 

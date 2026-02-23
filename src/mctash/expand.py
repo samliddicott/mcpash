@@ -173,6 +173,7 @@ def _extract_balanced(text: str, start: int, closing: str) -> Tuple[str, int]:
     i = start
     in_single = False
     in_double = False
+    paren_depth = 0
     while i < len(text):
         ch = text[i]
         if in_single:
@@ -206,6 +207,16 @@ def _extract_balanced(text: str, start: int, closing: str) -> Tuple[str, int]:
             depth += 1
             i += 2
             continue
+        if closing == "))":
+            if ch == "(":
+                paren_depth += 1
+                i += 1
+                continue
+            if ch == ")":
+                if paren_depth > 0:
+                    paren_depth -= 1
+                    i += 1
+                    continue
         if text.startswith(closing, i):
             depth -= 1
             if depth == 0:
