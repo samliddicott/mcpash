@@ -166,6 +166,10 @@ class Runtime:
         self.last_status = 0
         self.last_nonzero_status = 0
         self.env: Dict[str, str] = dict(os.environ)
+        try:
+            self.env["PWD"] = os.getcwd()
+        except OSError:
+            pass
         self.positional: List[str] = []
         self.functions: Dict[str, ListNode] = {}
         self.aliases: Dict[str, str] = {}
@@ -542,6 +546,10 @@ class Runtime:
             status = self._exec_command(node.commands[0])
             return 0 if (node.negate and status != 0) else (1 if node.negate and status == 0 else status)
 
+        if isinstance(sys.stdin, io.StringIO):
+            status = self._exec_pipeline_inprocess(node)
+            return 0 if (node.negate and status != 0) else (1 if node.negate and status == 0 else status)
+
         if any(self._pipeline_needs_shell(cmd) for cmd in node.commands):
             status = self._exec_pipeline_inprocess(node)
             return 0 if (node.negate and status != 0) else (1 if node.negate and status == 0 else status)
@@ -610,6 +618,11 @@ class Runtime:
     def _exec_pipeline_inprocess(self, node: Pipeline) -> int:
         data: bytes | None = None
         data_latency: float | None = None
+        if isinstance(sys.stdin, io.StringIO):
+            seed = sys.stdin.read()
+            data = seed.encode("utf-8", errors="surrogateescape")
+            if self._pipeline_input_latency is not None:
+                data_latency = self._pipeline_input_latency
         status = 0
         statuses: List[int] = []
         for i, cmd in enumerate(node.commands):
@@ -1217,7 +1230,10 @@ class Runtime:
         if name == "cd":
             target = argv[1] if len(argv) > 1 else self.env.get("HOME", "/")
             try:
+                old = os.getcwd()
                 os.chdir(target)
+                self.env["OLDPWD"] = old
+                self.env["PWD"] = os.getcwd()
                 return 0
             except OSError:
                 return 1
@@ -1402,10 +1418,19 @@ class Runtime:
         if argv[0] == "":
             self._report_error(": Permission denied", line=self.current_line, context=context)
             return 127
+        if "/" in argv[0]:
+            resolved = argv[0]
+            exec_argv = list(argv)
+        else:
+            resolved = self._resolve_external_path(argv[0], env)
+            if resolved is None:
+                self._report_error(f"{argv[0]}: not found", line=self.current_line, context=context)
+                return 127
+            exec_argv = [resolved] + argv[1:]
         child_env = dict(env)
         # If we're directly exec'ing a shebang script, propagate the script
         # basename so the child mctash can mirror ash-like /proc/$pid/comm.
-        path0 = argv[0]
+        path0 = resolved
         if os.path.isfile(path0):
             try:
                 with open(path0, "rb") as f:
@@ -1419,7 +1444,7 @@ class Runtime:
                 try:
                     job_id = getattr(self._thread_ctx, "job_id", None)
                     proc = subprocess.Popen(
-                        argv,
+                        exec_argv,
                         env=child_env,
                         start_new_session=bool(isinstance(job_id, int)),
                     )
@@ -1443,8 +1468,12 @@ class Runtime:
                     self._report_error(f"{argv[0]}: Permission denied", line=self.current_line, context=context)
                     return 126
                 except OSError as e:
-                    if getattr(e, "errno", None) == 8 and os.path.isfile(argv[0]):
-                        return self._run_source(argv[0], argv[1:])
+                    eno = getattr(e, "errno", None)
+                    if eno == 8 and os.path.isfile(resolved):
+                        return self._run_source(resolved, argv[1:])
+                    if eno == 36:
+                        self._report_error(f"{argv[0]}: File name too long", line=self.current_line, context=context)
+                        return 127
                     self._report_error(f"{argv[0]}: {e.strerror}", line=self.current_line, context=context)
                     return 126
                 except KeyboardInterrupt:
@@ -1452,6 +1481,25 @@ class Runtime:
         except RuntimeError as e:
             print(str(e), file=sys.stderr)
             return 1
+
+    def _resolve_external_path(self, argv0: str, env: Dict[str, str]) -> str | None:
+        if "/" in argv0:
+            if os.path.isdir(argv0):
+                return None
+            if os.path.isfile(argv0):
+                return argv0
+            return None
+        path_value = env.get("PATH", os.defpath)
+        for d in path_value.split(os.pathsep):
+            base = d or "."
+            candidate = os.path.join(base, argv0)
+            if os.path.isdir(candidate):
+                continue
+            if not os.path.isfile(candidate):
+                continue
+            if os.access(candidate, os.X_OK):
+                return candidate
+        return None
 
     def _run_alias(self, args: List[str]) -> int:
         status = 0
