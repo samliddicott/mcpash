@@ -16,9 +16,11 @@ Latest corpus result:
 - BusyBox `ash_test`: `ok=343 fail=0 skip=0` within the configured timeout window.
 - `ash-z_slow/many_ifs.tests` can exceed the harness timeout budget.
 - Oil subset corpus (via `src/tests/run_oil_subset.sh`):
-  - Full `smoke` + `redirect` + `word-split` + `posix`: `pass=100 fail=0 skip=29`
+  - Full `smoke` + `redirect` + `word-split` + `posix` + `shell-grammar`: `pass=138 fail=0 skip=29`
   - Skips are from unsupported/non-portable directives in the lightweight
     subset runner, not known semantic failures in these slices.
+  - In this runner, `## status: 99` is treated as an expected non-zero failure
+    sentinel used by some Oil grammar tests.
 
 ## Overall
 

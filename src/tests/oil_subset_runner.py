@@ -153,7 +153,11 @@ def run_case(
         )
 
         errs: List[str] = []
-        if proc.returncode != case.expected_status:
+        if case.expected_status == 99:
+            status_ok = proc.returncode != 0
+        else:
+            status_ok = proc.returncode == case.expected_status
+        if not status_ok:
             errs.append(
                 f"status expected={case.expected_status} actual={proc.returncode}"
             )

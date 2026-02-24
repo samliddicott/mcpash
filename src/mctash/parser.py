@@ -88,6 +88,7 @@ class Parser:
         self.pending_heredocs: List[tuple[Redirect, LstRedirect]] = []
         self.aliases: dict[str, str] = aliases if aliases is not None else {}
         self._saw_command: bool = False
+        self._last_token: Optional[Token] = None
 
     def _peek(self) -> Optional[Token]:
         if not self.buffer:
@@ -116,6 +117,7 @@ class Parser:
         tok = self._peek()
         if tok is not None:
             self.buffer.pop(0)
+            self._last_token = tok
         return tok
 
     def _expect_op(self, op: str) -> Token:
@@ -824,6 +826,20 @@ class Parser:
                 raise ParseError(f"syntax error: empty case action at {self._where(self._peek())}")
             body, lst_body = self.parse_compound_list({";;", "esac"})
             tok = self._peek()
+            if (
+                (tok is None or (tok.kind == "OP" and tok.value == "\n"))
+                and self._case_body_ends_with_bare_esac(body)
+            ):
+                raise ParseError("syntax error: expected ';;' before esac")
+            if (
+                tok
+                and self._is_word(tok)
+                and tok.value == "esac"
+                and self._last_token is not None
+                and self._last_token.line == tok.line
+                and not (self._last_token.kind == "OP" and self._last_token.value in [";", ";;"])
+            ):
+                raise ParseError(f"syntax error: expected ';;' before esac at {self._where(tok)}")
             if tok and tok.kind == "OP" and tok.value == ";;":
                 self._advance()
             items.append(CaseItem(patterns=patterns, body=body))
@@ -856,6 +872,23 @@ class Parser:
         if self._is_word(tok) and tok.value.endswith("|"):
             return True
         return False
+
+    def _case_body_ends_with_bare_esac(self, body: ListNode) -> bool:
+        if not body.items:
+            return False
+        last_item = body.items[-1]
+        andor = last_item.node
+        if not andor.pipelines:
+            return False
+        pl = andor.pipelines[-1]
+        if not pl.commands:
+            return False
+        cmd = pl.commands[-1]
+        if not isinstance(cmd, SimpleCommand):
+            return False
+        if not cmd.argv:
+            return False
+        return cmd.argv[-1].text == "esac"
 
     def parse_if(self) -> tuple[IfCommand, LstIfCommand]:
         tok = self._advance()
