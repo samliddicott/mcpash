@@ -86,9 +86,19 @@ def parse_spec(path: Path) -> List[Case]:
                         current.expected_stderr = text
                     block_mode = None
                     block_lines = []
+                    continue
+                if line.startswith("## "):
+                    text = _finalize_block(block_lines)
+                    if block_mode == "stdout":
+                        current.expected_stdout = text
+                    elif block_mode == "stderr":
+                        current.expected_stderr = text
+                    block_mode = None
+                    block_lines = []
+                    # Fall through and interpret this assertion line.
                 else:
                     block_lines.append(line)
-                continue
+                    continue
 
             if line.startswith("## "):
                 c = ensure_case()
@@ -196,7 +206,13 @@ def make_py3_argv_helper(base_tmp: Path) -> str:
     argv_path.write_text(
         "#!/usr/bin/env python3\n"
         "import sys\n"
-        "print(repr(sys.argv[1:]))\n",
+        "def _py2_repr(s):\n"
+        "    b = s.encode('utf-8', 'surrogateescape')\n"
+        "    r = repr(b)\n"
+        "    if r.startswith(\"b'\") or r.startswith('b\"'):\n"
+        "        return r[1:]\n"
+        "    return r\n"
+        "print('[' + ', '.join(_py2_repr(a) for a in sys.argv[1:]) + ']')\n",
         encoding="utf-8",
     )
     argv_path.chmod(0o755)

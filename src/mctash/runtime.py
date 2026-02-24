@@ -926,6 +926,12 @@ class Runtime:
                 self.current_line = node.line
             try:
                 argv = self._expand_argv(node.argv)
+            except RuntimeError as e:
+                msg = str(e)
+                print(msg, file=sys.stderr)
+                if "bad substitution" in msg:
+                    raise SystemExit(2)
+                raise SystemExit(1)
             except CommandSubstFailure as e:
                 return e.code
             except ArithExpansionFailure as e:
@@ -2253,7 +2259,7 @@ class Runtime:
                 if name in ["#", "?", "@", "*", "$", "!", "-"] or name.isdigit():
                     raise RuntimeError(self._format_error(f"{name}: bad variable name", line=self.current_line))
                 replacement = _expand_alt_word(arg_text)
-                self._set_local(name, replacement)
+                self._assign_shell_var(name, replacement)
                 return replacement
             return value
         if op in ["?", ":?"]:
@@ -2676,15 +2682,7 @@ class Runtime:
                     else:
                         self._user_fds.add(fd)
                 return
-            mode = "wb" if is_output else "rb"
-            f = open(target, mode)
-            os.dup2(f.fileno(), fd)
-            f.close()
-            if fd >= 3:
-                if allowed_fds is not None:
-                    allowed_fds.add(fd)
-                else:
-                    self._user_fds.add(fd)
+            raise OSError(9, "Bad file descriptor")
         except OSError as e:
             if target and target.isdigit():
                 # BusyBox ash diagnostics special-case fd 10 in script-mode.
@@ -2877,6 +2875,13 @@ class Runtime:
             self.env[name] = value
             return
         self.local_stack[-1][name] = value
+
+    def _assign_shell_var(self, name: str, value: str) -> None:
+        for scope in reversed(self.local_stack):
+            if name in scope:
+                scope[name] = value
+                return
+        self.env[name] = value
 
     def _run_local(self, args: List[str]) -> int:
         if not self.local_stack:
