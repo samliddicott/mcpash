@@ -558,6 +558,7 @@ def expand_word(
     split_ifs: Callable[[str], List[str]],
     glob_field: Callable[[str], List[str]],
     unprotect_literals: bool = True,
+    split_unquoted_literals: bool = False,
 ) -> List[str]:
     parts = parse_word_parts(text)
     # field tuple: (text, quoted_for_split, active, has_unquoted_glob_meta)
@@ -668,7 +669,7 @@ def expand_word(
             fields = new_fields
             continue
 
-        if part.kind == "LIT" and not part.quoted:
+        if part.kind == "LIT" and (not part.quoted) and (not split_unquoted_literals):
             fields = [
                 (f + value, q, active, gm or has_glob_meta(value)) if active else (f, q, active, gm)
                 for f, q, active, gm in fields

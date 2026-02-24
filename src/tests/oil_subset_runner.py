@@ -187,6 +187,13 @@ def make_py3_argv_helper(base_tmp: Path) -> str:
         encoding="utf-8",
     )
     argv_path.chmod(0o755)
+    python2_path = Path(helper_dir) / "python2"
+    python2_path.write_text(
+        "#!/usr/bin/env bash\n"
+        "exec python3 \"$@\"\n",
+        encoding="utf-8",
+    )
+    python2_path.chmod(0o755)
     return helper_dir
 
 

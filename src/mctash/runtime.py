@@ -80,6 +80,17 @@ class ArithExpansionFailure(Exception):
 
 
 class Runtime:
+    SET_O_OPTION_MAP: Dict[str, str] = {
+        "allexport": "a",
+        "errexit": "e",
+        "noglob": "f",
+        "noexec": "n",
+        "nounset": "u",
+        "verbose": "v",
+        "xtrace": "x",
+        "noclobber": "C",
+        "pipefail": "pipefail",
+    }
     ENV_MUTATING_BUILTINS = {
         "cd",
         "read",
@@ -1766,6 +1777,7 @@ class Runtime:
             return
         saved: List[Tuple[int, int]] = []
         saved_active = set(self._active_temp_fds)
+        saved_user_fds = set(self._user_fds)
         transient_fds: set[int] = set()
         self._fd_redirect_depth += 1
         try:
@@ -1831,6 +1843,7 @@ class Runtime:
                     except OSError:
                         pass
             self._active_temp_fds = saved_active
+            self._user_fds = saved_user_fds
             self._fd_redirect_depth = max(0, self._fd_redirect_depth - 1)
 
     def _expand_argv(self, words: List[Word]) -> List[str]:
@@ -1943,16 +1956,46 @@ class Runtime:
     def _split_ifs(self, text: str) -> List[str]:
         if text == "":
             return []
-        ifs = self.env.get("IFS", " \t\n")
+        ifs, is_set = self._get_var_with_state("IFS")
+        if not is_set:
+            ifs = " \t\n"
+        if ifs == "":
+            return [text]
+
+        ifs_ws = "".join(ch for ch in ifs if ch in " \t\n")
+        ifs_nonws = "".join(ch for ch in ifs if ch not in " \t\n")
         parts: List[str] = []
         current: List[str] = []
-        for ch in text:
-            if ch in ifs:
+        i = 0
+        n = len(text)
+        while i < n:
+            ch = text[i]
+            if ch not in ifs:
+                current.append(ch)
+                i += 1
+                continue
+
+            j = i
+            while j < n and text[j] in ifs_ws:
+                j += 1
+            saw_nonws = j < n and text[j] in ifs_nonws
+            if saw_nonws:
                 if current:
                     parts.append("".join(current))
                     current = []
-            else:
-                current.append(ch)
+                else:
+                    parts.append("")
+                j += 1
+                while j < n and text[j] in ifs_ws:
+                    j += 1
+                i = j
+                continue
+
+            if current:
+                parts.append("".join(current))
+                current = []
+            i = j
+
         if current:
             parts.append("".join(current))
         return parts
@@ -2105,10 +2148,6 @@ class Runtime:
                     words.append(tok.value)
             out_fields: List[str] = []
             for w in words:
-                w_parts = parse_word_parts(w)
-                if any(p.quoted for p in w_parts):
-                    out_fields.append(self._expand_assignment_word_protected(w))
-                    continue
                 out_fields.extend(
                     expand_word(
                         w,
@@ -2118,9 +2157,13 @@ class Runtime:
                         self._expand_arith,
                         self._split_ifs,
                         self._glob_field,
+                        split_unquoted_literals=True,
                     )
                 )
-            ifs_ws = "".join(ch for ch in self.env.get("IFS", " \t\n") if ch in " \t\n")
+            ifs_value, ifs_set = self._get_var_with_state("IFS")
+            if not ifs_set:
+                ifs_value = " \t\n"
+            ifs_ws = "".join(ch for ch in ifs_value if ch in " \t\n")
             lead_boundary = bool(text) and bool(ifs_ws) and text[0] in ifs_ws
             trail_boundary = bool(text) and bool(ifs_ws) and text[-1] in ifs_ws
             return PresplitFields(out_fields, lead_boundary=lead_boundary, trail_boundary=trail_boundary)
@@ -2861,10 +2904,14 @@ class Runtime:
             self.set_positional_args(args[1:])
             return 0
         if args[0] in ["-o", "+o"]:
-            if len(args) >= 2 and args[1] == "pipefail":
-                self.options["pipefail"] = args[0] == "-o"
-                return 0
-            return 1
+            if len(args) < 2:
+                return 1
+            name = args[1]
+            mapped = self.SET_O_OPTION_MAP.get(name)
+            if mapped is None:
+                return 1
+            self.options[mapped] = args[0] == "-o"
+            return 0
         if args[0].startswith("-") or args[0].startswith("+"):
             for token in args:
                 if token == "--":

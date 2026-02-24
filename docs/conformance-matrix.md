@@ -17,9 +17,9 @@ Latest corpus result:
 - `ash-z_slow/many_ifs.tests` can exceed the harness timeout budget.
 - Oil subset corpus (via `src/tests/run_oil_subset.sh`, first 25 cases each of
   `smoke`, `redirect`, `word-split`):
-  - `pass=49 fail=9 skip=10`
-  - Failing areas currently center on non-whitespace IFS edge cases and a small
-    redirection restoration/empty-target behavior gap.
+  - `pass=58 fail=0 skip=10`
+  - Skips are from unsupported/non-portable directives in the lightweight
+    subset runner, not known semantic failures in these slices.
 
 ## Overall
 
