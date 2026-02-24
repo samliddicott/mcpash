@@ -1,4 +1,4 @@
-# Conformance Matrix (2026-02-23)
+# Conformance Matrix (2026-02-24)
 
 This is a practical conformance snapshot, not a formal certification report.
 
@@ -13,13 +13,14 @@ Evidence used:
 
 Latest corpus result:
 
-- BusyBox `ash_test`: `ok=343 fail=0 skip=0` within the configured timeout window.
-- `ash-z_slow/many_ifs.tests` can exceed the harness timeout budget.
+- BusyBox `ash_test`: `ok=357 fail=0 skip=0` (full run including `ash-z_slow/many_ifs.tests`).
 - Oil subset corpus (via `src/tests/run_oil_subset.sh`):
   - Expanded suite (`smoke`, `redirect`, `word-split`, `posix`,
     `shell-grammar`, `sh-options`, `command-parsing`, `loop`, `if_`, `case_`,
     `var-op-strip`, `var-op-test`, `var-sub`):
-    `pass=219 fail=0 skip=111`
+    `pass=244 fail=1 skip=127` when including `pipeline` and `command_`.
+  - Remaining fail is an intentional semantic difference for last-pipeline-process
+    behavior (`pipeline.test.sh` expects OSH/lastpipe-like `line=hi`; ash/dash behavior is `line=`).
   - Skips are from unsupported/non-portable directives in the lightweight
     subset runner, not known semantic failures in these slices.
   - In this runner, `## status: 99` is treated as an expected non-zero failure
