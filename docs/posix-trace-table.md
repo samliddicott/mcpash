@@ -55,3 +55,7 @@ These are the main gaps before claiming strict formal POSIX conformance:
    expansions, redirections, traps/signals, error diagnostics.
 2. Add explicit case IDs or line anchors from Oil spec files where practical.
 3. Keep this file updated in lockstep with parser/runtime changes and each conformance commit.
+
+Requirement-level companion:
+
+- `docs/posix-shall-trace.md`
