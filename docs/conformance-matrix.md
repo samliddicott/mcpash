@@ -43,6 +43,7 @@ Latest corpus result:
 Current mctash status:
 
 - Runtime `set` options currently used by tests: `implemented` (`-e`, `-f`, `-n`, `-u`, `-v`, `-x`, `pipefail`).
+- Startup option parsing: `partial` but improved for non-interactive paths (`-/+` letter flags, `-o/+o name` for supported names and `pipefail`).
 - Interactive/editor/job-control flags (`-i`, `-m`, `-V`, `-E`, etc.): `partial`/`not target` for this milestone.
 - Startup CLI option parity with `ash` synopsis: `partial` (mctash CLI currently focuses on script execution + `--dump-lst`).
 - Builtins exercised by BusyBox ash corpus: `implemented for tested semantics`.

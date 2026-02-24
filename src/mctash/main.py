@@ -5,7 +5,7 @@ import json
 import os
 import shlex
 import sys
-from typing import List, Tuple
+from typing import Dict, List, Tuple
 
 from .parser import ParseError, Parser
 from .asdl_map import AsdlMappingError, lst_list_item_to_asdl, lst_script_to_asdl
@@ -25,6 +25,7 @@ def _set_proc_comm() -> None:
 def main(argv: List[str] | None = None) -> int:
     _set_proc_comm()
     argv = list(argv) if argv is not None else sys.argv[1:]
+    startup_changes, argv = _parse_startup_options(argv)
     if argv and argv[0] == "-c":
         if len(argv) < 2:
             print("mctash: -c requires an argument", file=sys.stderr)
@@ -33,6 +34,7 @@ def main(argv: List[str] | None = None) -> int:
         script_name = argv[2] if len(argv) > 2 else ""
         script_args = argv[3:] if len(argv) > 3 else []
         rt = Runtime()
+        _apply_startup_options(rt, startup_changes)
         rt.c_string_mode = True
         rt.set_script_name(script_name)
         rt.set_positional_args(script_args)
@@ -77,6 +79,11 @@ def main(argv: List[str] | None = None) -> int:
         except KeyboardInterrupt:
             return 130
 
+    dump_lst = False
+    if "--dump-lst" in argv:
+        argv = [a for a in argv if a != "--dump-lst"]
+        dump_lst = True
+
     cli_opts, script, script_args = _split_cli_argv(argv)
     shebang_args: List[str] = []
 
@@ -88,12 +95,13 @@ def main(argv: List[str] | None = None) -> int:
         source = sys.stdin.read()
 
     full_argv = cli_opts + shebang_args + ([script] if script else []) + script_args
-
-    parser = argparse.ArgumentParser(prog="mctash")
-    parser.add_argument("--dump-lst", action="store_true", help="print LST as ASDL-like JSON and exit")
-    parser.add_argument("script", nargs="?", help="script file to run")
-    parser.add_argument("script_args", nargs=argparse.REMAINDER, help="args passed to the script")
-    args = parser.parse_args(full_argv)
+    startup_changes2, full_argv = _parse_startup_options(full_argv)
+    startup_changes.update(startup_changes2)
+    args = argparse.Namespace(
+        dump_lst=dump_lst,
+        script=(full_argv[0] if full_argv and not full_argv[0].startswith("-") else None),
+        script_args=(full_argv[1:] if full_argv and not full_argv[0].startswith("-") else []),
+    )
 
     if args.dump_lst:
         script = Parser(source).parse_script()
@@ -102,6 +110,7 @@ def main(argv: List[str] | None = None) -> int:
         return 0
 
     rt = Runtime()
+    _apply_startup_options(rt, startup_changes)
     rt.c_string_mode = False
     rt.set_script_name(args.script or "")
     rt.set_positional_args(args.script_args)
@@ -172,6 +181,76 @@ def _split_cli_argv(argv: List[str]) -> Tuple[List[str], str | None, List[str]]:
             break
         opts.append(arg)
     return opts, script, script_args
+
+
+def _option_name_to_letter(name: str) -> str | None:
+    mapping = {
+        "allexport": "a",
+        "noclobber": "C",
+        "errexit": "e",
+        "noglob": "f",
+        "noexec": "n",
+        "nounset": "u",
+        "verbose": "v",
+        "xtrace": "x",
+        "ignoreeof": "I",
+        "interactive": "i",
+        "monitor": "m",
+        "vi": "V",
+        "emacs": "E",
+        "notify": "b",
+        "stdin": "s",
+        "privileged": "p",
+    }
+    return mapping.get(name.lower())
+
+
+def _parse_startup_options(argv: List[str]) -> Tuple[Dict[str, bool], List[str]]:
+    changes: Dict[str, bool] = {}
+    out: List[str] = []
+    i = 0
+    while i < len(argv):
+        arg = argv[i]
+        if arg in ["-c", "-s", "--"]:
+            out.extend(argv[i:])
+            break
+        if arg in ["-o", "+o"]:
+            if i + 1 >= len(argv):
+                out.append(arg)
+                break
+            name = argv[i + 1]
+            if name == "pipefail":
+                changes["pipefail"] = arg == "-o"
+            else:
+                letter = _option_name_to_letter(name)
+                if letter is not None:
+                    changes[letter] = arg == "-o"
+                else:
+                    out.extend([arg, name])
+            i += 2
+            continue
+        if (arg.startswith("-") or arg.startswith("+")) and len(arg) > 1 and not arg.startswith("--"):
+            on = arg[0] == "-"
+            ok = True
+            for ch in arg[1:]:
+                if ch in ["c", "s", "o"]:
+                    ok = False
+                    break
+                changes[ch] = on
+            if ok:
+                i += 1
+                continue
+        out.append(arg)
+        out.extend(argv[i + 1 :])
+        break
+    if i >= len(argv):
+        return changes, []
+    return changes, out
+
+
+def _apply_startup_options(rt: Runtime, changes: Dict[str, bool]) -> None:
+    for k, v in changes.items():
+        rt.options[k] = v
 
 
 def _strip_shebang_and_args(source: str) -> Tuple[str, List[str]]:
