@@ -64,14 +64,18 @@ Current mctash status:
 
 - We can credibly claim: **Python 3 ash-compatible shell behavior for the current BusyBox ash corpus**.
 - We should not yet claim: **full formal POSIX conformance** or **complete `man ash` facility/option parity**.
+- Threaded-runtime deltas from traditional fork-first ash/dash are tracked in:
+  - `docs/threaded-runtime-deviations.md`
 
 ## Next Conformance Work
 
 1. Add a POSIX requirement-to-test trace table (section-by-section references to tests).
 2. Add startup option parity (`-aCefnuvxIimqVEbp`, `-o/+o`) where in scope.
 3. Run/select additional corpus slices from Oil POSIX spec tests for independent confirmation.
-4. Document intentional divergences from traditional fork/job-control due to threaded execution model.
+4. Continue reducing documented threaded-runtime deviations where behavior-compatible fixes exist.
 
 Current trace table:
 
 - `docs/posix-trace-table.md`
+- Threaded-runtime deviations:
+  - `docs/threaded-runtime-deviations.md`
