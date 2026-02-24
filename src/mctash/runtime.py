@@ -894,6 +894,7 @@ class Runtime:
                     except BreakLoop as e:
                         if e.count > 1:
                             raise BreakLoop(e.count - 1)
+                        last = 0
                         break
                     should_run = cond_status != 0 if node.until else cond_status == 0
                     if not should_run:
@@ -909,6 +910,7 @@ class Runtime:
                     except BreakLoop as e:
                         if e.count > 1:
                             raise BreakLoop(e.count - 1)
+                        last = 0
                         break
                 return last
             finally:
@@ -1166,6 +1168,8 @@ class Runtime:
             items: List[str] = []
             for w in node.items:
                 items.extend(self._expand_argv([w]))
+        elif node.explicit_in:
+            items = []
         else:
             items = list(self.positional)
         status = 0

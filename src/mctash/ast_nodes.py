@@ -81,6 +81,7 @@ class ForCommand:
     name: str
     items: List[Word]
     body: "ListNode"
+    explicit_in: bool = False
 
 
 @dataclass

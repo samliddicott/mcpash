@@ -124,7 +124,11 @@ def parse_spec(path: Path) -> List[Case]:
 
 
 def run_case(
-    case: Case, shell_cmd: List[str], base_tmp: Path, helper_path: Optional[str]
+    case: Case,
+    shell_cmd: List[str],
+    base_tmp: Path,
+    helper_path: Optional[str],
+    workdir: Optional[str],
 ) -> Tuple[bool, str]:
     if case.skipped_reason:
         return True, f"SKIP {case.name}: {case.skipped_reason}"
@@ -145,6 +149,7 @@ def run_case(
             stderr=subprocess.PIPE,
             text=True,
             env=env,
+            cwd=workdir,
         )
 
         errs: List[str] = []
@@ -216,6 +221,11 @@ def main(argv: List[str]) -> int:
         default="",
         help="Optional directory prepended to PATH for test helpers like argv.py",
     )
+    ap.add_argument(
+        "--workdir",
+        default="",
+        help="Optional working directory used when executing test cases",
+    )
     ap.add_argument("spec_names", nargs="+")
     ns = ap.parse_args(argv)
 
@@ -236,7 +246,7 @@ def main(argv: List[str]) -> int:
         print(f"# {p.name} ({len(cases)} cases)")
         for c in cases:
             total += 1
-            ok, msg = run_case(c, shell_cmd, base_tmp, helper_path)
+            ok, msg = run_case(c, shell_cmd, base_tmp, helper_path, ns.workdir or None)
             if c.skipped_reason:
                 skipped += 1
             elif ok:

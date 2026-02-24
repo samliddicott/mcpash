@@ -33,10 +33,15 @@ run_subset() {
   if [[ ${#specs[@]} -eq 0 ]]; then
     specs=(smoke redirect word-split)
   fi
+  if [[ ! -e "${OIL_SRC}/tests" && -d "${OIL_SRC}/spec/testdata" ]]; then
+    ln -s spec/testdata "${OIL_SRC}/tests"
+  fi
+  mkdir -p "${OIL_SRC}/_tmp"
 
   PYTHONPATH="${ROOT}/src" \
     python3 "${ROOT}/src/tests/oil_subset_runner.py" \
       --spec-root "${SPEC_DIR}" \
+      --workdir "${OIL_SRC}" \
       --shell-cmd "python3 -m mctash" \
       --max-cases "${max_cases}" \
       --helper-path "${SPEC_BIN}" \

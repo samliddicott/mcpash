@@ -233,6 +233,7 @@ def _for_command(node: LstForCommand) -> Dict[str, Any]:
     return {
         "type": "command.ForEach",
         "iter_names": [node.name],
+        "explicit_in": node.explicit_in,
         "iterable": {
             "type": "for_iter.Words",
             "words": [word(w) for w in node.items],

@@ -119,7 +119,13 @@ def _asdl_command(node: Dict[str, Any]):
         iterable = node.get("iterable") or {}
         words = [Word(_word_to_text(w)) for w in iterable.get("words") or []]
         names = node.get("iter_names") or [""]
-        return ForCommand(name=names[0], items=words, body=_asdl_command_list(node.get("body") or {}))
+        explicit_in = bool(node.get("explicit_in", False))
+        return ForCommand(
+            name=names[0],
+            items=words,
+            body=_asdl_command_list(node.get("body") or {}),
+            explicit_in=explicit_in,
+        )
     if t == "command.Case":
         to_match = node.get("to_match") or {}
         value_node = to_match.get("word") if isinstance(to_match, dict) else None

@@ -87,6 +87,7 @@ class Parser:
         self.last_line: int | None = None
         self.pending_heredocs: List[tuple[Redirect, LstRedirect]] = []
         self.aliases: dict[str, str] = aliases if aliases is not None else {}
+        self._saw_command: bool = False
 
     def _peek(self) -> Optional[Token]:
         if not self.buffer:
@@ -212,6 +213,8 @@ class Parser:
             if tok is None:
                 return None
             if tok.kind == "OP" and tok.value in ["\n", ";"]:
+                if tok.value == ";" and not self._saw_command:
+                    raise ParseError(f"syntax error: unexpected ';' at {self._where(tok)}")
                 self._advance()
                 continue
             break
@@ -279,8 +282,10 @@ class Parser:
             )
             self.last_lst = wrapped_lst
             self.last_lst_item = LstListItem(node=wrapped_lst, terminator=None)
+            self._saw_command = True
             return ListItem(node=wrapped, background=False)
         self.last_lst_item = LstListItem(node=lst_node, terminator=terminator)
+        self._saw_command = True
         return ListItem(node=node, background=background)
 
     def parse_list(self) -> tuple[ListNode, LstListNode]:
@@ -712,6 +717,7 @@ class Parser:
             raise ParseError(f"expected name at {self._where(name_tok)}")
         items: List[Word] = []
         lst_items: List = []
+        explicit_in = False
         while True:
             tok = self._peek()
             if tok and tok.kind == "OP" and tok.value == "\n":
@@ -721,6 +727,7 @@ class Parser:
 
         tok = self._peek()
         if tok and self._is_word(tok) and tok.value == "in":
+            explicit_in = True
             self._advance()
             while True:
                 tok = self._peek()
@@ -757,8 +764,8 @@ class Parser:
         if done_tok is None or not self._is_word(done_tok) or done_tok.value != "done":
             raise ParseError(f"expected done at {self._where(done_tok)}")
         return (
-            ForCommand(name=name_tok.value, items=items, body=body),
-            LstForCommand(name=name_tok.value, items=lst_items, body=lst_body),
+            ForCommand(name=name_tok.value, items=items, body=body, explicit_in=explicit_in),
+            LstForCommand(name=name_tok.value, items=lst_items, body=lst_body, explicit_in=explicit_in),
         )
 
     def parse_case(self) -> tuple[CaseCommand, LstCaseCommand]:
@@ -813,6 +820,8 @@ class Parser:
                     self._advance()
                     continue
                 break
+            if self._looks_like_case_pattern_start():
+                raise ParseError(f"syntax error: empty case action at {self._where(self._peek())}")
             body, lst_body = self.parse_compound_list({";;", "esac"})
             tok = self._peek()
             if tok and tok.kind == "OP" and tok.value == ";;":
@@ -828,6 +837,25 @@ class Parser:
                 items=lst_items,
             ),
         )
+
+    def _looks_like_case_pattern_start(self) -> bool:
+        i = 0
+        while True:
+            tok = self._peek_n(i)
+            if tok is None:
+                return False
+            if tok.kind == "OP" and tok.value in ["\n", ";"]:
+                i += 1
+                continue
+            break
+        if self._is_word(tok) and tok.value == "esac":
+            return False
+        tok1 = self._peek_n(i + 1)
+        if tok1 and tok1.kind == "OP" and tok1.value in [")", "|"]:
+            return True
+        if self._is_word(tok) and tok.value.endswith("|"):
+            return True
+        return False
 
     def parse_if(self) -> tuple[IfCommand, LstIfCommand]:
         tok = self._advance()

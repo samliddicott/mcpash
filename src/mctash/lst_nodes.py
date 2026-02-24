@@ -133,6 +133,7 @@ class LstForCommand:
     name: str
     items: List[LstWord]
     body: "LstListNode"
+    explicit_in: bool = False
 
 
 @dataclass
