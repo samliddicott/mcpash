@@ -103,6 +103,16 @@ Additional independent check:
   - Initial target files: `smoke`, `redirect`, `word-split`
   - Purpose: independent semantics checks without replacing BusyBox ash corpus as primary gate.
 
+Local conformance gate (no external CI required):
+- `make regressions`
+  - Runs targeted regression checks for fragile semantics:
+    - `read` + mixed `IFS` edge behavior
+    - pipeline status/control-flow (`pipefail`, negation, pipeline `exit`)
+    - redirection/exec error mapping (`126/127`, bad fd)
+- `make conformance`
+  - Runs targeted regressions, then BusyBox ash corpus, then Oil subset corpus.
+  - Enforces baseline thresholds to catch regressions during local development.
+
 ## Open Decisions
 - Exact ash compliance criteria and test suite selection.
 - Final interop syntax ergonomics and error semantics.
