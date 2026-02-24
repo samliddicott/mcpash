@@ -3640,6 +3640,16 @@ class Runtime:
         rem = text[pos:]
         if ifs_ws:
             rem = rem.rstrip(ifs_ws)
+        if rem and ifs_other and rem[-1] in ifs_other:
+            # For read with multiple variables, drop exactly one trailing
+            # separator only when it is a single final separator token, not
+            # part of an already-adjacent separator sequence.
+            m = len(rem) - 1
+            while m > 0 and rem[m - 1] in ifs_ws:
+                m -= 1
+            prefix = rem[:m]
+            if not any(ch in ifs for ch in prefix):
+                rem = prefix
         out.append(rem)
         return out
 
