@@ -70,3 +70,7 @@ Current mctash status:
 2. Add startup option parity (`-aCefnuvxIimqVEbp`, `-o/+o`) where in scope.
 3. Run/select additional corpus slices from Oil POSIX spec tests for independent confirmation.
 4. Document intentional divergences from traditional fork/job-control due to threaded execution model.
+
+Current trace table:
+
+- `docs/posix-trace-table.md`

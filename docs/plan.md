@@ -105,3 +105,4 @@ Execution policy while iterating failures:
 
 ## Conformance Snapshot
 - Current conformance status matrix: `docs/conformance-matrix.md`
+- POSIX requirement-to-test trace table: `docs/posix-trace-table.md`
