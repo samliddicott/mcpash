@@ -1030,8 +1030,12 @@ class Runtime:
                 is_special = name in self.SPECIAL_BUILTINS
                 if is_special:
                     self.env = local_env
-                    with self._redirected_fds(node.redirects):
-                        return self._run_builtin(name, argv)
+                    try:
+                        with self._redirected_fds(node.redirects):
+                            return self._run_builtin(name, argv)
+                    except RuntimeError as e:
+                        print(str(e), file=sys.stderr)
+                        return 1
                 saved_env = self.env
                 try:
                     self.env = local_env
@@ -1710,15 +1714,12 @@ class Runtime:
 
     def _open_for_redir_readwrite(self, path: str) -> object:
         try:
-            return open(path, "r+b")
-        except FileNotFoundError:
-            try:
-                return open(path, "w+b")
-            except OSError as e:
-                reason = (e.strerror or "error").lower()
-                raise RuntimeError(self._format_error(f"can't create {path}: {reason}", line=self.current_line))
+            fd = os.open(path, os.O_RDWR | os.O_CREAT, 0o666)
+            return os.fdopen(fd, "r+b", buffering=0)
         except OSError as e:
             reason = (e.strerror or "error").lower()
+            if e.errno == 2:
+                raise RuntimeError(self._format_error(f"can't create {path}: {reason}", line=self.current_line))
             raise RuntimeError(self._format_error(f"can't open {path}: {reason}", line=self.current_line))
 
     def _dup2_file(self, f: object, fd: int) -> None:
@@ -2148,6 +2149,10 @@ class Runtime:
                     words.append(tok.value)
             out_fields: List[str] = []
             for w in words:
+                w_parts = parse_word_parts(w)
+                if w_parts and all(p.quoted for p in w_parts):
+                    out_fields.append(self._expand_assignment_word_protected(w))
+                    continue
                 out_fields.extend(
                     expand_word(
                         w,
@@ -2451,8 +2456,10 @@ class Runtime:
         for scope in self.local_stack:
             merged_env.update(scope)
         names = self._arith_capture_names(expr, merged_env)
+        positional = " ".join(shlex.quote(a) for a in self.positional)
         lines = [
             "set +u",
+            f"set -- {positional}",
             f"__mctash_result=$(({expr}))",
             'printf "__MCTASH_RESULT__=%s\\n" "$__mctash_result"',
         ]

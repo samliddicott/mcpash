@@ -13,6 +13,7 @@ _GLOB_PROTECT = {
     "!": "\ue008",
 }
 _GLOB_UNPROTECT = {v: k for k, v in _GLOB_PROTECT.items()}
+_QUOTED_EMPTY_MARK = "\ue00c"
 
 
 @dataclass
@@ -570,6 +571,10 @@ def expand_word(
     for idx, part in enumerate(parts):
         if part.kind == "LIT":
             value: Union[str, List[str]] = part.value
+            if part.quoted and value == "":
+                # Preserve explicit quoted-empty literals as word anchors
+                # around later unquoted field splitting.
+                value = _QUOTED_EMPTY_MARK
         elif part.kind == "PARAM":
             value = get_param(part.value, part.quoted)
         elif part.kind == "BRACED":
@@ -708,9 +713,8 @@ def expand_word(
                         continue
                     if len(pieces) == 1:
                         p = pieces[0]
-                        pos = value.find(p)
-                        lead_delim = pos > 0
-                        trail_delim = (pos + len(p)) < len(value)
+                        lead_delim = not value.startswith(p)
+                        trail_delim = not value.endswith(p)
                         if lead_delim and (f != "" or q):
                             new_fields.append((f, q, False, gm))
                             f = ""
@@ -721,20 +725,32 @@ def expand_word(
                             new_fields.append((f + p, q, True, gm or has_glob_meta(p)))
                     else:
                         first = pieces[0]
+                        lead_delim = not value.startswith(first)
+                        trail_delim = not value.endswith(pieces[-1])
+                        if lead_delim and (f != "" or q):
+                            new_fields.append((f, q, False, gm))
+                            f = ""
                         new_fields.append((f + first, q, False, gm or has_glob_meta(first)))
                         for p in pieces[1:-1]:
                             new_fields.append((p, q, False, has_glob_meta(p)))
                         last = pieces[-1]
-                        new_fields.append((last, q, True, has_glob_meta(last)))
+                        if trail_delim and idx < len(parts) - 1:
+                            new_fields.append((last, q, False, has_glob_meta(last)))
+                            new_fields.append(("", q, True, False))
+                        else:
+                            new_fields.append((last, q, True, has_glob_meta(last)))
                 fields = new_fields
 
     expanded: List[str] = []
     for f, quoted, _, has_meta in fields:
         rendered = _unprotect_glob_meta(f) if unprotect_literals else f
+        rendered = rendered.replace(_QUOTED_EMPTY_MARK, "")
         # Globbing is driven by unquoted meta presence, not by whether any
         # quoted fragments contributed to the same output field.
         if has_meta or not quoted:
-            expanded.extend(glob_field(f if unprotect_literals else rendered))
+            g = f if unprotect_literals else rendered
+            g = g.replace(_QUOTED_EMPTY_MARK, "")
+            expanded.extend(glob_field(g))
         else:
             expanded.append(rendered)
     return expanded
