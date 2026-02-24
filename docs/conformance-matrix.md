@@ -15,6 +15,11 @@ Latest corpus result:
 
 - BusyBox `ash_test`: `ok=343 fail=0 skip=0` within the configured timeout window.
 - `ash-z_slow/many_ifs.tests` can exceed the harness timeout budget.
+- Oil subset corpus (via `src/tests/run_oil_subset.sh`, first 25 cases each of
+  `smoke`, `redirect`, `word-split`):
+  - `pass=49 fail=9 skip=10`
+  - Failing areas currently center on non-whitespace IFS edge cases and a small
+    redirection restoration/empty-target behavior gap.
 
 ## Overall
 

@@ -98,6 +98,11 @@ Execution policy while iterating failures:
 3. Check `man ash` for implementation-specific behavior.
 4. Add/adjust parser/runtime behavior and rerun the failing test set.
 
+Additional independent check:
+- Oil POSIX-oriented subset runner: `src/tests/run_oil_subset.sh`
+  - Initial target files: `smoke`, `redirect`, `word-split`
+  - Purpose: independent semantics checks without replacing BusyBox ash corpus as primary gate.
+
 ## Open Decisions
 - Exact ash compliance criteria and test suite selection.
 - Final interop syntax ergonomics and error semantics.
