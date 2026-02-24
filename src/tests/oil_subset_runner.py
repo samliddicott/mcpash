@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import shlex
 import subprocess
 import sys
 import tempfile
@@ -128,6 +129,7 @@ def run_case(
     shell_cmd: List[str],
     base_tmp: Path,
     helper_path: Optional[str],
+    shell_path: Optional[str],
     workdir: Optional[str],
 ) -> Tuple[bool, str]:
     if case.skipped_reason:
@@ -142,6 +144,8 @@ def run_case(
         env["TMP"] = str(td_path)
         if helper_path:
             env["PATH"] = helper_path + os.pathsep + env.get("PATH", "")
+        if shell_path:
+            env["SH"] = shell_path
 
         proc = subprocess.run(
             shell_cmd + [str(script_path)],
@@ -206,6 +210,18 @@ def make_py3_argv_helper(base_tmp: Path) -> str:
     return helper_dir
 
 
+def make_shell_wrapper(base_tmp: Path, shell_cmd: List[str]) -> str:
+    wrapper_dir = tempfile.mkdtemp(prefix="mctash-shell-wrapper-", dir=str(base_tmp))
+    wrapper_path = Path(wrapper_dir) / "sh"
+    wrapper_path.write_text(
+        "#!/usr/bin/env bash\n"
+        f"exec {shlex.join(shell_cmd)} \"$@\"\n",
+        encoding="utf-8",
+    )
+    wrapper_path.chmod(0o755)
+    return str(wrapper_path)
+
+
 def main(argv: List[str]) -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--spec-root", required=True)
@@ -238,6 +254,7 @@ def main(argv: List[str]) -> int:
     shell_cmd = ns.shell_cmd.split()
     base_tmp = Path(tempfile.gettempdir())
     shim_dir = make_py3_argv_helper(base_tmp)
+    shell_wrapper = make_shell_wrapper(base_tmp, shell_cmd)
     helper_path = shim_dir
     if ns.helper_path:
         helper_path = helper_path + os.pathsep + ns.helper_path
@@ -250,7 +267,7 @@ def main(argv: List[str]) -> int:
         print(f"# {p.name} ({len(cases)} cases)")
         for c in cases:
             total += 1
-            ok, msg = run_case(c, shell_cmd, base_tmp, helper_path, ns.workdir or None)
+            ok, msg = run_case(c, shell_cmd, base_tmp, helper_path, shell_wrapper, ns.workdir or None)
             if c.skipped_reason:
                 skipped += 1
             elif ok:

@@ -89,6 +89,11 @@ class Runtime:
         "verbose": "v",
         "xtrace": "x",
         "noclobber": "C",
+        "vi": "V",
+        "emacs": "E",
+        "interactive": "i",
+        "monitor": "m",
+        "notify": "b",
         "pipefail": "pipefail",
     }
     ENV_MUTATING_BUILTINS = {
@@ -106,6 +111,7 @@ class Runtime:
         ":",
         ".",
         "source",
+        "local",
         "break",
         "continue",
         "eval",
@@ -2896,10 +2902,13 @@ class Runtime:
 
     def _run_eval(self, args: List[str]) -> int:
         source = " ".join(args)
-        status = self._eval_source(source, parse_context="eval", line_offset=1)
-        if status != 0:
-            raise SystemExit(status)
-        return 0
+        return self._eval_source(
+            source,
+            propagate_exit=True,
+            propagate_return=True,
+            parse_context="eval",
+            line_offset=1,
+        )
 
     def _run_declare(self, args: List[str]) -> int:
         if args and args[0] == "-F":

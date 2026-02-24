@@ -31,7 +31,6 @@ from .lst_nodes import (
     LstCaseItem,
     LstCommandSubPart,
     LstCommand,
-    LstControlFlowCommand,
     LstDoubleQuotedPart,
     LstForCommand,
     LstFunctionDef,
@@ -566,9 +565,6 @@ class Parser:
         lst_simple_cmd = LstSimpleCommand(argv=lst_argv, assignments=lst_assignments, redirects=lst_redirects)
         if not argv and assignments:
             return simple_cmd, LstShAssignmentCommand(assignments=lst_assignments, redirects=lst_redirects)
-        if argv and argv[0].text in ["break", "continue", "return", "exit"]:
-            arg = lst_argv[1] if len(lst_argv) > 1 else None
-            return simple_cmd, LstControlFlowCommand(keyword=argv[0].text, arg=arg)
         return simple_cmd, lst_simple_cmd
 
     def _is_assignment(self, text: str) -> bool:
