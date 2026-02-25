@@ -5,6 +5,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 CASES_DIR="${ROOT}/tests/diff/cases"
 LOG_DIR="${ROOT}/tests/diff/logs"
 ASH_BIN="${ASH_BIN:-ash}"
+read -r -a ASH_CMD <<< "${ASH_BIN}"
 MCTASH_CMD="${MCTASH_CMD:-PYTHONPATH=${ROOT}/src python3 -m mctash}"
 
 GENERATE_EXPECTED=0
@@ -102,7 +103,7 @@ for case in "${CASE_FILES[@]}"; do
 
   if [[ ${ASH_ONLY} -eq 0 ]]; then
     ash_status=0
-    if ! "${ASH_BIN}" "${CASES_DIR}/${case}" >"${ash_stdout}" 2>"${ash_stderr}"; then
+    if ! "${ASH_CMD[@]}" "${CASES_DIR}/${case}" >"${ash_stdout}" 2>"${ash_stderr}"; then
       ash_status=$?
     fi
   fi

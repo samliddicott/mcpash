@@ -36,11 +36,14 @@ The script runs `ash` first, then `mctash`, saves their outputs under `tests/dif
 - `man-ash-resource.sh` touches `hash`, `times`, `umask`, and `ulimit` output behavior.
 - `man-ash-jobs.sh` exercises `jobs`, `fg`, and `bg` job control commands.
 - `man-ash-logic.sh` tests `:`/`true`/`false`, `exit` status behavior, `break`/`continue`, and `return`.
-- `man-ash-alias.sh` covers `alias`, `command`, and `builtin` interactions.
+- `man-ash-alias.sh` covers `alias`, `command`, `builtin`, and `unalias` interactions.
 - `man-ash-cd-source.sh` covers `cd` directory changes plus `.`/`source`.
 - `man-ash-eval-exec.sh` targets `eval` expression parsing and `exec` replacing the shell.
 - `man-ash-printf-echo.sh` exercises `printf`/`echo` argument forms, quoting, newlines, and escapes.
 - `man-ash-shift.sh` inspects `shift` defaults, multi shifts, and error status behavior.
+- `man-ash-fc.sh` exercises the `fc` history-listing and re-execution flags.
+- `man-ash-pwd.sh` validates `pwd` output and the `PWD` variable after directory changes.
+- `man-ash-type.sh` checks `type` output for functions, builtins, keywords, and missing commands.
 
 ## Next steps
 1. Add cases for each builtin and option sequence described in `man ash` (use subsection identifiers as labels).
