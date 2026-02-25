@@ -21,7 +21,7 @@ Scope note:
 | `-e` | errexit | Implemented | Startup behavior active. |
 | `-f` | noglob | Implemented | Startup behavior active (pathname expansion disabled). |
 | `-n` | noexec | Implemented | Startup behavior active (parse-only). |
-| `-u` | nounset | Implemented (with known status-code divergence) | Startup behavior active; unset parameter error exits non-zero (currently status 1 in mctash). |
+| `-u` | nounset | Implemented | Startup behavior active; unset parameter error exits with status 2. |
 | `-v` | verbose | Partial | Parsed and exposed in options; full ash-verbose output parity not claimed. |
 | `-x` | xtrace | Partial | Parsed and used; formatting parity is implementation-specific. |
 | `-I` | ignoreeof | Parsed (out-of-scope runtime effect) | Interactive behavior not in current scope. |

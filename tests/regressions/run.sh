@@ -121,7 +121,7 @@ set +e
 PYTHONPATH="$ROOT/src" python3 -m mctash -u -c 'echo $UNSET' >"$tmpdir/out" 2>"$tmpdir/err"
 status=$?
 set -e
-[[ "$status" -eq 1 ]] || fail "startup_nounset_status: expected status 1, got $status"
+[[ "$status" -eq 2 ]] || fail "startup_nounset_status: expected status 2, got $status"
 grep -Fq 'unbound variable: UNSET' "$tmpdir/err" || fail "startup_nounset_status: expected unbound variable diagnostic"
 printf '[PASS] startup_nounset_status\n'
 

@@ -16,6 +16,7 @@ import sys
 import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
+import re
 from typing import Dict, Iterable, List, Optional, Tuple
 
 
@@ -26,6 +27,7 @@ class Case:
     expected_status: int = 0
     expected_stdout: Optional[str] = None
     expected_stderr: Optional[str] = None
+    alt_statuses: List[int] = field(default_factory=list)
     skipped_reason: Optional[str] = None
     raw_assertions: List[str] = field(default_factory=list)
 
@@ -122,8 +124,10 @@ def parse_spec(path: Path) -> List[Case]:
                 elif line.startswith("## N-I") or line.startswith("## BUG"):
                     c.skipped_reason = "non-portable Oil-specific assertion annotation"
                 elif line.startswith("## OK") or line.startswith("## notes:"):
-                    # Informational in spec corpus.
-                    pass
+                    # Some specs include shell-specific acceptable alternatives.
+                    m = re.match(r"## OK [^:]+ status:\s*([0-9]+)\s*$", line)
+                    if m:
+                        c.alt_statuses.append(int(m.group(1)))
                 else:
                     c.skipped_reason = f"unsupported assertion directive: {line}"
                 continue
@@ -170,7 +174,8 @@ def run_case(
         if case.expected_status == 99:
             status_ok = proc.returncode != 0
         else:
-            status_ok = proc.returncode == case.expected_status
+            accepted = [case.expected_status] + case.alt_statuses
+            status_ok = proc.returncode in accepted
         if not status_ok:
             errs.append(
                 f"status expected={case.expected_status} actual={proc.returncode}"

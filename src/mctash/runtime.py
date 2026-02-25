@@ -972,6 +972,8 @@ class Runtime:
                 print(msg, file=sys.stderr)
                 if "bad substitution" in msg:
                     raise SystemExit(2)
+                if "unbound variable:" in msg:
+                    raise SystemExit(2)
                 raise SystemExit(1)
             except CommandSubstFailure as e:
                 return e.code
