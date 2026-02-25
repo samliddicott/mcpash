@@ -54,9 +54,22 @@ Current mctash status:
 
 - Runtime `set` options currently used by tests: `implemented` (`-e`, `-f`, `-n`, `-u`, `-v`, `-x`, `pipefail`).
 - Startup option parsing: `partial` but improved for non-interactive paths (`-/+` letter flags, `-o/+o name` for supported names and `pipefail`).
+- `set -o` / `set +o` listing behavior: `implemented` for in-scope option names.
 - Interactive/editor/job-control flags (`-i`, `-m`, `-V`, `-E`, etc.): `partial`/`not target` for this milestone.
 - Startup CLI option parity with `ash` synopsis: `partial` (mctash CLI currently focuses on script execution + `--dump-lst`).
 - Builtins exercised by BusyBox ash corpus: `implemented for tested semantics`.
+
+In-scope option parity right now:
+
+- non-interactive startup option parsing (`-`/`+` single-letter flags in implemented set)
+- `-o`/`+o` with supported names
+- `set -o` status listing and `set +o` re-creatable listing
+
+Explicitly out-of-scope for current milestone:
+
+- full interactive/editor UX parity
+- full job-control parity
+- complete startup flag matrix beyond currently implemented and tested options
 
 ## OSH ASDL Foundation
 

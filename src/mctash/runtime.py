@@ -80,6 +80,26 @@ class ArithExpansionFailure(Exception):
 
 
 class Runtime:
+    SET_O_LIST_ORDER: List[str] = [
+        "errexit",
+        "noglob",
+        "ignoreeof",
+        "interactive",
+        "monitor",
+        "noexec",
+        "stdin",
+        "xtrace",
+        "verbose",
+        "vi",
+        "emacs",
+        "noclobber",
+        "allexport",
+        "notify",
+        "nounset",
+        "privileged",
+        "quiet",
+        "pipefail",
+    ]
     SET_O_OPTION_MAP: Dict[str, str] = {
         "allexport": "a",
         "errexit": "e",
@@ -2982,7 +3002,22 @@ class Runtime:
             return 0
         if args[0] in ["-o", "+o"]:
             if len(args) < 2:
-                return 1
+                if args[0] == "-o":
+                    print("Current option settings")
+                    for name in self.SET_O_LIST_ORDER:
+                        mapped = self.SET_O_OPTION_MAP.get(name)
+                        if mapped is None:
+                            continue
+                        state = "on" if self.options.get(mapped, False) else "off"
+                        print(f"{name:<15} {state}")
+                else:
+                    for name in self.SET_O_LIST_ORDER:
+                        mapped = self.SET_O_OPTION_MAP.get(name)
+                        if mapped is None:
+                            continue
+                        state = "-" if self.options.get(mapped, False) else "+"
+                        print(f"set {state}o {name}")
+                return 0
             name = args[1]
             mapped = self.SET_O_OPTION_MAP.get(name)
             if mapped is None:

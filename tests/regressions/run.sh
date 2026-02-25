@@ -125,4 +125,21 @@ set -e
 grep -Fq 'illegal option -- z' "$tmpdir/err" || fail "startup_illegal_option: expected illegal option diagnostic"
 printf '[PASS] startup_illegal_option\n'
 
+set +e
+PYTHONPATH="$ROOT/src" python3 -m mctash -c 'set -o' >"$tmpdir/out" 2>"$tmpdir/err"
+status=$?
+set -e
+[[ "$status" -eq 0 ]] || fail "set_dash_o_list: expected status 0, got $status"
+grep -Fq 'Current option settings' "$tmpdir/out" || fail "set_dash_o_list: missing header"
+grep -Fq 'errexit' "$tmpdir/out" || fail "set_dash_o_list: missing errexit row"
+printf '[PASS] set_dash_o_list\n'
+
+set +e
+PYTHONPATH="$ROOT/src" python3 -m mctash -c 'set +o' >"$tmpdir/out" 2>"$tmpdir/err"
+status=$?
+set -e
+[[ "$status" -eq 0 ]] || fail "set_plus_o_list: expected status 0, got $status"
+grep -Fq 'set +o errexit' "$tmpdir/out" || fail "set_plus_o_list: missing errexit line"
+printf '[PASS] set_plus_o_list\n'
+
 printf '[PASS] all regressions (including startup options)\n'
