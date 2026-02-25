@@ -37,7 +37,7 @@ Checklist links:
 - `ControlFlow`: implemented
 - `Pipeline`: implemented
 - `AndOr`: implemented
-- `DoGroup`: missing
+- `DoGroup`: implemented
 - `BraceGroup`: implemented
 - `Subshell`: implemented
 - `DParen`: missing
@@ -58,7 +58,7 @@ Checklist links:
 - `Func`: missing
 - `Retval`: missing
 
-Summary: implemented `15`, missing `14`.
+Summary: implemented `16`, missing `13`.
 Checklist links:
 - `docs/grammar-production-checklist.md#grammar-families`
 

@@ -32,6 +32,7 @@ from .lst_nodes import (
     LstCommandSubPart,
     LstCommand,
     LstDoubleQuotedPart,
+    LstDoGroup,
     LstForCommand,
     LstFunctionDef,
     LstGroupCommand,
@@ -781,7 +782,12 @@ class Parser:
             raise ParseError(f"expected done at {self._where(done_tok)}")
         return (
             ForCommand(name=name_tok.value, items=items, body=body, explicit_in=explicit_in),
-            LstForCommand(name=name_tok.value, items=lst_items, body=lst_body, explicit_in=explicit_in),
+            LstForCommand(
+                name=name_tok.value,
+                items=lst_items,
+                body=LstDoGroup(body=lst_body),
+                explicit_in=explicit_in,
+            ),
         )
 
     def parse_case(self) -> tuple[CaseCommand, LstCaseCommand]:
@@ -962,7 +968,7 @@ class Parser:
             raise ParseError(f"expected done at {self._where(done_tok)}")
         return (
             WhileCommand(cond=cond, body=body, until=until),
-            LstWhileCommand(cond=lst_cond, body=lst_body, until=until),
+            LstWhileCommand(cond=lst_cond, body=LstDoGroup(body=lst_body), until=until),
         )
 
     def _looks_like_function_def(self) -> bool:

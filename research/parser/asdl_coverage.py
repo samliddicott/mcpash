@@ -57,6 +57,7 @@ def main() -> None:
             "Simple",
             "Pipeline",
             "AndOr",
+            "DoGroup",
             "BraceGroup",
             "Subshell",
             "If",

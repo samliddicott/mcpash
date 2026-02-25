@@ -113,7 +113,7 @@ class LstIfCommand:
 @dataclass
 class LstWhileCommand:
     cond: "LstListNode"
-    body: "LstListNode"
+    body: "LstDoGroup"
     until: bool = False
 
 
@@ -132,8 +132,13 @@ class LstSubshellCommand:
 class LstForCommand:
     name: str
     items: List[LstWord]
-    body: "LstListNode"
+    body: "LstDoGroup"
     explicit_in: bool = False
+
+
+@dataclass
+class LstDoGroup:
+    body: "LstListNode"
 
 
 @dataclass

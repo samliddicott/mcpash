@@ -110,7 +110,7 @@ def _asdl_command(node: Dict[str, Any]):
         kw = _token_text(node.get("keyword"))
         return WhileCommand(
             cond=_asdl_command_list(node.get("cond") or {}),
-            body=_asdl_command_list(node.get("body") or {}),
+            body=_asdl_do_group_body(node.get("body") or {}),
             until=(kw == "until"),
         )
     if t == "command.ShFunction":
@@ -123,7 +123,7 @@ def _asdl_command(node: Dict[str, Any]):
         return ForCommand(
             name=names[0],
             items=words,
-            body=_asdl_command_list(node.get("body") or {}),
+            body=_asdl_do_group_body(node.get("body") or {}),
             explicit_in=explicit_in,
         )
     if t == "command.Case":
@@ -168,6 +168,18 @@ def _asdl_command_list(node: Dict[str, Any]) -> ListNode:
     for child in node.get("children") or []:
         items.append(asdl_item_to_list_item(child))
     return ListNode(items=items)
+
+
+def _asdl_do_group_body(node: Dict[str, Any]) -> ListNode:
+    t = node.get("type")
+    if t == "command.DoGroup":
+        items: List[ListItem] = []
+        for child in node.get("children") or []:
+            items.append(asdl_item_to_list_item(child))
+        return ListNode(items=items)
+    if t == "command.CommandList":
+        return _asdl_command_list(node)
+    raise OshAdapterError(f"expected command.DoGroup or command.CommandList, got {t}")
 
 
 def _asdl_action_list(action: List[Dict[str, Any]]) -> ListNode:

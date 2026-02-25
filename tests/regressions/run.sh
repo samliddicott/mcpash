@@ -218,6 +218,19 @@ printf '[PASS] diag_expected_do\n'
 
 printf '[PASS] diagnostic format regressions\n'
 
+cat >"$tmpdir/asdl_do_group.sh" <<'EOF'
+while false; do
+  echo x
+done
+EOF
+set +e
+PYTHONPATH="$ROOT/src" python3 -m mctash --dump-lst "$tmpdir/asdl_do_group.sh" >"$tmpdir/out" 2>"$tmpdir/err"
+status=$?
+set -e
+[[ "$status" -eq 0 ]] || fail "asdl_do_group_mapping: expected status 0, got $status"
+grep -Fq '"type": "command.DoGroup"' "$tmpdir/out" || fail "asdl_do_group_mapping: expected command.DoGroup in ASDL dump"
+printf '[PASS] asdl_do_group_mapping\n'
+
 # Startup option parity checks.
 set +e
 PYTHONPATH="$ROOT/src" python3 -m mctash -eu -c 'echo "$-"' >"$tmpdir/out" 2>"$tmpdir/err"

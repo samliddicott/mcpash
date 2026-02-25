@@ -11,6 +11,7 @@ from .lst_nodes import (
     LstCaseItem,
     LstCommandSubPart,
     LstControlFlowCommand,
+    LstDoGroup,
     LstDoubleQuotedPart,
     LstForCommand,
     LstFunctionDef,
@@ -225,7 +226,7 @@ def _while_command(node: LstWhileCommand) -> Dict[str, Any]:
         "type": "command.WhileUntil",
         "keyword": token(keyword),
         "cond": _lst_andor_list(node.cond),
-        "body": _lst_andor_list(node.body),
+        "body": _do_group(node.body),
     }
 
 
@@ -238,7 +239,16 @@ def _for_command(node: LstForCommand) -> Dict[str, Any]:
             "type": "for_iter.Words",
             "words": [word(w) for w in node.items],
         },
-        "body": _lst_andor_list(node.body),
+        "body": _do_group(node.body),
+    }
+
+
+def _do_group(node: LstDoGroup) -> Dict[str, Any]:
+    return {
+        "type": "command.DoGroup",
+        "left": token("do"),
+        "children": [_lst_list_item_to_command(n) for n in node.body.items],
+        "right": token("done"),
     }
 
 
