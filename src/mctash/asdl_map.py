@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from typing import Any, Dict, List, Optional
 
 from .lst_nodes import (
@@ -308,7 +309,11 @@ def word_part(part: LstWordPart) -> Dict[str, Any]:
             "syntax": part.style,
         }
     if isinstance(part, LstArithSubPart):
-        return {"type": "word_part.ArithSub", "expr_source": part.source}
+        return {
+            "type": "word_part.ArithSub",
+            "expr_source": part.source,
+            "anode": arith_expr(part.source),
+        }
     return {"type": "word_part.Literal", "tval": ""}
 
 
@@ -327,3 +332,99 @@ def token_pos(pos: LstTokenPos) -> Dict[str, Any]:
             "index": pos.index,
         },
     }
+
+
+_ARITH_TOKEN_RE = re.compile(
+    r"\s*(\+=|-=|\*=|/=|%=|<<|>>|==|!=|<=|>=|&&|\|\||[A-Za-z_][A-Za-z0-9_]*|[0-9]+|.)"
+)
+
+
+def arith_expr(source: str) -> Dict[str, Any]:
+    tokens = _arith_tokens(source)
+    if not tokens:
+        return {"type": "arith_expr.EmptyZero"}
+    idx, node = _parse_arith_assignment(tokens, 0)
+    if idx != len(tokens):
+        return {"type": "arith_expr.Word", "value": source.strip()}
+    return node
+
+
+def _arith_tokens(source: str) -> List[str]:
+    tokens: List[str] = []
+    i = 0
+    while i < len(source):
+        m = _ARITH_TOKEN_RE.match(source, i)
+        if not m:
+            break
+        tok = m.group(1)
+        i = m.end()
+        if tok.isspace():
+            continue
+        tokens.append(tok)
+    return tokens
+
+
+def _parse_arith_assignment(tokens: List[str], i: int) -> tuple[int, Dict[str, Any]]:
+    i, left = _parse_arith_add(tokens, i)
+    if i < len(tokens) and tokens[i] in {"=", "+=", "-=", "*=", "/=", "%="}:
+        op = tokens[i]
+        i, right = _parse_arith_assignment(tokens, i + 1)
+        return i, {
+            "type": "arith_expr.BinaryAssign",
+            "op": token(op),
+            "left": left,
+            "right": right,
+        }
+    return i, left
+
+
+def _parse_arith_add(tokens: List[str], i: int) -> tuple[int, Dict[str, Any]]:
+    i, left = _parse_arith_mul(tokens, i)
+    while i < len(tokens) and tokens[i] in {"+", "-"}:
+        op = tokens[i]
+        i, right = _parse_arith_mul(tokens, i + 1)
+        left = {
+            "type": "arith_expr.Binary",
+            "op": token(op),
+            "left": left,
+            "right": right,
+        }
+    return i, left
+
+
+def _parse_arith_mul(tokens: List[str], i: int) -> tuple[int, Dict[str, Any]]:
+    i, left = _parse_arith_unary(tokens, i)
+    while i < len(tokens) and tokens[i] in {"*", "/", "%"}:
+        op = tokens[i]
+        i, right = _parse_arith_unary(tokens, i + 1)
+        left = {
+            "type": "arith_expr.Binary",
+            "op": token(op),
+            "left": left,
+            "right": right,
+        }
+    return i, left
+
+
+def _parse_arith_unary(tokens: List[str], i: int) -> tuple[int, Dict[str, Any]]:
+    if i < len(tokens) and tokens[i] in {"+", "-", "!"}:
+        op = tokens[i]
+        i, child = _parse_arith_unary(tokens, i + 1)
+        return i, {"type": "arith_expr.Unary", "op": token(op), "child": child}
+    return _parse_arith_primary(tokens, i)
+
+
+def _parse_arith_primary(tokens: List[str], i: int) -> tuple[int, Dict[str, Any]]:
+    if i >= len(tokens):
+        return i, {"type": "arith_expr.EmptyOne"}
+    tok = tokens[i]
+    if tok == "(":
+        i, node = _parse_arith_assignment(tokens, i + 1)
+        if i < len(tokens) and tokens[i] == ")":
+            return i + 1, node
+        return i, {"type": "arith_expr.Word", "value": "("}
+    if tok.isdigit():
+        return i + 1, {"type": "arith_expr.Word", "value": tok}
+    if tok and (tok[0].isalpha() or tok[0] == "_"):
+        return i + 1, {"type": "arith_expr.VarSub", "name": tok}
+    return i + 1, {"type": "arith_expr.Word", "value": tok}

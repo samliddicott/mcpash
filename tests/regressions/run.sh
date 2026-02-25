@@ -231,6 +231,23 @@ set -e
 grep -Fq '"type": "command.DoGroup"' "$tmpdir/out" || fail "asdl_do_group_mapping: expected command.DoGroup in ASDL dump"
 printf '[PASS] asdl_do_group_mapping\n'
 
+cat >"$tmpdir/asdl_arith_expr.sh" <<'EOF'
+a=1
+echo $((a+2*3))
+echo $((-a))
+echo $((a+=4))
+EOF
+set +e
+PYTHONPATH="$ROOT/src" python3 -m mctash --dump-lst "$tmpdir/asdl_arith_expr.sh" >"$tmpdir/out" 2>"$tmpdir/err"
+status=$?
+set -e
+[[ "$status" -eq 0 ]] || fail "asdl_arith_expr_mapping: expected status 0, got $status"
+grep -Fq '"type": "arith_expr.VarSub"' "$tmpdir/out" || fail "asdl_arith_expr_mapping: missing arith_expr.VarSub"
+grep -Fq '"type": "arith_expr.Binary"' "$tmpdir/out" || fail "asdl_arith_expr_mapping: missing arith_expr.Binary"
+grep -Fq '"type": "arith_expr.Unary"' "$tmpdir/out" || fail "asdl_arith_expr_mapping: missing arith_expr.Unary"
+grep -Fq '"type": "arith_expr.BinaryAssign"' "$tmpdir/out" || fail "asdl_arith_expr_mapping: missing arith_expr.BinaryAssign"
+printf '[PASS] asdl_arith_expr_mapping\n'
+
 # Startup option parity checks.
 set +e
 PYTHONPATH="$ROOT/src" python3 -m mctash -eu -c 'echo "$-"' >"$tmpdir/out" 2>"$tmpdir/err"

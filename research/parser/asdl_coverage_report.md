@@ -90,15 +90,15 @@ Checklist links:
 ## arith_expr
 - `EmptyZero`: missing
 - `EmptyOne`: missing
-- `VarSub`: missing
-- `Word`: missing
+- `VarSub`: implemented
+- `Word`: implemented
 - `UnaryAssign`: missing
-- `BinaryAssign`: missing
-- `Unary`: missing
-- `Binary`: missing
+- `BinaryAssign`: implemented
+- `Unary`: implemented
+- `Binary`: implemented
 - `TernaryOp`: missing
 
-Summary: implemented `0`, missing `9`.
+Summary: implemented `5`, missing `4`.
 Checklist links:
 - `docs/grammar-production-checklist.md#word-level-grammar-sub-checklist`
 

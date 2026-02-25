@@ -24,12 +24,12 @@ Primary input:
 | S1 | `assign_op` (`Equal`, `PlusEqual`) | Done | `tests/regressions/run.sh` (`assign_plus_equal`), BusyBox assignment suite | Coverage report now marks both variants implemented. |
 | S2 | `command.DoGroup` alignment | Done | `tests/busybox/ash_test/ash-misc/while*.tests`, `tests/oil/oils-master/spec/loop.test.sh`, `tests/oil/oils-master/spec/shell-grammar.test.sh` | Loop bodies now map through explicit `command.DoGroup` in ASDL mapping and adapter path. |
 | S3 | `redir_param.HereWord` decision | Planned | N/A | Likely out of ash scope (`<<<`), but should be explicitly documented as deferred/out-of-scope. |
-| S4 | arithmetic-expression variant mapping (`arith_expr.*`) | Planned | `tests/busybox/ash_test/ash-arith/*.tests` | Runtime behavior exists for many arithmetic forms; ASDL coverage/mapping remains coarse. |
+| S4 | arithmetic-expression variant mapping (`arith_expr.*`) | In Progress | `tests/regressions/run.sh` (`asdl_arith_expr_mapping`), `tests/busybox/ash_test/ash-arith/*.tests` | ASDL dump now emits structured nodes for core variants (`Word`, `VarSub`, `Unary`, `Binary`, `BinaryAssign`); remaining exotic forms still pending. |
 | S5 | boolean-expression variants (`bool_expr.*`) | Planned | `tests/busybox/ash_test/ash-quoting/*`, parsing tests | Depends on whether `[[ ... ]]` and extended tests remain in milestone scope. |
 
 ## Next Slice
 
-- Execute S4 (arithmetic-expression variant mapping) with:
-  1. AST/LST-to-ASDL node shape review for arithmetic operators
-  2. targeted `ash-arith`/Oil arithmetic tests per operator family
-  3. coverage report update only when variant is evidenced
+- Continue S4 with:
+  1. extend mapping coverage for ternary/logical/shift operators
+  2. add targeted `ash-arith`/Oil arithmetic evidence rows per added operator
+  3. update coverage report only for variants with regression evidence

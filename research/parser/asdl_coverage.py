@@ -75,6 +75,13 @@ def main() -> None:
         "redir_loc": {"Fd"},
         "word": {"Compound"},
         "assign_op": {"Equal", "PlusEqual"},
+        "arith_expr": {
+            "Word",
+            "VarSub",
+            "Unary",
+            "Binary",
+            "BinaryAssign",
+        },
     }
 
     lines = ["# ASDL Coverage Report", ""]
