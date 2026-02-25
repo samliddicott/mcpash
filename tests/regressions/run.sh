@@ -216,6 +216,24 @@ grep -Eq '^mctash -c: line 1: syntax error:' "$tmpdir/err" || fail "diag_expecte
 grep -Fq 'expecting "do"' "$tmpdir/err" || fail "diag_expected_do: expected hint about do"
 printf '[PASS] diag_expected_do\n'
 
+set +e
+PYTHONPATH="$ROOT/src" python3 -m mctash -c 'if true; do echo x; fi' >"$tmpdir/out" 2>"$tmpdir/err"
+status=$?
+set -e
+[[ "$status" -eq 2 ]] || fail "diag_expected_then: expected status 2, got $status"
+grep -Eq '^mctash -c: line 1: syntax error:' "$tmpdir/err" || fail "diag_expected_then: expected line-prefixed syntax error"
+grep -Fq 'expecting "then"' "$tmpdir/err" || fail "diag_expected_then: expected hint about then"
+printf '[PASS] diag_expected_then\n'
+
+set +e
+PYTHONPATH="$ROOT/src" python3 -m mctash -c 'while true; do echo x' >"$tmpdir/out" 2>"$tmpdir/err"
+status=$?
+set -e
+[[ "$status" -eq 2 ]] || fail "diag_expected_done_eof: expected status 2, got $status"
+grep -Eq '^mctash -c: line 1: syntax error:' "$tmpdir/err" || fail "diag_expected_done_eof: expected line-prefixed syntax error"
+grep -Fq 'expecting "done"' "$tmpdir/err" || fail "diag_expected_done_eof: expected hint about done"
+printf '[PASS] diag_expected_done_eof\n'
+
 printf '[PASS] diagnostic format regressions\n'
 
 cat >"$tmpdir/asdl_do_group.sh" <<'EOF'

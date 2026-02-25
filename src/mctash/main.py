@@ -302,7 +302,7 @@ def _normalize_parse_error(msg: str) -> tuple[str, int | None]:
     if msg.startswith("expected then at "):
         where = msg[len("expected then at ") :]
         line_s = where.split(":", 1)[0]
-        return 'syntax error: unexpected ")"', int(line_s) if line_s.isdigit() else None
+        return 'syntax error: unexpected token (expecting "then")', int(line_s) if line_s.isdigit() else None
     if msg.startswith("expected done at "):
         where = msg[len("expected done at ") :]
         line_s = where.split(":", 1)[0]
