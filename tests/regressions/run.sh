@@ -128,6 +128,30 @@ run_case \
 
 printf '[PASS] reserved-word contextualization regressions\n'
 
+# Parser rejection checks for ambiguous/unterminated constructs.
+run_case \
+  "parser_unterminated_double_quote" \
+  'echo "unterminated' \
+  2 \
+  $'\n' \
+  'unterminated quoted string'
+
+run_case \
+  "parser_missing_done" \
+  'while true; do echo x' \
+  2 \
+  $'\n' \
+  'unexpected end of file'
+
+run_case \
+  "parser_unexpected_close_paren" \
+  ')' \
+  2 \
+  $'\n' \
+  'unexpected'
+
+printf '[PASS] parser rejection regressions\n'
+
 # Startup option parity checks.
 set +e
 PYTHONPATH="$ROOT/src" python3 -m mctash -eu -c 'echo "$-"' >"$tmpdir/out" 2>"$tmpdir/err"
