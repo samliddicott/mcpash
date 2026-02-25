@@ -34,6 +34,8 @@ Local regression gate status:
   - startup option behavior checks (`-u`, `-f`, `-C`, `set -o/+o` listing)
 - `make conformance` now also enforces an allowlist on Oil failing-case names,
   so a changed fail identity is treated as regression even if fail count is unchanged.
+- `make conformance` also enforces BusyBox `.fail` filename allowlist identity,
+  so new unexpected BusyBox failing-case names are treated as regressions.
 
 ## Overall
 

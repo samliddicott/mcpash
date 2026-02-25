@@ -47,6 +47,9 @@ Known environment-specific BusyBox allowed-fail list can be adjusted:
 BUSYBOX_ALLOWED_FAIL_FILES=ash-signals-sigquit_exec.tests.fail make conformance
 ```
 
+BusyBox conformance now enforces allowlisted fail-file identity; if a different
+`.fail` file appears, the gate fails even when fail-count thresholds still pass.
+
 Known Oil fail pattern allowlist is also configurable:
 
 ```sh

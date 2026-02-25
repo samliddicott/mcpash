@@ -70,18 +70,32 @@ if (( busy_rc != 0 )); then
   fail "BusyBox run exited non-zero (${busy_rc}). See $busy_log"
 fi
 allowed_hits=0
+unexpected_busy=()
 if [[ -n "$BUSYBOX_ALLOWED_FAIL_FILES" ]]; then
   IFS=',' read -r -a allowed_list <<<"$BUSYBOX_ALLOWED_FAIL_FILES"
-  for fail_path in "$ROOT"/tests/busybox/ash_test/*.fail; do
-    [[ -e "$fail_path" ]] || continue
-    base="$(basename "$fail_path")"
-    for allowed in "${allowed_list[@]}"; do
-      if [[ "$base" == "$allowed" ]]; then
-        allowed_hits=$((allowed_hits + 1))
-        break
-      fi
-    done
+else
+  allowed_list=()
+fi
+for fail_path in "$ROOT"/tests/busybox/ash_test/*.fail; do
+  [[ -e "$fail_path" ]] || continue
+  base="$(basename "$fail_path")"
+  matched=0
+  for allowed in "${allowed_list[@]}"; do
+    if [[ -n "$allowed" && "$base" == "$allowed" ]]; then
+      allowed_hits=$((allowed_hits + 1))
+      matched=1
+      break
+    fi
   done
+  if (( matched == 0 )); then
+    unexpected_busy+=("$base")
+  fi
+done
+if (( ${#unexpected_busy[@]} > 0 )); then
+  fail "BusyBox unexpected fail file(s): ${unexpected_busy[*]}"
+fi
+if (( busy_fail > 0 )) && (( allowed_hits == 0 )); then
+  fail "BusyBox has failing cases but no allowlisted fail files matched"
 fi
 effective_busy_fail=$((busy_fail - allowed_hits))
 if (( effective_busy_fail < 0 )); then
