@@ -86,6 +86,18 @@ Explicitly out-of-scope for current milestone:
 - full job-control parity
 - complete startup flag matrix beyond currently implemented and tested options
 
+Additional ash-man-page parity gaps (tracked for next phase):
+
+- Builtins not yet implemented to ash-man-page level:
+  - `hash`, `fc`, `jobs`, `fg`, `bg`, `times`, `ulimit`, `umask`
+- Interactive startup contract not complete:
+  - true interactive REPL prompt loop
+  - login-shell startup file flow (`/etc/profile`, `~/.profile`)
+  - interactive `ENV` file processing
+  - vi/emacs command-line editing behavior (`-V` / `-E`)
+- Parsed-vs-effective option parity gap remains for several interactive/job-control options:
+  - `-i`, `-I`, `-m`, `-b`, `-V`, `-E`
+
 ## OSH ASDL Foundation
 
 - Present and wired in execution path:

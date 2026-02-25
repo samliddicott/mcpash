@@ -118,6 +118,17 @@ Local conformance gate (no external CI required):
 - Final interop syntax ergonomics and error semantics.
 - Long-term plan for full Bash compatibility.
 
+## Remaining Ash Parity Gaps (man ash aligned)
+- Builtins not yet implemented to ash-man-page level:
+  - `hash`, `fc`, `jobs`, `fg`, `bg`, `times`, `ulimit`, `umask`
+- Interactive shell behavior not yet complete:
+  - true interactive REPL prompt loop
+  - login-shell startup file flow (`/etc/profile`, `~/.profile`)
+  - interactive `ENV` file processing
+  - vi/emacs command-line editing behavior (`-V` / `-E`)
+- Parsed-vs-effective option parity gap for interactive/job-control options:
+  - `-i`, `-I`, `-m`, `-b`, `-V`, `-E`
+
 ## Conformance Snapshot
 - Current conformance status matrix: `docs/conformance-matrix.md`
 - POSIX requirement-to-test trace table: `docs/posix-trace-table.md`
