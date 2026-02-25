@@ -12,7 +12,7 @@ from .asdl_map import AsdlMappingError, lst_list_item_to_asdl, lst_script_to_asd
 from .osh_adapter import OshAdapterError, asdl_item_to_list_item
 from .runtime import BreakLoop, ContinueLoop, Runtime, RuntimeError
 
-VALID_STARTUP_OPTION_LETTERS = set("aCefnuvxIimqVEbps")
+VALID_STARTUP_OPTION_LETTERS = set("aCefnuvxIimqVEbpsl")
 
 
 def _set_proc_comm() -> None:
@@ -97,7 +97,7 @@ def main(argv: List[str] | None = None) -> int:
             source = f.read()
         source, shebang_args = _strip_shebang_and_args(source)
     else:
-        source = sys.stdin.read()
+        source = ""
 
     full_argv = cli_opts + shebang_args + ([script] if script else []) + script_args
     startup_changes2, full_argv, startup_err2 = _parse_startup_options(full_argv)
@@ -122,6 +122,16 @@ def main(argv: List[str] | None = None) -> int:
     rt.c_string_mode = False
     rt.set_script_name(args.script or "")
     rt.set_positional_args(args.script_args)
+    login_shell = startup_changes.get("__login__", False) or os.path.basename(sys.argv[0]).startswith("-")
+    interactive = bool(rt.options.get("i", False)) or (args.script is None and os.isatty(0))
+
+    if interactive and args.script is None:
+        _source_startup_files(rt, login_shell=login_shell, interactive=True)
+        return _run_interactive(rt)
+
+    if args.script is None:
+        source = sys.stdin.read()
+
     try:
         parser_impl = Parser(source, aliases=rt.aliases)
         while True:
@@ -248,6 +258,9 @@ def _parse_startup_options(argv: List[str]) -> Tuple[Dict[str, bool], List[str],
                     break
                 if ch not in VALID_STARTUP_OPTION_LETTERS:
                     return changes, out, f"illegal option -- {ch}"
+                if ch == "l":
+                    changes["__login__"] = on
+                    continue
                 changes[ch] = on
             if ok:
                 i += 1
@@ -262,7 +275,106 @@ def _parse_startup_options(argv: List[str]) -> Tuple[Dict[str, bool], List[str],
 
 def _apply_startup_options(rt: Runtime, changes: Dict[str, bool]) -> None:
     for k, v in changes.items():
+        if k.startswith("__"):
+            continue
         rt.options[k] = v
+
+
+def _source_startup_files(rt: Runtime, *, login_shell: bool, interactive: bool) -> None:
+    if login_shell:
+        for path in ["/etc/profile", os.path.expanduser("~/.profile")]:
+            if os.path.exists(path):
+                rt._run_source(path, [])
+    if interactive:
+        env_path = rt._get_var("ENV")
+        if env_path:
+            p = os.path.expanduser(env_path)
+            if os.path.exists(p):
+                rt._run_source(p, [])
+
+
+def _try_parse_complete(source: str, aliases: Dict[str, str]) -> tuple[bool, str | None]:
+    try:
+        p = Parser(source, aliases=aliases)
+        while True:
+            item = p.parse_next()
+            if item is None:
+                break
+        return True, None
+    except ParseError as e:
+        msg = str(e)
+        lower = msg.lower()
+        if "end of file" in lower or "unterminated" in lower or "missing end_python" in lower:
+            return False, None
+        if msg.startswith("expected "):
+            return False, None
+        return True, msg
+
+
+def _configure_line_editor(rt: Runtime) -> None:
+    try:
+        import readline  # noqa: F401
+    except Exception:
+        return
+    try:
+        if rt.options.get("V", False):
+            readline.parse_and_bind("set editing-mode vi")
+        else:
+            readline.parse_and_bind("set editing-mode emacs")
+    except Exception:
+        pass
+
+
+def _run_interactive(rt: Runtime) -> int:
+    _configure_line_editor(rt)
+    buffer: List[str] = []
+    status = 0
+    while True:
+        try:
+            prompt = rt.env.get("PS2", "> ") if buffer else rt.env.get("PS1", "$ ")
+            line = input(prompt)
+        except EOFError:
+            if rt.options.get("I", False):
+                print()
+                continue
+            print()
+            break
+        except KeyboardInterrupt:
+            print()
+            status = 130
+            rt.last_status = status
+            buffer.clear()
+            continue
+        buffer.append(line + "\n")
+        src = "".join(buffer)
+        complete, hard_err = _try_parse_complete(src, rt.aliases)
+        if not complete:
+            continue
+        if hard_err is not None:
+            text, line_hint = _normalize_parse_error(hard_err)
+            if line_hint is not None:
+                print(f"mctash: line {line_hint}: {text}", file=sys.stderr)
+            else:
+                print(f"mctash: {text}", file=sys.stderr)
+            status = 2
+            rt.last_status = status
+            if status != 0:
+                rt.last_nonzero_status = status
+            rt._trap_status_hint = status
+            buffer.clear()
+            continue
+        try:
+            status = rt._eval_source(src, propagate_exit=True)
+        except SystemExit as e:
+            code = int(e.code) if e.code is not None else 0
+            rt.last_status = code
+            return rt._run_exit_trap(code)
+        rt.last_status = status
+        if status != 0:
+            rt.last_nonzero_status = status
+        rt._trap_status_hint = status
+        buffer.clear()
+    return rt._run_exit_trap(rt.last_status)
 
 
 def _strip_shebang_and_args(source: str) -> Tuple[str, List[str]]:
