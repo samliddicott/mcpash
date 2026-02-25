@@ -10,6 +10,7 @@ RUN_TIMEOUT="${RUN_TIMEOUT:-1200}"
 
 OIL_MIN_PASS="${OIL_MIN_PASS:-244}"
 OIL_MAX_FAIL="${OIL_MAX_FAIL:-1}"
+OIL_ALLOWED_FAIL_PATTERNS="${OIL_ALLOWED_FAIL_PATTERNS:-bash/dash/mksh run the last command is run in its own process}"
 OIL_SPECS=(
   smoke
   redirect
@@ -118,6 +119,24 @@ if (( oil_fail > OIL_MAX_FAIL )); then
 fi
 if (( oil_pass < OIL_MIN_PASS )); then
   fail "Oil pass count ${oil_pass} below minimum ${OIL_MIN_PASS}"
+fi
+allowed_oil=0
+if (( oil_fail > 0 )); then
+  mapfile -t oil_fail_lines < <(grep '^FAIL ' "$oil_log" || true)
+  IFS=',' read -r -a allowed_patterns <<<"$OIL_ALLOWED_FAIL_PATTERNS"
+  for line in "${oil_fail_lines[@]}"; do
+    matched=0
+    for pat in "${allowed_patterns[@]}"; do
+      if [[ -n "$pat" && "$line" == *"$pat"* ]]; then
+        matched=1
+        break
+      fi
+    done
+    if (( matched == 0 )); then
+      fail "Oil unexpected failure line: ${line}"
+    fi
+    allowed_oil=$((allowed_oil + 1))
+  done
 fi
 pass "Oil conformance gate"
 

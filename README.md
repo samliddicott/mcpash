@@ -47,6 +47,12 @@ Known environment-specific BusyBox allowed-fail list can be adjusted:
 BUSYBOX_ALLOWED_FAIL_FILES=ash-signals-sigquit_exec.tests.fail make conformance
 ```
 
+Known Oil fail pattern allowlist is also configurable:
+
+```sh
+OIL_ALLOWED_FAIL_PATTERNS='bash/dash/mksh run the last command is run in its own process' make conformance
+```
+
 ## Project Docs
 
 - Plan: `docs/plan.md`

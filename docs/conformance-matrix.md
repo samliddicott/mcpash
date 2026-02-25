@@ -32,6 +32,8 @@ Local regression gate status:
   - reserved-word contextualization checks (literal-vs-keyword contexts)
   - parser rejection checks (unterminated quote, missing `done`, unexpected tokens)
   - startup option behavior checks (`-u`, `-f`, `-C`, `set -o/+o` listing)
+- `make conformance` now also enforces an allowlist on Oil failing-case names,
+  so a changed fail identity is treated as regression even if fail count is unchanged.
 
 ## Overall
 
