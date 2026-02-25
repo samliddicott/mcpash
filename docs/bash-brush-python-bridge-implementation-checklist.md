@@ -116,3 +116,4 @@ Before declaring bridge parity baseline complete:
 5. Shared visibility across subshell/pipeline is demonstrated by automated tests.
 
 Known limitations register: `docs/bridge-limitations.md`.
+Requirement-to-test trace: `docs/bridge-test-trace.md`.

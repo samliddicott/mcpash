@@ -116,8 +116,8 @@ Required operations:
 
 Type mapping:
 - scalar -> scalar var
-- `list`/`tuple` -> indexed array
-- `dict` -> associative array
+- `list`/`tuple` -> typed Python-side list with shell scalar projection
+- `dict` -> typed Python-side map with shell scalar projection
 
 Flags:
 `exported`, `integer`, `readonly`, `uppercase`, `lowercase`, `nameref`, `trace`
@@ -246,7 +246,7 @@ Shell commands:
 Semantics:
 1. Shared across subshells and pipeline elements.
 2. Writes from one process become visible to others.
-3. Backing may use shared memory region + locking.
+3. Backing may use shared memory region or a file-backed store with locking.
 
 Compatibility-critical behavior:
 
