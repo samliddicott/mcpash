@@ -69,5 +69,6 @@ Test harnesses set `MCTASH_TEST_MODE=1` to reduce nondeterminism in bridge diagn
 
 - Plan: `docs/plan.md`
 - Conformance matrix: `docs/conformance-matrix.md`
+- Milestone-2 closure: `docs/milestone-2-closure-report.md`
 - POSIX trace: `docs/posix-trace-table.md`
 - POSIX shall-trace: `docs/posix-shall-trace.md`

@@ -101,8 +101,8 @@ All checklist rows should be implemented as `sh.*` and mirrored via `bash.*` ali
 
 | Feature | Required behavior | Conformance tests | Implementation hints | Status |
 |---|---|---|---|---|
-| bridge conformance suite | all sections above covered by automated tests | CI matrix across OS/Python versions | group tests by feature area | in-progress |
-| docs parity | user docs align with actual behavior | doc snippets run as tests where possible | use doctest-style harness for examples | in-progress |
+| bridge conformance suite | all in-scope ash-mode sections above covered by automated tests | local quick/full conformance gates | group tests by feature area | done |
+| docs parity | user docs align with actual behavior | docs reviewed against current test gates and runtime behavior | use doctest-style harness for examples | done |
 | known limitations register | explicit list of deferred items | release note includes deferred list | keep a single source-of-truth doc table | done |
 
 ## Minimum acceptance gate
