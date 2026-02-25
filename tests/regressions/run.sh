@@ -386,6 +386,30 @@ run_case \
   $'s:127\n' \
   'not found'
 
+run_case \
+  "hash_builtin_resolve_list" \
+  'hash -r; hash ls >/dev/null; case "$(hash)" in *"ls="*) echo ok;; *) echo no;; esac' \
+  0 \
+  $'ok\n'
+
+run_case \
+  "times_builtin_basic" \
+  'x=$(times); case "$x" in "") echo no;; *) echo ok;; esac' \
+  0 \
+  $'ok\n'
+
+run_case \
+  "umask_builtin_roundtrip" \
+  'old=$(umask); umask 022; echo now:$(umask); umask "$old"' \
+  0 \
+  $'now:0022\n'
+
+run_case \
+  "ulimit_builtin_nofile_get" \
+  'ulimit -n >/dev/null; echo s:$?' \
+  0 \
+  $'s:0\n'
+
 printf '[PASS] all targeted regressions\n'
 
 # Reserved-word contextualization checks.

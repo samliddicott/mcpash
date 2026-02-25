@@ -20,6 +20,7 @@ import re
 import traceback
 import textwrap
 import uuid
+import resource
 from contextlib import contextmanager, redirect_stdout
 from collections.abc import MutableMapping
 from dataclasses import dataclass
@@ -566,6 +567,10 @@ class Runtime:
         "wait",
         "kill",
         "fc",
+        "hash",
+        "times",
+        "ulimit",
+        "umask",
         "let",
         "getopts",
         "py",
@@ -624,6 +629,7 @@ class Runtime:
         self._frame_stack: List[Dict[str, object]] = []
         self._call_stack: List[str] = []
         self._history: List[str] = []
+        self._cmd_hash: Dict[str, str] = {}
         self._py_callables: Dict[str, Any] = {}
         self._py_ties: Dict[str, tuple[Any, Any, str | None]] = {}
         shared_path = self.env.get(
@@ -1848,6 +1854,14 @@ class Runtime:
             return self._run_kill(argv[1:])
         if name == "fc":
             return self._run_fc(argv[1:])
+        if name == "hash":
+            return self._run_hash(argv[1:])
+        if name == "times":
+            return self._run_times(argv[1:])
+        if name == "ulimit":
+            return self._run_ulimit(argv[1:])
+        if name == "umask":
+            return self._run_umask(argv[1:])
         if name == "let":
             return self._run_let(argv[1:])
         if name == "getopts":
@@ -2137,6 +2151,9 @@ class Runtime:
             if os.path.isfile(argv0):
                 return argv0
             return None
+        cached = self._cmd_hash.get(argv0)
+        if cached and os.path.isfile(cached) and os.access(cached, os.X_OK):
+            return cached
         path_value = env.get("PATH", os.defpath)
         for d in path_value.split(os.pathsep):
             base = d or "."
@@ -2146,8 +2163,38 @@ class Runtime:
             if not os.path.isfile(candidate):
                 continue
             if os.access(candidate, os.X_OK):
+                self._cmd_hash[argv0] = candidate
                 return candidate
         return None
+
+    def _run_hash(self, args: List[str]) -> int:
+        verbose = False
+        i = 0
+        while i < len(args) and args[i].startswith("-"):
+            if args[i] == "-r":
+                self._cmd_hash.clear()
+                i += 1
+                continue
+            if args[i] == "-v":
+                verbose = True
+                i += 1
+                continue
+            return 2
+        names = args[i:]
+        if not names:
+            for name in sorted(self._cmd_hash.keys()):
+                print(f"{name}={self._cmd_hash[name]}")
+            return 0
+        status = 0
+        for name in names:
+            path = self._resolve_external_path(name, self.env)
+            if path is None:
+                print(f"hash: {name}: not found", file=sys.stderr)
+                status = 1
+                continue
+            if verbose:
+                print(f"{name}={path}")
+        return status
 
     def _run_alias(self, args: List[str]) -> int:
         status = 0
@@ -2310,6 +2357,64 @@ class Runtime:
             except Exception:
                 status = 1
         return status
+
+    def _run_times(self, args: List[str]) -> int:
+        if args:
+            return 2
+        t = os.times()
+        print(f"{t.user:.2f} {t.system:.2f}")
+        print(f"{t.children_user:.2f} {t.children_system:.2f}")
+        return 0
+
+    def _run_umask(self, args: List[str]) -> int:
+        if not args:
+            cur = os.umask(0)
+            os.umask(cur)
+            print(f"{cur:04o}")
+            return 0
+        try:
+            mask = int(args[0], 8)
+        except ValueError:
+            return 2
+        os.umask(mask)
+        return 0
+
+    def _run_ulimit(self, args: List[str]) -> int:
+        # Baseline ash-mode support: no args, -a listing, and -n get/set.
+        if not args:
+            soft, _ = resource.getrlimit(resource.RLIMIT_FSIZE)
+            print("unlimited" if soft == resource.RLIM_INFINITY else str(soft))
+            return 0
+        if args[0] == "-a":
+            rows = [
+                ("file(blocks)", resource.RLIMIT_FSIZE),
+                ("nofiles", resource.RLIMIT_NOFILE),
+                ("cputime(sec)", resource.RLIMIT_CPU),
+            ]
+            for label, key in rows:
+                soft, _ = resource.getrlimit(key)
+                val = "unlimited" if soft == resource.RLIM_INFINITY else str(soft)
+                print(f"{label:14} {val}")
+            return 0
+        if args[0] == "-n":
+            if len(args) == 1:
+                soft, _ = resource.getrlimit(resource.RLIMIT_NOFILE)
+                print("unlimited" if soft == resource.RLIM_INFINITY else str(soft))
+                return 0
+            target = args[1]
+            if target == "unlimited":
+                new_soft = resource.RLIM_INFINITY
+            else:
+                try:
+                    new_soft = int(target, 10)
+                except ValueError:
+                    return 2
+            soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
+            if hard != resource.RLIM_INFINITY and new_soft > hard:
+                return 1
+            resource.setrlimit(resource.RLIMIT_NOFILE, (new_soft, hard))
+            return 0
+        return 2
 
     def _expand_aliases(self, argv: List[str]) -> List[str]:
         if not argv:
