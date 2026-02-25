@@ -1,13 +1,13 @@
 #!/usr/bin/env ash
 # Coverage: man ash 'getopts' builtin (option parsing, missing arguments, error handling, OPTIND behavior).
-set -euo pipefail
+set -e
 
 # test: iterate options that take args and flags, check OPTARG and OPTIND.
 set -- -a alpha -b -c
 optstring="a:bc"
 OPTIND=1
 while getopts "$optstring" opt; do
-  printf 'opt=%s optarg=%s optind=%s\n' "$opt" "$OPTARG" "$OPTIND"
+  printf 'opt=%s optarg=%s optind=%s\n' "$opt" "${OPTARG-}" "$OPTIND"
   case "$opt" in
     a)
       ;;
@@ -27,5 +27,5 @@ set -- -a
 optstring=":a"
 OPTIND=1
 if ! getopts "$optstring" opt_missing; then
-  printf 'missing-status=%s OPTARG=%s OPTIND=%s\n' "$?" "$OPTARG" "$OPTIND"
+  printf 'missing-status=%s OPTARG=%s OPTIND=%s\n' "$?" "${OPTARG-}" "$OPTIND"
 fi
