@@ -460,7 +460,7 @@ class Parser:
         if tok and ((tok.kind == "OP" and tok.value == "(") or (self._is_word(tok) and tok.value == "(")):
             command, lst_command = self.parse_subshell()
             return self._maybe_wrap_redirects(command, lst_command)
-        if self._looks_like_function_def():
+        if not (self._is_word(tok) and tok.value == "PYTHON") and self._looks_like_function_def():
             command, lst_command = self.parse_function_def()
             return self._maybe_wrap_redirects(command, lst_command)
 
@@ -583,9 +583,52 @@ class Parser:
             raise ParseError(f"expected command at {self._where(tok)}")
         simple_cmd = SimpleCommand(argv=argv, assignments=assignments, redirects=redirects, line=command_line)
         lst_simple_cmd = LstSimpleCommand(argv=lst_argv, assignments=lst_assignments, redirects=lst_redirects)
+        if argv and argv[0].text == "PYTHON":
+            return self._parse_python_block_command(
+                simple_cmd,
+                lst_simple_cmd,
+                tok,
+            )
         if not argv and assignments:
             return simple_cmd, LstShAssignmentCommand(assignments=lst_assignments, redirects=lst_redirects)
         return simple_cmd, lst_simple_cmd
+
+    def _parse_python_block_command(
+        self,
+        cmd: SimpleCommand,
+        lst_cmd: LstSimpleCommand,
+        separator_tok: Token | None,
+    ) -> tuple[Command, LstCommand]:
+        if separator_tok is None or separator_tok.kind != "OP" or separator_tok.value != "\n":
+            raise ParseError(f"syntax error: PYTHON block requires newline before body at {self._where(separator_tok)}")
+        self._advance()  # consume newline after PYTHON header
+        self._consume_pending_heredocs()
+        try:
+            body = self.reader.consume_verbatim_block("END_PYTHON")
+        except LexError as e:
+            raise ParseError(str(e))
+
+        cmd.argv = [Word("py")] + cmd.argv[1:]
+        py_block_redir = Redirect(
+            op="<<",
+            target="__MCTASH_PY_BLOCK__",
+            fd=0,
+            here_doc=body,
+            here_doc_expand=False,
+        )
+        cmd.redirects.append(py_block_redir)
+
+        lst_cmd.argv = [self._resolve_word(parse_word("py"))] + lst_cmd.argv[1:]
+        lst_cmd.redirects.append(
+            LstRedirect(
+                op="<<",
+                target=self._resolve_word(parse_word("__MCTASH_PY_BLOCK__")),
+                fd=0,
+                here_doc=body,
+                here_doc_expand=False,
+            )
+        )
+        return cmd, lst_cmd
 
     def _is_assignment(self, text: str) -> bool:
         if "=" not in text:

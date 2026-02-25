@@ -352,6 +352,27 @@ class TokenReader:
             self._queue.append(Token("HEREDOC", heredoc_value, self.line, self.col, self.i))
             self._advance_to(end_index)
 
+    def consume_verbatim_block(self, terminator: str) -> str:
+        parts: list[str] = []
+        i = self.i
+        while i <= len(self.source):
+            line_start = i
+            while i < len(self.source) and self.source[i] != "\n":
+                i += 1
+            line = self.source[line_start:i]
+            has_newline = i < len(self.source) and self.source[i] == "\n"
+            if line == terminator:
+                end_index = i + 1 if has_newline else i
+                self._advance_to(end_index)
+                return "".join(parts)
+            parts.append(line)
+            if has_newline:
+                parts.append("\n")
+                i += 1
+                continue
+            break
+        raise LexError(f"syntax error: missing {terminator} before end of file at {self.line}:{self.col}")
+
 
 def tokenize(source: str) -> Iterator[Token]:
     ctx = LexContext(reserved_words=set())

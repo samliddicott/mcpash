@@ -3471,19 +3471,20 @@ class Runtime:
             self._report_error(f"illegal option {a}", line=self.current_line, context="py")
             return 2
         payload = args[i:]
+        source_from_stdin = False
         if not payload:
-            self._report_error("usage: py [-e] [-x] [-v VAR] [-r VAR] CODE", line=self.current_line, context="py")
-            return 2
-
-        code = " ".join(payload)
+            source_from_stdin = True
+            code = sys.stdin.read()
+        else:
+            code = " ".join(payload)
         py_stdout = io.StringIO() if stdout_var else None
         py_result: object = None
         try:
             if py_stdout is not None:
                 with redirect_stdout(py_stdout):
-                    py_result = self._run_py_payload(payload, code, eval_mode)
+                    py_result = self._run_py_payload(payload, code, eval_mode, source_from_stdin)
             else:
-                py_result = self._run_py_payload(payload, code, eval_mode)
+                py_result = self._run_py_payload(payload, code, eval_mode, source_from_stdin)
         except KeyboardInterrupt:
             return 130
         except Exception as e:
@@ -3505,9 +3506,12 @@ class Runtime:
             print(self._py_to_shell(py_result))
         return 0
 
-    def _run_py_payload(self, payload: List[str], code: str, eval_mode: bool) -> object:
+    def _run_py_payload(self, payload: List[str], code: str, eval_mode: bool, source_from_stdin: bool) -> object:
         if eval_mode:
             return eval(code, self._py_globals, self._py_globals)
+        if source_from_stdin:
+            exec(code, self._py_globals, self._py_globals)
+            return None
 
         target = self._resolve_py_name(payload[0])
         if callable(target):

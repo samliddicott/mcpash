@@ -133,6 +133,25 @@ run_case \
   'RuntimeError: bad'
 
 run_case \
+  "python_block_basic" \
+  $'PYTHON\nprint("blk")\nEND_PYTHON' \
+  0 \
+  $'blk\n'
+
+run_case \
+  "python_block_structured_exception" \
+  $'PYTHON -x\nraise ValueError("zb")\nEND_PYTHON\necho "$PYTHON_EXCEPTION|$PYTHON_EXCEPTION_MSG|$PYTHON_EXCEPTION_LANG"' \
+  0 \
+  $'ValueError|zb|python\n'
+
+run_case \
+  "python_block_missing_terminator" \
+  $'PYTHON\nprint("x")' \
+  2 \
+  $'\n' \
+  'missing END_PYTHON'
+
+run_case \
   "param_len_special_at_star" \
   'set -- aa b; echo ${#@}; echo ${#*}' \
   0 \
