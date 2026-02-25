@@ -39,6 +39,7 @@ run_subset() {
   mkdir -p "${OIL_SRC}/_tmp"
 
   PYTHONPATH="${ROOT}/src" \
+    MCTASH_TEST_MODE=1 \
     python3 "${ROOT}/src/tests/oil_subset_runner.py" \
       --spec-root "${SPEC_DIR}" \
       --workdir "${OIL_SRC}" \

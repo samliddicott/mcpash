@@ -37,7 +37,7 @@ run_ash() {
   printf '%s\n' \
     '#!/usr/bin/env bash' \
     'set -euo pipefail' \
-    "PYTHONPATH=\"${ROOT}/src\" exec python3 -m mctash \"\$@\"" \
+    "PYTHONPATH=\"${ROOT}/src\" MCTASH_TEST_MODE=1 exec python3 -m mctash \"\$@\"" \
     > "${ASH_TEST_DIR}/ash"
   chmod +x "${ASH_TEST_DIR}/ash"
   cat > "${ASH_TEST_DIR}/.config" <<'EOF'

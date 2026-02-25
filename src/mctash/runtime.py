@@ -614,6 +614,8 @@ class Runtime:
         self._line_offset: int = 0
         self._last_eval_hard_error: bool = False
         self._pipeline_input_latency: float | None = None
+        self._test_mode: bool = self.env.get("MCTASH_TEST_MODE", "") == "1"
+        self._py_import_counter: int = 0
         self._var_attrs: Dict[str, set[str]] = {k: {"exported"} for k in self.env.keys()}
         self._typed_vars: Dict[str, object] = {}
         self._call_stack: List[str] = []
@@ -4030,7 +4032,7 @@ class Runtime:
             if structured_exc:
                 self._assign_shell_var("PYTHON_EXCEPTION", type(e).__name__)
                 self._assign_shell_var("PYTHON_EXCEPTION_MSG", str(e))
-                tb_lines = [ln.rstrip() for ln in traceback.format_tb(e.__traceback__)]
+                tb_lines = self._format_python_tb(e.__traceback__)
                 self._assign_shell_var("PYTHON_EXCEPTION_TB", "\n".join(tb_lines))
                 self._assign_shell_var("PYTHON_EXCEPTION_LANG", "python")
             else:
@@ -4078,6 +4080,12 @@ class Runtime:
             chunks.append(b)
         return b"".join(chunks).decode("utf-8", errors="surrogateescape")
 
+    def _format_python_tb(self, tb) -> list[str]:
+        out: list[str] = []
+        for fr in traceback.extract_tb(tb):
+            out.append(f"{fr.filename}:{fr.lineno}:{fr.name}")
+        return out
+
     def _run_from_import(self, args: List[str]) -> int:
         # Syntax: from <module|path.py> import <name|*> [as alias]
         if len(args) < 3:
@@ -4122,7 +4130,11 @@ class Runtime:
     def _load_py_module(self, ref: str):
         if ref.endswith(".py") or ref.startswith("./") or ref.startswith("../") or ref.startswith("/"):
             path = os.path.abspath(ref)
-            mod_name = f"_mctash_import_{uuid.uuid4().hex}"
+            if self._test_mode:
+                self._py_import_counter += 1
+                mod_name = f"_mctash_import_{self._py_import_counter}"
+            else:
+                mod_name = f"_mctash_import_{uuid.uuid4().hex}"
             spec = importlib.util.spec_from_file_location(mod_name, path)
             if spec is None or spec.loader is None:
                 raise RuntimeError(f"unable to load module from {ref}")

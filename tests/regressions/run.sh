@@ -31,7 +31,7 @@ run_case() {
   local stderr_substr="${5:-}"
 
   set +e
-  PYTHONPATH="$ROOT/src" "${SHELL_CMD[@]}" -c "$script" >"$tmpdir/out" 2>"$tmpdir/err"
+  PYTHONPATH="$ROOT/src" MCTASH_TEST_MODE=1 "${SHELL_CMD[@]}" -c "$script" >"$tmpdir/out" 2>"$tmpdir/err"
   local status=$?
   set -e
   if [[ "$status" -ne "$expect_status" ]]; then
@@ -124,6 +124,12 @@ run_case \
   'py -x '"'"'raise ValueError("boom")'"'"'; echo "$PYTHON_EXCEPTION|$PYTHON_EXCEPTION_MSG|$PYTHON_EXCEPTION_LANG"; case "$PYTHON_EXCEPTION_TB" in *"<string>"*) echo s:0;; *) echo s:1;; esac' \
   0 \
   $'ValueError|boom|python\ns:0\n'
+
+run_case \
+  "py_structured_exception_tb_shape" \
+  'py -x '"'"'raise RuntimeError("x")'"'"'; case "$PYTHON_EXCEPTION_TB" in *"<string>:1:<module>"*) echo s:0;; *) echo s:1;; esac' \
+  0 \
+  $'s:0\n'
 
 run_case \
   "py_exception_status" \

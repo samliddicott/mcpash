@@ -37,7 +37,7 @@ You can override thresholds/timeouts per run:
 ```sh
 RUN_TIMEOUT=1200 \
 BUSYBOX_MIN_OK=357 BUSYBOX_MAX_FAIL=0 \
-OIL_MIN_PASS=244 OIL_MAX_FAIL=1 \
+OIL_MIN_PASS=245 OIL_MAX_FAIL=0 \
 make conformance
 ```
 
@@ -55,6 +55,8 @@ Known Oil fail pattern allowlist is also configurable:
 ```sh
 OIL_ALLOWED_FAIL_PATTERNS='bash/dash/mksh run the last command is run in its own process' make conformance
 ```
+
+Test harnesses set `MCTASH_TEST_MODE=1` to reduce nondeterminism in bridge diagnostics/import naming.
 
 ## Project Docs
 
