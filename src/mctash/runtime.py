@@ -3885,7 +3885,7 @@ class Runtime:
         source_from_stdin = False
         if not payload:
             source_from_stdin = True
-            code = sys.stdin.read()
+            code = self._read_stdin_text()
             if not no_dedent:
                 code = textwrap.dedent(code)
         else:
@@ -3937,6 +3937,19 @@ class Runtime:
                 continue
             print(self._shared_vars[arg])
         return status
+
+    def _read_stdin_text(self) -> str:
+        # Read from fd 0 so command redirections (including here-docs) win over
+        # python-level sys.stdin wrappers used by the pipeline emulator.
+        if self._fd_redirect_depth == 0 and isinstance(sys.stdin, io.StringIO):
+            return sys.stdin.read()
+        chunks: list[bytes] = []
+        while True:
+            b = os.read(0, 65536)
+            if not b:
+                break
+            chunks.append(b)
+        return b"".join(chunks).decode("utf-8", errors="surrogateescape")
 
     def _run_from_import(self, args: List[str]) -> int:
         # Syntax: from <module|path.py> import <name|*> [as alias]

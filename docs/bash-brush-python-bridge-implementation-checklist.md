@@ -93,17 +93,17 @@ All checklist rows should be implemented as `sh.*` and mirrored via `bash.*` ali
 
 | Feature | Required behavior | Conformance tests | Implementation hints | Status |
 |---|---|---|---|---|
-| block robustness | `)`/quotes inside Python body do not terminate shell parse | regression fixtures | dedicated embedded-block lexer state | todo |
-| command substitution interaction | status and output semantics stable inside `$()` | `$({ PYTHON ...; })` style tests | ensure command node behavior is consistent | todo |
-| interrupt path | SIGINT returns `130` and unwinds cleanly | ctrl-c integration tests | map interrupts distinctly from exceptions | todo |
+| block robustness | `)`/quotes inside Python body do not terminate shell parse | regression fixtures | dedicated embedded-block lexer state | done |
+| command substitution interaction | status and output semantics stable inside `$()` | `$({ PYTHON ...; })` style tests | ensure command node behavior is consistent | done |
+| interrupt path | SIGINT returns `130` and unwinds cleanly | ctrl-c integration tests | map interrupts distinctly from exceptions | done |
 
 ## Phase 10: Compatibility suite and release gate
 
 | Feature | Required behavior | Conformance tests | Implementation hints | Status |
 |---|---|---|---|---|
-| bridge conformance suite | all sections above covered by automated tests | CI matrix across OS/Python versions | group tests by feature area | todo |
-| docs parity | user docs align with actual behavior | doc snippets run as tests where possible | use doctest-style harness for examples | todo |
-| known limitations register | explicit list of deferred items | release note includes deferred list | keep a single source-of-truth doc table | todo |
+| bridge conformance suite | all sections above covered by automated tests | CI matrix across OS/Python versions | group tests by feature area | in-progress |
+| docs parity | user docs align with actual behavior | doc snippets run as tests where possible | use doctest-style harness for examples | in-progress |
+| known limitations register | explicit list of deferred items | release note includes deferred list | keep a single source-of-truth doc table | done |
 
 ## Minimum acceptance gate
 
@@ -114,3 +114,5 @@ Before declaring bridge parity baseline complete:
 3. `PYTHON ... END_PYTHON` parse regressions are gated in CI.
 4. Structured exception variables and status code behavior are documented and tested.
 5. Shared visibility across subshell/pipeline is demonstrated by automated tests.
+
+Known limitations register: `docs/bridge-limitations.md`.

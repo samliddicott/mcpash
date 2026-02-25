@@ -165,6 +165,30 @@ run_case \
   'IndentationError'
 
 run_case \
+  "python_block_parser_robust_parens_quotes" \
+  $'PYTHON\ntext = ")"\nprint("q:\\""+text)\nEND_PYTHON' \
+  0 \
+  $'q:")\n'
+
+run_case \
+  "python_block_in_command_substitution" \
+  $'out=$({ PYTHON\nprint("sub")\nEND_PYTHON\n}); echo "$out"' \
+  0 \
+  $'sub\n'
+
+run_case \
+  "python_block_pipeline" \
+  $'echo xx | { PYTHON\nimport sys\nprint(sys.stdin.read().strip()+"yy")\nEND_PYTHON\n} | cat' \
+  0 \
+  $'xxyy\n'
+
+run_case \
+  "py_interrupt_status_130" \
+  'py '"'"'raise KeyboardInterrupt()'"'"'; echo s:$?' \
+  130 \
+  $'s:130\n'
+
+run_case \
   "py_sh_vars_mapping" \
   'py '"'"'sh.vars["BRIDGE_X"]="42"'"'"'; echo "$BRIDGE_X"' \
   0 \
