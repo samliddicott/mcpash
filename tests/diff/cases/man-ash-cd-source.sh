@@ -1,6 +1,6 @@
 #!/usr/bin/env ash
 # Coverage: man ash 'cd' and '.'/'source' builtins (relative/absolute directory changes, sourcing scripts).
-set -euo pipefail
+set -eu
 root=$(pwd)
 mkdir -p tmpdir/subdir
 cd tmpdir
