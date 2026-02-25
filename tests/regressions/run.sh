@@ -100,6 +100,34 @@ run_case \
 
 printf '[PASS] all targeted regressions\n'
 
+# Reserved-word contextualization checks.
+run_case \
+  "reserved_words_as_literals" \
+  'echo then do in fi' \
+  0 \
+  $'then do in fi\n'
+
+run_case \
+  "reserved_word_for_loop_var_in" \
+  'for in in a b; do echo $in; done' \
+  0 \
+  $'a\nb\n'
+
+run_case \
+  "reserved_word_case_pattern_in" \
+  'case in in in) echo ok;; esac' \
+  0 \
+  $'ok\n'
+
+run_case \
+  "reserved_word_invalid_context_then" \
+  'for i in a b; then echo x; done' \
+  2 \
+  $'\n' \
+  'expected do'
+
+printf '[PASS] reserved-word contextualization regressions\n'
+
 # Startup option parity checks.
 set +e
 PYTHONPATH="$ROOT/src" python3 -m mctash -eu -c 'echo "$-"' >"$tmpdir/out" 2>"$tmpdir/err"
