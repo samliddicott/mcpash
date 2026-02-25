@@ -1,14 +1,24 @@
-# Bash/Brush <-> Python Bridge Specification (Implementation Guide)
+# Shell/Brush <-> Python Bridge Specification (Implementation Guide)
 
 This is a practical, implementation-oriented spec for a POSIX shell written in Python that wants feature parity with the brush/bash Python bridge model.
 
 ## 1. Scope and goals
 
+
+## Naming
+
+- Canonical injected object name: `sh`
+- Compatibility alias: `bash` (legacy alias retained for migration)
+- Optional readability alias: `shell`
+
+All normative API references in this spec use `sh.*`. Implementations MUST keep `bash.*`
+as a compatibility alias for milestone-2 rollout.
+
 The bridge must provide:
 
 1. Shell -> Python execution (`py`, `PYTHON ... END_PYTHON`)
-2. Python -> Shell callbacks (`bash()`, `bash.run`, `bash.popen`)
-3. Shared shell-state access (`bash.vars`, `bash.env`, `bash.fn`, `bash.stack`, `bash.shared`)
+2. Python -> Shell callbacks (`sh()`, `sh.run`, `sh.popen`)
+3. Shared shell-state access (`sh.vars`, `sh.env`, `sh.fn`, `sh.stack`, `sh.shared`)
 4. Cross-language function exposure (`from ... import ... as ...`, callable wrappers)
 5. Structured exception/status behavior suitable for shell scripting
 
@@ -21,8 +31,8 @@ Use RFC-style language:
 
 1. Shell variable/function store is canonical for shell-visible state.
 2. Python runtime is embedded/persistent within shell process lifetime.
-3. Python accesses shell via injected `bash` object only.
-4. Shell commands block until Python action completes (for `py`/`PYTHON`) unless explicitly using process APIs (`bash.popen`).
+3. Python accesses shell via injected `sh` object only.
+4. Shell commands block until Python action completes (for `py`/`PYTHON`) unless explicitly using process APIs (`sh.popen`).
 5. Subshell/pipeline semantics must match normal shell behavior.
 
 ## 3. Shell command surface
@@ -75,29 +85,29 @@ When `-x` is active and Python raises:
 
 Set shell variables instead of printing traceback:
 
-- `MCBASH_EXCEPTION` = exception type name
-- `MCBASH_EXCEPTION_MSG` = message
-- `MCBASH_EXCEPTION_TB` = array of traceback frames
-- `MCBASH_EXCEPTION_LANG` = `python`
+- `MCSH_EXCEPTION` = exception type name
+- `MCSH_EXCEPTION_MSG` = message
+- `MCSH_EXCEPTION_TB` = array of traceback frames
+- `MCSH_EXCEPTION_LANG` = `python`
 
 Status still non-zero (`1` unless interrupted).
 
-## 5. Injected Python `bash` object
+## 5. Injected Python `sh` object
 
 ## 5.1 Constants
 
-- `bash.PIPE`
-- `bash.STDOUT`
-- `bash.DEVNULL`
+- `sh.PIPE`
+- `sh.STDOUT`
+- `sh.DEVNULL`
 
-## 5.2 `bash.vars` (live shell vars mapping)
+## 5.2 `sh.vars` (live shell vars mapping)
 
 Required operations:
 
-- `bash.vars[name]`
-- `bash.vars[name] = value`
-- `del bash.vars[name]`
-- `name in bash.vars`
+- `sh.vars[name]`
+- `sh.vars[name] = value`
+- `del sh.vars[name]`
+- `name in sh.vars`
 - iteration
 - length
 - `attrs(name)`
@@ -112,19 +122,19 @@ Type mapping:
 Flags:
 `exported`, `integer`, `readonly`, `uppercase`, `lowercase`, `nameref`, `trace`
 
-## 5.3 `bash.env` (exported env only)
+## 5.3 `sh.env` (exported env only)
 
 - same mapping interface as `vars`
 - write implies set+export
 
-## 5.4 `bash.fn` (shell functions)
+## 5.4 `sh.fn` (shell functions)
 
 - get/set/delete by name
 - iteration/membership
-- callable dispatch: `bash.fn.myfunc("a", "b")`
+- callable dispatch: `sh.fn.myfunc("a", "b")`
 - setting callable SHOULD generate wrapper equivalent to `py` callable invocation
 
-## 5.5 `bash.stack`
+## 5.5 `sh.stack`
 
 Read-only list/iterable of frames with:
 
@@ -132,25 +142,25 @@ Read-only list/iterable of frames with:
 - `lineno`
 - `funcname`
 
-## 5.6 `bash.shared`
+## 5.6 `sh.shared`
 
 Mapping for shared-backed variables (see section 9).
 
 ## 6. Python -> Shell callbacks
 
-## 6.1 `bash(*args)`
+## 6.1 `sh(*args)`
 
 - runs shell command
 - returns stdout string (strip trailing newline)
-- non-zero raises `BashCalledProcessError`
+- non-zero raises `ShellCalledProcessError`
 
-`BashCalledProcessError` SHOULD expose:
+`ShellCalledProcessError` SHOULD expose:
 - `.returncode`
 - `.cmd`
 - `.stdout`
 - `.stderr`
 
-## 6.2 `bash.run(...)`
+## 6.2 `sh.run(...)`
 
 Subprocess-style API returning `Completed` object:
 
@@ -166,9 +176,9 @@ Supported args (minimum):
 - `env`
 - `timeout` (implement if possible; if not, fail explicitly/documented)
 
-`check=True` non-zero MUST raise `BashCalledProcessError`.
+`check=True` non-zero MUST raise `ShellCalledProcessError`.
 
-## 6.3 `bash.popen(...)`
+## 6.3 `sh.popen(...)`
 
 Streaming process API:
 
@@ -189,7 +199,7 @@ Argument conversion SHOULD be predictable (strings by default; explicit coercion
 
 ## 7.2 Python calls shell function
 
-- `bash.fn.name(args...)` executes shell function and returns captured stdout or raises on failure.
+- `sh.fn.name(args...)` executes shell function and returns captured stdout or raises on failure.
 
 ## 7.3 `from ... import ... as ...` shell syntax
 
@@ -213,8 +223,8 @@ Generated wrappers MUST be real shell functions visible to function introspectio
 
 ## 8.2 Python-initiated
 
-- `bash.tie(name, getter, setter=None, type=None)`
-- `bash.untie(name)`
+- `sh.tie(name, getter, setter=None, type=None)`
+- `sh.untie(name)`
 
 Types:
 - `scalar`, `integer`, `array`, `assoc`
@@ -224,7 +234,7 @@ Reads invoke getter; writes invoke setter (if absent and write attempted -> erro
 
 ## 9. Shared variables
 
-Provide shell builtin `shared` and Python mapping `bash.shared`.
+Provide shell builtin `shared` and Python mapping `sh.shared`.
 
 Shell commands:
 - `shared name=value`
@@ -249,7 +259,7 @@ echo "$x"   # must print 42
 ## 10. Status/return semantics summary
 
 1. Shell command status communicates success/failure (`py`, `PYTHON`, generated wrappers).
-2. Python callback APIs use exceptions for non-zero when configured (`check=True` or `bash()` always).
+2. Python callback APIs use exceptions for non-zero when configured (`check=True` or `sh()` always).
 3. Structured exceptions (`-x`) expose machine-readable shell vars.
 
 ## 11. Parsing requirements
@@ -266,9 +276,9 @@ Implement a test suite that verifies:
 2. `-v`/`-r` capture combinations
 3. `-x` variable population
 4. `PYTHON` block parse with nested `)`/quotes
-5. `bash.vars/env/fn/stack/shared` CRUD + iteration
+5. `sh.vars/env/fn/stack/shared` CRUD + iteration
 6. tie round-trip (shell write -> python read, python write -> shell read)
-7. `bash()`/`run`/`popen` non-zero and `check` behavior
+7. `sh()`/`run`/`popen` non-zero and `check` behavior
 8. shared visibility across subshell/pipeline/background
 9. import wrapper generation and invocation
 10. SIGINT behavior (`130`)
