@@ -410,6 +410,24 @@ run_case \
   0 \
   $'s:0\n'
 
+run_case \
+  "jobs_builtin_lists_bg" \
+  'sleep 0.5 & case "$(jobs)" in *"[1]"*) echo ok;; *) echo no;; esac; wait %1 >/dev/null' \
+  0 \
+  $'ok\n'
+
+run_case \
+  "fg_builtin_waits_job" \
+  'sleep 0.2 & fg %1 >/dev/null; echo s:$?' \
+  0 \
+  $'s:0\n'
+
+run_case \
+  "bg_builtin_current_job" \
+  'sleep 0.2 & bg %1 >/dev/null; echo s:$?; wait %1 >/dev/null' \
+  0 \
+  $'s:0\n'
+
 printf '[PASS] all targeted regressions\n'
 
 # Reserved-word contextualization checks.

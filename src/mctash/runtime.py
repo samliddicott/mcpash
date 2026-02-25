@@ -571,6 +571,9 @@ class Runtime:
         "times",
         "ulimit",
         "umask",
+        "jobs",
+        "fg",
+        "bg",
         "let",
         "getopts",
         "py",
@@ -1862,6 +1865,12 @@ class Runtime:
             return self._run_ulimit(argv[1:])
         if name == "umask":
             return self._run_umask(argv[1:])
+        if name == "jobs":
+            return self._run_jobs(argv[1:])
+        if name == "fg":
+            return self._run_fg(argv[1:])
+        if name == "bg":
+            return self._run_bg_builtin(argv[1:])
         if name == "let":
             return self._run_let(argv[1:])
         if name == "getopts":
@@ -2283,6 +2292,76 @@ class Runtime:
             if last >= 128:
                 return last
         return last
+
+    def _resolve_job_id(self, token: str | None) -> int | None:
+        if token is None or token == "%%":
+            return self._last_bg_job
+        raw = token[1:] if token.startswith("%") else token
+        if not raw.isdigit():
+            return None
+        num = int(raw)
+        if token.startswith("%"):
+            return num
+        if num in self._bg_jobs or num in self._bg_status:
+            return num
+        return self._bg_pid_to_job.get(num)
+
+    def _run_jobs(self, args: List[str]) -> int:
+        long_fmt = False
+        pid_only = False
+        i = 0
+        while i < len(args):
+            a = args[i]
+            if a == "-l":
+                long_fmt = True
+                i += 1
+                continue
+            if a == "-p":
+                pid_only = True
+                i += 1
+                continue
+            return 2
+        job_ids = sorted(set(self._bg_jobs.keys()) | set(self._bg_status.keys()))
+        for job_id in job_ids:
+            pid = self._bg_pids.get(job_id)
+            th = self._bg_jobs.get(job_id)
+            done = (th is None) or (not th.is_alive())
+            state = "Done" if done else "Running"
+            if pid_only:
+                if pid is not None:
+                    print(pid)
+                continue
+            if long_fmt and pid is not None:
+                print(f"[{job_id}] {pid} {state}")
+            else:
+                print(f"[{job_id}] {state}")
+        return 0
+
+    def _run_fg(self, args: List[str]) -> int:
+        if len(args) > 1:
+            return 2
+        job_id = self._resolve_job_id(args[0] if args else None)
+        if job_id is None:
+            return 1
+        if job_id not in self._bg_jobs and job_id not in self._bg_status:
+            return 1
+        status = self._run_wait([f"%{job_id}"])
+        self.last_status = status
+        if status != 0:
+            self.last_nonzero_status = status
+        return status
+
+    def _run_bg_builtin(self, args: List[str]) -> int:
+        # Threaded background jobs start immediately; no stopped-state resume yet.
+        if len(args) > 1:
+            return 2
+        job_id = self._resolve_job_id(args[0] if args else None)
+        if job_id is None:
+            return 1
+        if job_id not in self._bg_jobs and job_id not in self._bg_status:
+            return 1
+        print(f"[{job_id}]")
+        return 0
 
     def _run_kill(self, args: List[str]) -> int:
         if not args:
