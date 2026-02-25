@@ -222,7 +222,7 @@ status=$?
 set -e
 [[ "$status" -eq 2 ]] || fail "diag_expected_then: expected status 2, got $status"
 grep -Eq '^mctash -c: line 1: syntax error:' "$tmpdir/err" || fail "diag_expected_then: expected line-prefixed syntax error"
-grep -Fq 'expecting "then"' "$tmpdir/err" || fail "diag_expected_then: expected hint about then"
+grep -Fq 'unexpected ")"' "$tmpdir/err" || fail "diag_expected_then: expected unexpected \")\" diagnostic"
 printf '[PASS] diag_expected_then\n'
 
 set +e
