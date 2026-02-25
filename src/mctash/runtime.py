@@ -94,6 +94,10 @@ class Runtime:
         "interactive": "i",
         "monitor": "m",
         "notify": "b",
+        "ignoreeof": "I",
+        "stdin": "s",
+        "privileged": "p",
+        "quiet": "q",
         "pipefail": "pipefail",
     }
     ENV_MUTATING_BUILTINS = {
@@ -2179,7 +2183,7 @@ class Runtime:
         if name == "!":
             return str(self._last_bg_pid) if self._last_bg_pid is not None else ""
         if name == "-":
-            return "".join(sorted(k for k, v in self.options.items() if v))
+            return "".join(sorted(k for k, v in self.options.items() if v and len(k) == 1))
         if name == "LINENO":
             line = self.current_line if self.current_line is not None else 0
             if self.script_name == "":
@@ -2763,7 +2767,7 @@ class Runtime:
         if name == "!":
             return str(self._last_bg_job) if self._last_bg_job is not None else "", True
         if name == "-":
-            return "".join(sorted(k for k, v in self.options.items() if v)), True
+            return "".join(sorted(k for k, v in self.options.items() if v and len(k) == 1)), True
         if name == "LINENO":
             line = self.current_line if self.current_line is not None else 0
             if self.script_name == "":

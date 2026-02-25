@@ -99,3 +99,30 @@ run_case \
   'not found'
 
 printf '[PASS] all targeted regressions\n'
+
+# Startup option parity checks.
+set +e
+PYTHONPATH="$ROOT/src" python3 -m mctash -eu -c 'echo "$-"' >"$tmpdir/out" 2>"$tmpdir/err"
+status=$?
+set -e
+[[ "$status" -eq 0 ]] || fail "startup_short_options: expected status 0, got $status"
+grep -Eq '^[[:alpha:]]*e[[:alpha:]]*u[[:alpha:]]*$' "$tmpdir/out" || fail "startup_short_options: expected \$- to include e and u"
+printf '[PASS] startup_short_options\n'
+
+set +e
+PYTHONPATH="$ROOT/src" python3 -m mctash -o nounset -c 'echo "$-"' >"$tmpdir/out" 2>"$tmpdir/err"
+status=$?
+set -e
+[[ "$status" -eq 0 ]] || fail "startup_long_option: expected status 0, got $status"
+grep -Eq '^[[:alpha:]]*u[[:alpha:]]*$' "$tmpdir/out" || fail "startup_long_option: expected \$- to include u"
+printf '[PASS] startup_long_option\n'
+
+set +e
+PYTHONPATH="$ROOT/src" python3 -m mctash -z -c 'echo hi' >"$tmpdir/out" 2>"$tmpdir/err"
+status=$?
+set -e
+[[ "$status" -eq 2 ]] || fail "startup_illegal_option: expected status 2, got $status"
+grep -Fq 'illegal option -- z' "$tmpdir/err" || fail "startup_illegal_option: expected illegal option diagnostic"
+printf '[PASS] startup_illegal_option\n'
+
+printf '[PASS] all regressions (including startup options)\n'

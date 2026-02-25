@@ -12,6 +12,8 @@ from .asdl_map import AsdlMappingError, lst_list_item_to_asdl, lst_script_to_asd
 from .osh_adapter import OshAdapterError, asdl_item_to_list_item
 from .runtime import BreakLoop, ContinueLoop, Runtime, RuntimeError
 
+VALID_STARTUP_OPTION_LETTERS = set("aCefnuvxIimqVEbps")
+
 
 def _set_proc_comm() -> None:
     name = os.environ.get("MCTASH_COMM_NAME", "ash")
@@ -25,7 +27,10 @@ def _set_proc_comm() -> None:
 def main(argv: List[str] | None = None) -> int:
     _set_proc_comm()
     argv = list(argv) if argv is not None else sys.argv[1:]
-    startup_changes, argv = _parse_startup_options(argv)
+    startup_changes, argv, startup_err = _parse_startup_options(argv)
+    if startup_err is not None:
+        print(f"mctash: {startup_err}", file=sys.stderr)
+        return 2
     if argv and argv[0] == "-c":
         if len(argv) < 2:
             print("mctash: -c requires an argument", file=sys.stderr)
@@ -95,7 +100,10 @@ def main(argv: List[str] | None = None) -> int:
         source = sys.stdin.read()
 
     full_argv = cli_opts + shebang_args + ([script] if script else []) + script_args
-    startup_changes2, full_argv = _parse_startup_options(full_argv)
+    startup_changes2, full_argv, startup_err2 = _parse_startup_options(full_argv)
+    if startup_err2 is not None:
+        print(f"mctash: {startup_err2}", file=sys.stderr)
+        return 2
     startup_changes.update(startup_changes2)
     args = argparse.Namespace(
         dump_lst=dump_lst,
@@ -199,13 +207,14 @@ def _option_name_to_letter(name: str) -> str | None:
         "vi": "V",
         "emacs": "E",
         "notify": "b",
+        "quiet": "q",
         "stdin": "s",
         "privileged": "p",
     }
     return mapping.get(name.lower())
 
 
-def _parse_startup_options(argv: List[str]) -> Tuple[Dict[str, bool], List[str]]:
+def _parse_startup_options(argv: List[str]) -> Tuple[Dict[str, bool], List[str], str | None]:
     changes: Dict[str, bool] = {}
     out: List[str] = []
     i = 0
@@ -216,8 +225,7 @@ def _parse_startup_options(argv: List[str]) -> Tuple[Dict[str, bool], List[str]]
             break
         if arg in ["-o", "+o"]:
             if i + 1 >= len(argv):
-                out.append(arg)
-                break
+                return changes, out, f"{arg} requires an argument"
             name = argv[i + 1]
             if name == "pipefail":
                 changes["pipefail"] = arg == "-o"
@@ -226,7 +234,7 @@ def _parse_startup_options(argv: List[str]) -> Tuple[Dict[str, bool], List[str]]
                 if letter is not None:
                     changes[letter] = arg == "-o"
                 else:
-                    out.extend([arg, name])
+                    return changes, out, f"illegal option name: {name}"
             i += 2
             continue
         if (arg.startswith("-") or arg.startswith("+")) and len(arg) > 1 and not arg.startswith("--"):
@@ -236,6 +244,8 @@ def _parse_startup_options(argv: List[str]) -> Tuple[Dict[str, bool], List[str]]
                 if ch in ["c", "s", "o"]:
                     ok = False
                     break
+                if ch not in VALID_STARTUP_OPTION_LETTERS:
+                    return changes, out, f"illegal option -- {ch}"
                 changes[ch] = on
             if ok:
                 i += 1
@@ -244,8 +254,8 @@ def _parse_startup_options(argv: List[str]) -> Tuple[Dict[str, bool], List[str]]
         out.extend(argv[i + 1 :])
         break
     if i >= len(argv):
-        return changes, []
-    return changes, out
+        return changes, [], None
+    return changes, out, None
 
 
 def _apply_startup_options(rt: Runtime, changes: Dict[str, bool]) -> None:
