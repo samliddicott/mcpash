@@ -80,5 +80,6 @@ Legend:
 ## Open Gaps (Next "Shall" Expansion)
 
 1. Add requirement rows for startup option semantics from `man ash` synopsis where in milestone scope.
-2. Add grammar-production-level trace (nonterminal-by-nonterminal) for parser completeness reporting.
+2. Refine grammar-production-level trace (nonterminal-by-nonterminal) for parser completeness reporting:
+   - `docs/grammar-production-checklist.md`
 3. Add per-requirement negative tests for diagnostics formatting and ambiguous parse errors.

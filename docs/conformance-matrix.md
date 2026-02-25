@@ -92,6 +92,8 @@ Explicitly out-of-scope for current milestone:
   - `docs/threaded-runtime-deviations.md`
 - Startup option parity matrix is tracked in:
   - `docs/startup-option-matrix.md`
+- Parser production checklist is tracked in:
+  - `docs/grammar-production-checklist.md`
 
 ## Next Conformance Work
 
