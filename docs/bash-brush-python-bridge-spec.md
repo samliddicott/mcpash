@@ -138,9 +138,14 @@ Flags:
 
 Read-only list/iterable of frames with:
 
+- `kind` (`python`, `function`, `command_subst`, `source`, `subshell`, `trap`, `script`)
 - `source`
 - `lineno`
 - `funcname`
+
+Ordering:
+
+- `sh.stack[0]` is the innermost active frame.
 
 ## 5.6 `sh.shared`
 
