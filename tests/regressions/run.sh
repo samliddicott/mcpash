@@ -118,6 +118,14 @@ grep -Eq '^[[:alpha:]]*u[[:alpha:]]*$' "$tmpdir/out" || fail "startup_long_optio
 printf '[PASS] startup_long_option\n'
 
 set +e
+PYTHONPATH="$ROOT/src" python3 -m mctash -u -c 'echo $UNSET' >"$tmpdir/out" 2>"$tmpdir/err"
+status=$?
+set -e
+[[ "$status" -eq 1 ]] || fail "startup_nounset_status: expected status 1, got $status"
+grep -Fq 'unbound variable: UNSET' "$tmpdir/err" || fail "startup_nounset_status: expected unbound variable diagnostic"
+printf '[PASS] startup_nounset_status\n'
+
+set +e
 PYTHONPATH="$ROOT/src" python3 -m mctash -z -c 'echo hi' >"$tmpdir/out" 2>"$tmpdir/err"
 status=$?
 set -e
@@ -152,5 +160,28 @@ set -e
 grep -Eq '^nolog[[:space:]]+on$' "$tmpdir/out" || fail "set_o_nolog_debug: expected nolog on"
 grep -Eq '^debug[[:space:]]+on$' "$tmpdir/out" || fail "set_o_nolog_debug: expected debug on"
 printf '[PASS] set_o_nolog_debug\n'
+
+workdir="$tmpdir/globtest"
+mkdir -p "$workdir"
+touch "$workdir/a" "$workdir/b"
+
+set +e
+PYTHONPATH="$ROOT/src" python3 -m mctash -f -c "cd '$workdir'; echo *" >"$tmpdir/out" 2>"$tmpdir/err"
+status=$?
+set -e
+[[ "$status" -eq 0 ]] || fail "startup_noglob_behavior: expected status 0, got $status"
+grep -Fxq '*' "$tmpdir/out" || fail "startup_noglob_behavior: expected literal '*' output"
+printf '[PASS] startup_noglob_behavior\n'
+
+noclobber_file="$tmpdir/noclobber.txt"
+printf 'one\n' >"$noclobber_file"
+set +e
+PYTHONPATH="$ROOT/src" python3 -m mctash -C -c "echo two > '$noclobber_file'; cat '$noclobber_file'" >"$tmpdir/out" 2>"$tmpdir/err"
+status=$?
+set -e
+[[ "$status" -eq 0 ]] || fail "startup_noclobber_behavior: expected shell status 0, got $status"
+grep -Fxq 'one' "$tmpdir/out" || fail "startup_noclobber_behavior: expected file content to remain 'one'"
+grep -Fq 'file exists' "$tmpdir/err" || fail "startup_noclobber_behavior: expected noclobber diagnostic"
+printf '[PASS] startup_noclobber_behavior\n'
 
 printf '[PASS] all regressions (including startup options)\n'

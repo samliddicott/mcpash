@@ -90,6 +90,8 @@ Explicitly out-of-scope for current milestone:
 - We should not yet claim: **full formal POSIX conformance** or **complete `man ash` facility/option parity**.
 - Threaded-runtime deltas from traditional fork-first ash/dash are tracked in:
   - `docs/threaded-runtime-deviations.md`
+- Startup option parity matrix is tracked in:
+  - `docs/startup-option-matrix.md`
 
 ## Next Conformance Work
 

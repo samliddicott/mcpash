@@ -6,6 +6,7 @@ import os
 import select
 import signal
 import shlex
+import stat
 import subprocess
 import sys
 import tempfile
@@ -1789,6 +1790,13 @@ class Runtime:
 
     def _open_for_redir(self, path: str, mode: str, op: str) -> object:
         try:
+            if op == ">" and self.options.get("C", False):
+                try:
+                    st = os.stat(path)
+                    if stat.S_ISREG(st.st_mode):
+                        raise RuntimeError(self._format_error(f"can't create {path}: file exists", line=self.current_line))
+                except FileNotFoundError:
+                    pass
             return open(path, mode)
         except OSError as e:
             reason = (e.strerror or "error").lower()
@@ -2104,6 +2112,8 @@ class Runtime:
 
     def _glob_field(self, text: str) -> List[str]:
         text = self._tilde_expand(text)
+        if self.options.get("f", False):
+            return [self._glob_pattern_display(text)]
         if any(c in text for c in ["*", "?", "[", "\ue001", "\ue002", "\ue003", "\ue004", "\ue005", "\ue007"]):
             pattern_for_match = self._glob_pattern_for_match(text)
             matches = sorted(glob.glob(pattern_for_match))
