@@ -272,6 +272,18 @@ class Runtime:
             except Exception:
                 pass
 
+    @staticmethod
+    def _preexec_reset_signals() -> None:
+        # External commands should not inherit mctash/Python signal handlers
+        # or ignored dispositions.
+        for sig in signal.Signals:
+            if sig in (signal.SIGKILL, signal.SIGSTOP):
+                continue
+            try:
+                signal.signal(sig, signal.SIG_DFL)
+            except Exception:
+                pass
+
     def _signal_handler(self, signum, frame) -> None:
         try:
             name = signal.Signals(signum).name.replace("SIG", "")
@@ -460,7 +472,12 @@ class Runtime:
                             except OSError:
                                 pass
                         with self._redirected_fds(sc.redirects):
-                            proc = subprocess.Popen(argv, env=child_env, start_new_session=True)
+                            proc = subprocess.Popen(
+                                argv,
+                                env=child_env,
+                                start_new_session=True,
+                                preexec_fn=self._preexec_reset_signals,
+                            )
 
                         def _watch_proc() -> None:
                             try:
@@ -606,7 +623,14 @@ class Runtime:
             stdout = subprocess.PIPE if i < len(node.commands) - 1 else None
             stdin, stdout, stderr, to_close = self._apply_redirects(cmd.redirects, stdin, stdout, None)
             try:
-                proc = subprocess.Popen(argv, stdin=stdin, stdout=stdout, stderr=stderr, env=cmd_env)
+                proc = subprocess.Popen(
+                    argv,
+                    stdin=stdin,
+                    stdout=stdout,
+                    stderr=stderr,
+                    env=cmd_env,
+                    preexec_fn=self._preexec_reset_signals,
+                )
             except FileNotFoundError:
                 print(f"{argv[0]}: not found", file=sys.stderr)
                 return 127
@@ -876,7 +900,14 @@ class Runtime:
             stdout = subprocess.PIPE if capture else None
             stdin, stdout, stderr, to_close = self._apply_redirects(cmd.redirects, stdin, stdout, None)
             try:
-                proc = subprocess.Popen(argv, stdin=stdin, stdout=stdout, stderr=stderr, env=cmd_env)
+                proc = subprocess.Popen(
+                    argv,
+                    stdin=stdin,
+                    stdout=stdout,
+                    stderr=stderr,
+                    env=cmd_env,
+                    preexec_fn=self._preexec_reset_signals,
+                )
                 if stdin == subprocess.PIPE:
                     out, _ = proc.communicate(data if data is not None else b"")
                 else:
@@ -1477,6 +1508,7 @@ class Runtime:
                         exec_argv,
                         env=child_env,
                         start_new_session=bool(isinstance(job_id, int)),
+                        preexec_fn=self._preexec_reset_signals,
                     )
                     if isinstance(job_id, int):
                         self._bg_pids[job_id] = proc.pid
