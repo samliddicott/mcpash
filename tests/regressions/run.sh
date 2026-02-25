@@ -124,7 +124,7 @@ run_case \
   'for i in a b; then echo x; done' \
   2 \
   $'\n' \
-  'expected do'
+  'expecting "do"'
 
 run_case \
   "reserved_word_function_name_ksh_style" \
@@ -138,7 +138,7 @@ run_case \
   'function then { echo x; }; then' \
   2 \
   $'\n' \
-  'expected function name'
+  'invalid function name'
 
 printf '[PASS] reserved-word contextualization regressions\n'
 
@@ -165,6 +165,26 @@ run_case \
   'unexpected'
 
 printf '[PASS] parser rejection regressions\n'
+
+# Diagnostic formatting checks.
+set +e
+PYTHONPATH="$ROOT/src" python3 -m mctash -c 'function then { echo x; }; then' >"$tmpdir/out" 2>"$tmpdir/err"
+status=$?
+set -e
+[[ "$status" -eq 2 ]] || fail "diag_function_name: expected status 2, got $status"
+grep -Eq '^mctash -c: line 1: syntax error:' "$tmpdir/err" || fail "diag_function_name: expected line-prefixed syntax error"
+printf '[PASS] diag_function_name\n'
+
+set +e
+PYTHONPATH="$ROOT/src" python3 -m mctash -c 'for i in a b; then echo x; done' >"$tmpdir/out" 2>"$tmpdir/err"
+status=$?
+set -e
+[[ "$status" -eq 2 ]] || fail "diag_expected_do: expected status 2, got $status"
+grep -Eq '^mctash -c: line 1: syntax error:' "$tmpdir/err" || fail "diag_expected_do: expected line-prefixed syntax error"
+grep -Fq 'expecting "do"' "$tmpdir/err" || fail "diag_expected_do: expected hint about do"
+printf '[PASS] diag_expected_do\n'
+
+printf '[PASS] diagnostic format regressions\n'
 
 # Startup option parity checks.
 set +e

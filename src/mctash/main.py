@@ -289,6 +289,16 @@ def _find_mctash_index(tokens: List[str]) -> int | None:
 
 
 def _normalize_parse_error(msg: str) -> tuple[str, int | None]:
+    if msg.startswith("expected function name at "):
+        where = msg[len("expected function name at ") :]
+        line_s = where.split(":", 1)[0]
+        line = int(line_s) if line_s.isdigit() else None
+        return "syntax error: invalid function name", line
+    if msg.startswith("expected do at "):
+        where = msg[len("expected do at ") :]
+        line_s = where.split(":", 1)[0]
+        line = int(line_s) if line_s.isdigit() else None
+        return 'syntax error: unexpected token (expecting "do")', line
     if msg.startswith("expected then at "):
         where = msg[len("expected then at ") :]
         line_s = where.split(":", 1)[0]
