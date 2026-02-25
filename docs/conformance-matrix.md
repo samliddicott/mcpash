@@ -17,10 +17,8 @@ Latest corpus result:
 - Oil subset corpus (via `src/tests/run_oil_subset.sh`):
   - Expanded suite (`smoke`, `redirect`, `word-split`, `posix`,
     `shell-grammar`, `sh-options`, `command-parsing`, `loop`, `if_`, `case_`,
-    `var-op-strip`, `var-op-test`, `var-sub`):
-    `pass=244 fail=1 skip=127` when including `pipeline` and `command_`.
-  - Remaining fail is an intentional semantic difference for last-pipeline-process
-    behavior (`pipeline.test.sh` expects OSH/lastpipe-like `line=hi`; ash/dash behavior is `line=`).
+    `var-op-strip`, `var-op-test`, `var-sub`, `pipeline`, `command_`):
+    `pass=245 fail=0 skip=127`.
   - Skips are from unsupported/non-portable directives in the lightweight
     subset runner, not known semantic failures in these slices.
   - In this runner, `## status: 99` is treated as an expected non-zero failure
