@@ -58,8 +58,27 @@ Legend:
 | `trap` installs and runs handlers for supported signals and EXIT where applicable | Partial | `tests/busybox/ash_test/ash-signals/signal*.tests`, `tests/busybox/ash_test/ash-signals/return_in_trap1.tests`, `tests/busybox/ash_test/ash-signals/save-ret.tests` | BusyBox signal suite passes; interactive-only behaviors are out of current scope. |
 | Signal handling does not break command execution and wait/child behavior in tested cases | Verified | `tests/busybox/ash_test/ash-signals/reap1.tests`, `tests/busybox/ash_test/ash-signals/sigquit_exec.tests`, `tests/busybox/ash_test/ash-misc/wait*.tests` | Covers practical trap/wait integration paths. |
 
+## 2.9 Shell Commands
+
+| Requirement (normative intent) | Status | Evidence | Notes |
+|---|---|---|---|
+| Simple commands perform assignment prefix handling, command lookup, and argument execution in shell order | Verified | `tests/busybox/ash_test/ash-misc/assignment*.tests`, `tests/busybox/ash_test/ash-misc/command*.tests`, `tests/oil/oils-master/spec/command-parsing.test.sh` | Includes prefix assignments on normal and control-flow commands. |
+| Lists and and/or chains (`;`, `&`, `&&`, `||`) execute with short-circuit semantics | Verified | `tests/busybox/ash_test/ash-misc/and-or.tests`, `tests/busybox/ash_test/ash-parsing/and_or_and_backgrounding.tests`, `tests/oil/oils-master/spec/shell-grammar.test.sh` (`a && b || c`) | Backgrounding and chain precedence are exercised. |
+| Compound commands (`if`, `case`, `while`, `until`, `for`, grouping, subshell) execute with correct control-flow behavior | Verified | `tests/busybox/ash_test/ash-misc/if_false_exitcode.tests`, `tests/busybox/ash_test/ash-misc/case1.tests`, `tests/busybox/ash_test/ash-misc/while*.tests`, `tests/busybox/ash_test/ash-misc/for*.tests`, `tests/busybox/ash_test/ash-parsing/group*.tests`, `tests/oil/oils-master/spec/if_.test.sh`, `tests/oil/oils-master/spec/case_.test.sh`, `tests/oil/oils-master/spec/loop.test.sh` | Includes nested loop break/continue and subshell cases in current corpora. |
+| Function definition and invocation preserve positional/local scope behavior in tested cases | Partial | `tests/busybox/ash_test/ash-misc/func*.tests`, `tests/busybox/ash_test/ash-misc/source_argv_and_shift.tests`, `tests/oil/oils-master/spec/shell-grammar.test.sh` (`Function def`) | Strong coverage for current scope; full interactive/debug corner behavior not claimed. |
+| Special builtins (`eval`, `command`, `exec`, `set`, `readonly`, etc.) honor command semantics in tested paths | Partial | `tests/busybox/ash_test/ash-misc/eval*.tests`, `tests/busybox/ash_test/ash-misc/exec.tests`, `tests/busybox/ash_test/ash-vars/readonly*.tests`, `tests/busybox/ash_test/ash-getopts/*.tests`, `tests/oil/oils-master/spec/command_.test.sh` | In-scope behavior is validated; full option surface parity still being expanded. |
+
+## 2.10 Shell Grammar
+
+| Requirement (normative intent) | Status | Evidence | Notes |
+|---|---|---|---|
+| Parser accepts valid command grammar forms for lists/pipelines/compound commands | Verified | `tests/busybox/ash_test/ash-parsing/*.tests`, `tests/oil/oils-master/spec/shell-grammar.test.sh` | Current parser pass set covers broad accepted grammar forms. |
+| Parser rejects invalid grammar with non-success status and diagnostics | Partial | `tests/busybox/ash_test/ash-parsing/nodone1.tests`, `tests/busybox/ash_test/ash-parsing/nodone2.tests`, `tests/oil/oils-master/spec/shell-grammar.test.sh` (`Invalid token`) | Rejection behavior is covered; message text exactness is implementation-specific in some cases. |
+| Here-doc grammar attachment/order and multi-here-doc parsing follow shell grammar constraints | Verified | `tests/busybox/ash_test/ash-heredoc/heredoc*.tests`, `tests/oil/oils-master/spec/posix.test.sh` (`Multiple here docs on one line`) | Includes parser queueing/order-sensitive cases. |
+| Case grammar variants (optional trailing `;;`, pattern alternation, oneline forms) parse correctly | Verified | `tests/busybox/ash_test/ash-misc/case1.tests`, `tests/oil/oils-master/spec/shell-grammar.test.sh` (`Case without last dsemi`, `Case with 2 options`, oneline forms), `tests/oil/oils-master/spec/case_.test.sh` | Covers core POSIX case grammar forms in scope. |
+
 ## Open Gaps (Next "Shall" Expansion)
 
-1. Expand to full `2.9`/`2.10` requirement rows (grammar production-level trace).
-2. Add requirement rows for startup option semantics from `man ash` synopsis where in milestone scope.
+1. Add requirement rows for startup option semantics from `man ash` synopsis where in milestone scope.
+2. Add grammar-production-level trace (nonterminal-by-nonterminal) for parser completeness reporting.
 3. Add per-requirement negative tests for diagnostics formatting and ambiguous parse errors.
