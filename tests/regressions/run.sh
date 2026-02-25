@@ -286,6 +286,36 @@ run_case \
   $'f\n'
 
 run_case \
+  "shared_builtin_basic" \
+  'f="/tmp/mctash-shared-$$.json"; MCTASH_SHARED_FILE="$f" shared SX=12; MCTASH_SHARED_FILE="$f" shared SX; rm -f "$f"' \
+  0 \
+  $'12\n'
+
+run_case \
+  "shared_cross_process_visibility" \
+  'f="/tmp/mctash-shared-$$.json"; MCTASH_SHARED_FILE="$f" shared SP=ok; MCTASH_SHARED_FILE="$f" python3 -m mctash -c '"'"'shared SP'"'"'; rm -f "$f"' \
+  0 \
+  $'ok\n'
+
+run_case \
+  "py_sh_vars_list_roundtrip" \
+  'py '"'"'sh.vars["LST"]=["a","b"]; print(len(sh.vars["LST"])); print(sh.vars["LST"][1])'"'"'' \
+  0 \
+  $'2\nb\n'
+
+run_case \
+  "py_sh_vars_dict_roundtrip" \
+  'py '"'"'sh.vars["MAP"]={"k":"v"}; print(sh.vars["MAP"]["k"])'"'"'' \
+  0 \
+  $'v\n'
+
+run_case \
+  "py_sh_vars_typed_cleared_on_shell_write" \
+  'py '"'"'sh.vars["LST"]=["a","b"]'"'"'; LST=z; py -e '"'"'type(sh.vars["LST"]).__name__'"'"'' \
+  0 \
+  $'str\n'
+
+run_case \
   "param_len_special_at_star" \
   'set -- aa b; echo ${#@}; echo ${#*}' \
   0 \

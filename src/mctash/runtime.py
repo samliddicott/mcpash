@@ -4,6 +4,7 @@ import glob
 import importlib
 import importlib.util
 import io
+import json
 import os
 import select
 import signal
@@ -51,6 +52,11 @@ from .parser import ParseError, Parser
 from .asdl_map import AsdlMappingError, lst_list_item_to_asdl
 from .osh_adapter import OshAdapterError, asdl_item_to_list_item
 
+try:
+    import fcntl
+except ImportError:  # pragma: no cover
+    fcntl = None  # type: ignore[assignment]
+
 
 class RuntimeError(Exception):
     pass
@@ -86,6 +92,82 @@ class ArithExpansionFailure(Exception):
         self.code = code
 
 
+class _SharedVarStore:
+    def __init__(self, path: str) -> None:
+        self.path = path
+        os.makedirs(os.path.dirname(self.path), exist_ok=True)
+        if not os.path.exists(self.path):
+            with open(self.path, "w", encoding="utf-8") as f:
+                json.dump({}, f)
+
+    @contextmanager
+    def _locked_file(self):
+        with open(self.path, "r+", encoding="utf-8") as f:
+            if fcntl is not None:
+                fcntl.flock(f.fileno(), fcntl.LOCK_EX)
+            try:
+                yield f
+            finally:
+                if fcntl is not None:
+                    fcntl.flock(f.fileno(), fcntl.LOCK_UN)
+
+    def _read(self, f) -> dict[str, str]:
+        f.seek(0)
+        text = f.read()
+        if not text.strip():
+            return {}
+        try:
+            raw = json.loads(text)
+        except json.JSONDecodeError:
+            return {}
+        if not isinstance(raw, dict):
+            return {}
+        out: dict[str, str] = {}
+        for k, v in raw.items():
+            out[str(k)] = str(v)
+        return out
+
+    def _write(self, f, data: dict[str, str]) -> None:
+        f.seek(0)
+        json.dump(data, f, sort_keys=True)
+        f.truncate()
+        f.flush()
+
+    def get(self, key: str) -> str:
+        with self._locked_file() as f:
+            return self._read(f).get(key, "")
+
+    def set(self, key: str, value: str) -> None:
+        with self._locked_file() as f:
+            data = self._read(f)
+            data[key] = value
+            self._write(f, data)
+
+    def delete(self, key: str) -> bool:
+        with self._locked_file() as f:
+            data = self._read(f)
+            if key not in data:
+                return False
+            del data[key]
+            self._write(f, data)
+            return True
+
+    def contains(self, key: str) -> bool:
+        with self._locked_file() as f:
+            return key in self._read(f)
+
+    def items(self) -> list[tuple[str, str]]:
+        with self._locked_file() as f:
+            return sorted(self._read(f).items())
+
+    def keys(self) -> list[str]:
+        return [k for k, _ in self.items()]
+
+    def __len__(self) -> int:
+        with self._locked_file() as f:
+            return len(self._read(f))
+
+
 @dataclass
 class ShellCalledProcessError(Exception):
     returncode: int
@@ -97,14 +179,30 @@ class ShellCalledProcessError(Exception):
         return f"ShellCalledProcessError(returncode={self.returncode}, cmd={self.cmd!r})"
 
 
-class _PyVarsMapping(MutableMapping[str, str]):
+class _PyVarsMapping(MutableMapping[str, object]):
     def __init__(self, rt: "Runtime") -> None:
         self._rt = rt
 
-    def __getitem__(self, key: str) -> str:
+    def __getitem__(self, key: str) -> object:
+        if key in self._rt._typed_vars:
+            return self._rt._typed_vars[key]  # type: ignore[return-value]
         return self._rt._get_var(key)
 
     def __setitem__(self, key: str, value: object) -> None:
+        if isinstance(value, (list, tuple)):
+            seq = list(value)
+            self._rt._assign_shell_var(key, " ".join(self._rt._py_to_shell(v) for v in seq))
+            self._rt._typed_vars[key] = seq
+            return
+        if isinstance(value, dict):
+            d = {str(k): v for k, v in value.items()}
+            self._rt._assign_shell_var(
+                key,
+                " ".join(f"{k}={self._rt._py_to_shell(v)}" for k, v in d.items()),
+            )
+            self._rt._typed_vars[key] = d
+            return
+        self._rt._typed_vars.pop(key, None)
         self._rt._assign_shell_var(key, self._rt._py_to_shell(value))
 
     def __delitem__(self, key: str) -> None:
@@ -120,6 +218,7 @@ class _PyVarsMapping(MutableMapping[str, str]):
         if not removed:
             raise KeyError(key)
         self._rt._var_attrs.pop(key, None)
+        self._rt._typed_vars.pop(key, None)
 
     def __iter__(self) -> Iterator[str]:
         seen: set[str] = set()
@@ -179,23 +278,23 @@ class _PySharedMapping(MutableMapping[str, str]):
         self._rt = rt
 
     def __getitem__(self, key: str) -> str:
-        if key not in self._rt._shared_vars:
+        store = self._rt._get_shared_store()
+        if not store.contains(key):
             raise KeyError(key)
-        return self._rt._shared_vars[key]
+        return store.get(key)
 
     def __setitem__(self, key: str, value: object) -> None:
-        self._rt._shared_vars[key] = self._rt._py_to_shell(value)
+        self._rt._get_shared_store().set(key, self._rt._py_to_shell(value))
 
     def __delitem__(self, key: str) -> None:
-        if key not in self._rt._shared_vars:
+        if not self._rt._get_shared_store().delete(key):
             raise KeyError(key)
-        del self._rt._shared_vars[key]
 
     def __iter__(self) -> Iterator[str]:
-        return iter(self._rt._shared_vars.keys())
+        return iter(self._rt._get_shared_store().keys())
 
     def __len__(self) -> int:
-        return len(self._rt._shared_vars)
+        return len(self._rt._get_shared_store())
 
 
 class _PyFnNamespace(MutableMapping[str, object]):
@@ -516,10 +615,16 @@ class Runtime:
         self._last_eval_hard_error: bool = False
         self._pipeline_input_latency: float | None = None
         self._var_attrs: Dict[str, set[str]] = {k: {"exported"} for k in self.env.keys()}
+        self._typed_vars: Dict[str, object] = {}
         self._call_stack: List[str] = []
         self._py_callables: Dict[str, Any] = {}
         self._py_ties: Dict[str, tuple[Any, Any, str | None]] = {}
-        self._shared_vars: Dict[str, str] = {}
+        shared_path = self.env.get(
+            "MCTASH_SHARED_FILE",
+            os.path.join(tempfile.gettempdir(), f"mctash-shared-{os.getuid()}.json"),
+        )
+        self._shared_store_path = shared_path
+        self._shared_store = _SharedVarStore(shared_path)
         self._py_globals: Dict[str, object] = {"__builtins__": __builtins__}
         # Canonical injected name is `sh`; `bash` is kept for compatibility.
         self._py_globals["sh"] = _PyBridge(self)
@@ -535,6 +640,13 @@ class Runtime:
 
     def _get_subshell_depth(self) -> int:
         return int(getattr(self._thread_ctx, "subshell_depth", 0))
+
+    def _get_shared_store(self) -> _SharedVarStore:
+        current = self._get_var("MCTASH_SHARED_FILE")
+        if current and current != self._shared_store_path:
+            self._shared_store_path = current
+            self._shared_store = _SharedVarStore(current)
+        return self._shared_store
 
     def _set_subshell_depth(self, value: int) -> None:
         self._thread_ctx.subshell_depth = max(0, int(value))
@@ -823,6 +935,8 @@ class Runtime:
                 bg_rt._bg_started_at = self._bg_started_at
                 bg_rt._last_bg_job = self._last_bg_job
                 bg_rt._last_bg_pid = self._last_bg_pid
+                bg_rt._shared_store_path = self._shared_store_path
+                bg_rt._shared_store = self._shared_store
                 bg_rt._thread_ctx.job_id = job_id
                 try:
                     bg_body = ListNode(items=[ListItem(node=item.node, background=False)])
@@ -1306,6 +1420,7 @@ class Runtime:
             if argv and argv[0] == "exec" and len(argv) <= 1 and node.redirects:
                 local_env = dict(self.env)
                 saved_env = self.env
+                assigned_names: set[str] = set()
                 try:
                     self.env = local_env
                     self._apply_persistent_redirects(node.redirects)
@@ -1318,6 +1433,7 @@ class Runtime:
                             raise SystemExit(e.code)
                         name = assign.name
                         op = assign.op
+                        assigned_names.add(name)
                         if name in self.readonly_vars:
                             print(self._format_error(f"{name}: is read only", line=self.current_line), file=sys.stderr)
                             raise SystemExit(2)
@@ -1337,6 +1453,8 @@ class Runtime:
                         for r in node.redirects
                     )
                     if should_persist_env:
+                        for n in assigned_names:
+                            self._typed_vars.pop(n, None)
                         saved_env.clear()
                         saved_env.update(self.env)
                     return 0
@@ -1345,6 +1463,7 @@ class Runtime:
 
             local_env = dict(self.env)
             saved_env = self.env
+            assigned_names: set[str] = set()
             try:
                 self.env = local_env
                 for assign in node.assignments:
@@ -1356,6 +1475,7 @@ class Runtime:
                         raise SystemExit(e.code)
                     name = assign.name
                     op = assign.op
+                    assigned_names.add(name)
                     if name in self.readonly_vars:
                         print(self._format_error(f"{name}: is read only", line=self.current_line), file=sys.stderr)
                         raise SystemExit(2)
@@ -1383,6 +1503,8 @@ class Runtime:
                 except RuntimeError as e:
                     print(str(e), file=sys.stderr)
                     return 1
+                for n in assigned_names:
+                    self._typed_vars.pop(n, None)
                 self.env.update(local_env)
                 for tied_name in self._py_ties:
                     self.env[tied_name] = self._get_var(tied_name)
@@ -3341,6 +3463,7 @@ class Runtime:
 
     def _set_local(self, name: str, value: str) -> None:
         value = self._coerce_var_value(name, value)
+        self._typed_vars.pop(name, None)
         if not self.local_stack:
             self.env[name] = value
             return
@@ -3350,6 +3473,7 @@ class Runtime:
         if name in self.readonly_vars:
             raise RuntimeError(f"{name}: is read only")
         value = self._coerce_var_value(name, value)
+        self._typed_vars.pop(name, None)
         tied = self._py_ties.get(name)
         if tied is not None:
             _, setter, tie_type = tied
@@ -3550,6 +3674,7 @@ class Runtime:
             if not mode_vars:
                 self.functions.pop(name, None)
                 continue
+            self._typed_vars.pop(name, None)
             removed_local = False
             for scope in reversed(self.local_stack):
                 if name in scope:
@@ -3584,6 +3709,7 @@ class Runtime:
         if name in self.readonly_vars:
             raise RuntimeError(f"{name}: is read only")
         value = self._coerce_var_value(name, value)
+        self._typed_vars.pop(name, None)
         tied = self._py_ties.get(name)
         if tied is not None:
             _, setter, tie_type = tied
@@ -3922,20 +4048,21 @@ class Runtime:
         return 0
 
     def _run_shared(self, args: List[str]) -> int:
+        store = self._get_shared_store()
         if not args:
-            for k in sorted(self._shared_vars.keys()):
-                print(f"{k}={self._shared_vars[k]}")
+            for k, v in store.items():
+                print(f"{k}={v}")
             return 0
         status = 0
         for arg in args:
             if "=" in arg:
                 name, value = arg.split("=", 1)
-                self._shared_vars[name] = value
+                store.set(name, value)
                 continue
-            if arg not in self._shared_vars:
+            if not store.contains(arg):
                 status = 1
                 continue
-            print(self._shared_vars[arg])
+            print(store.get(arg))
         return status
 
     def _read_stdin_text(self) -> str:

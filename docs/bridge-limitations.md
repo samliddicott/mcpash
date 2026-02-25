@@ -4,7 +4,6 @@ This file tracks intentionally deferred or partial items in the shell/Python bri
 
 ## Deferred
 
-- Shared variable process-level visibility (`shared` across true subshell/process boundaries) is not implemented yet.
 - Full typed shell arrays/associative arrays are not implemented as first-class shell variables; bridge type conversion for those is partial.
 - Full `PYTHON` command-line shell-syntax integration for inline pipeline terminator forms (e.g. placing `|` on the `END_PYTHON` line) is not supported.
 
@@ -15,4 +14,4 @@ This file tracks intentionally deferred or partial items in the shell/Python bri
 
 ## In Progress
 
-- End-to-end conformance gating: regressions + Oil subset are integrated; full BusyBox run-all remains timeout-bounded in local runs.
+- End-to-end conformance gating: regressions + Oil subset are integrated and full BusyBox run-all passes locally, but runtime remains bounded by configured timeout.

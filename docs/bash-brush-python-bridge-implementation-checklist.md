@@ -80,7 +80,7 @@ All checklist rows should be implemented as `sh.*` and mirrored via `bash.*` ali
 |---|---|---|---|---|
 | `shared` builtin | create/read/update/delete typed shared vars | scalar/array/assoc/integer tests | shared backend + shell builtin wiring | in-progress |
 | `sh.shared` mapping | Python access to shared backend | read/write/delete from Python | expose same storage via mapping API | done |
-| fork visibility | subshell/pipeline/background see same value | `(x=42)` after `shared x=0` -> `42` | shared memory + locking recommended | deferred |
+| fork visibility | subshell/pipeline/background see same value | `(x=42)` after `shared x=0` -> `42` | shared memory + locking recommended | done |
 
 ## Phase 8: Stack and diagnostics
 
