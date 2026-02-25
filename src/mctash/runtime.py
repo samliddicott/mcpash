@@ -14,8 +14,9 @@ import threading
 import time
 import fnmatch
 import re
+import traceback
 import uuid
-from contextlib import contextmanager
+from contextlib import contextmanager, redirect_stdout
 from typing import Dict, Iterable, List, Optional, Tuple
 
 from .ast_nodes import (
@@ -80,6 +81,15 @@ class ArithExpansionFailure(Exception):
         self.code = code
 
 
+class _PyBridge:
+    PIPE = subprocess.PIPE
+    STDOUT = subprocess.STDOUT
+    DEVNULL = subprocess.DEVNULL
+
+    def __init__(self, rt: "Runtime") -> None:
+        self._rt = rt
+
+
 class Runtime:
     SET_O_LIST_ORDER: List[str] = [
         "errexit",
@@ -134,6 +144,7 @@ class Runtime:
         "unalias",
         "trap",
         "let",
+        "py",
     }
     SPECIAL_BUILTINS = {
         ":",
@@ -188,6 +199,7 @@ class Runtime:
         "kill",
         "let",
         "getopts",
+        "py",
     }
 
     def __init__(self) -> None:
@@ -234,6 +246,11 @@ class Runtime:
         self._line_offset: int = 0
         self._last_eval_hard_error: bool = False
         self._pipeline_input_latency: float | None = None
+        self._py_globals: Dict[str, object] = {"__builtins__": __builtins__}
+        # Canonical injected name is `sh`; `bash` is kept for compatibility.
+        self._py_globals["sh"] = _PyBridge(self)
+        self._py_globals["bash"] = self._py_globals["sh"]
+        self._py_globals["shell"] = self._py_globals["sh"]
         # Align with ash test assumptions: shell starts with only stdio fds open.
         if threading.current_thread() is threading.main_thread():
             try:
@@ -1360,6 +1377,8 @@ class Runtime:
             return self._run_let(argv[1:])
         if name == "getopts":
             return self._run_getopts(argv[1:])
+        if name == "py":
+            return self._run_py(argv[1:])
         if name in ["[", "[[", "test"]:
             return self._run_test(name, argv[1:])
         if name == "exit":
@@ -3412,7 +3431,112 @@ class Runtime:
         rendered = "".join(rendered_parts)
         if isinstance(sys.stdout, io.StringIO) and self._fd_redirect_depth == 0:
             sys.stdout.write(rendered)
-            return 0
+        return 0
+
+    def _run_py(self, args: List[str]) -> int:
+        eval_mode = False
+        structured_exc = False
+        stdout_var: str | None = None
+        return_var: str | None = None
+        i = 0
+        while i < len(args):
+            a = args[i]
+            if a == "--":
+                i += 1
+                break
+            if not a.startswith("-") or a == "-":
+                break
+            if a == "-e":
+                eval_mode = True
+                i += 1
+                continue
+            if a == "-x":
+                structured_exc = True
+                i += 1
+                continue
+            if a == "-v":
+                if i + 1 >= len(args):
+                    self._report_error("usage: py [-e] [-x] [-v VAR] [-r VAR] CODE", line=self.current_line, context="py")
+                    return 2
+                stdout_var = args[i + 1]
+                i += 2
+                continue
+            if a == "-r":
+                if i + 1 >= len(args):
+                    self._report_error("usage: py [-e] [-x] [-v VAR] [-r VAR] CODE", line=self.current_line, context="py")
+                    return 2
+                return_var = args[i + 1]
+                i += 2
+                continue
+            self._report_error(f"illegal option {a}", line=self.current_line, context="py")
+            return 2
+        payload = args[i:]
+        if not payload:
+            self._report_error("usage: py [-e] [-x] [-v VAR] [-r VAR] CODE", line=self.current_line, context="py")
+            return 2
+
+        code = " ".join(payload)
+        py_stdout = io.StringIO() if stdout_var else None
+        py_result: object = None
+        try:
+            if py_stdout is not None:
+                with redirect_stdout(py_stdout):
+                    py_result = self._run_py_payload(payload, code, eval_mode)
+            else:
+                py_result = self._run_py_payload(payload, code, eval_mode)
+        except KeyboardInterrupt:
+            return 130
+        except Exception as e:
+            if structured_exc:
+                self._assign_shell_var("MCSH_EXCEPTION", type(e).__name__)
+                self._assign_shell_var("MCSH_EXCEPTION_MSG", str(e))
+                tb_lines = [ln.rstrip() for ln in traceback.format_tb(e.__traceback__)]
+                self._assign_shell_var("MCSH_EXCEPTION_TB", "\n".join(tb_lines))
+                self._assign_shell_var("MCSH_EXCEPTION_LANG", "python")
+            else:
+                print(f"py: {type(e).__name__}: {e}", file=sys.stderr)
+            return 1
+
+        if stdout_var is not None and py_stdout is not None:
+            self._assign_shell_var(stdout_var, py_stdout.getvalue())
+        if return_var is not None:
+            self._assign_shell_var(return_var, self._py_to_shell(py_result))
+        if eval_mode and py_result is not None and stdout_var is None and return_var is None:
+            print(self._py_to_shell(py_result))
+        return 0
+
+    def _run_py_payload(self, payload: List[str], code: str, eval_mode: bool) -> object:
+        if eval_mode:
+            return eval(code, self._py_globals, self._py_globals)
+
+        target = self._resolve_py_name(payload[0])
+        if callable(target):
+            return target(*payload[1:])
+        exec(code, self._py_globals, self._py_globals)
+        return None
+
+    def _resolve_py_name(self, name: str) -> object | None:
+        cur = self._py_globals.get(name)
+        if cur is not None:
+            return cur
+        parts = name.split(".")
+        if not parts:
+            return None
+        cur = self._py_globals.get(parts[0])
+        if cur is None:
+            return None
+        for p in parts[1:]:
+            if not hasattr(cur, p):
+                return None
+            cur = getattr(cur, p)
+        return cur
+
+    def _py_to_shell(self, value: object) -> str:
+        if value is None:
+            return ""
+        if isinstance(value, str):
+            return value
+        return repr(value)
         # Use latin-1 to preserve byte-oriented escapes like \\xHH.
         data = rendered.encode("latin-1", errors="ignore")
         try:

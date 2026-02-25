@@ -84,6 +84,55 @@ run_case \
   $'ab\n'
 
 run_case \
+  "py_statement_exec" \
+  "py 'print(\"ok\")'" \
+  0 \
+  $'ok\n'
+
+run_case \
+  "py_eval_print" \
+  "py -e '1+2'" \
+  0 \
+  $'3\n'
+
+run_case \
+  "py_persistent_state" \
+  "py 'x=7'; py -e 'x'" \
+  0 \
+  $'7\n'
+
+run_case \
+  "py_stdout_capture_var" \
+  'py -v out '"'"'print("cap")'"'"'; echo "X${out}Y"' \
+  0 \
+  $'Xcap\nY\n'
+
+run_case \
+  "py_return_capture_var" \
+  'py -r out -e '"'"'10+5'"'"'; echo "X${out}Y"' \
+  0 \
+  $'X15Y\n'
+
+run_case \
+  "py_callable_dispatch" \
+  'py '"'"'def add(a,b): return int(a)+int(b)'"'"'; py -r out add 2 3; echo "X${out}Y"' \
+  0 \
+  $'X5Y\n'
+
+run_case \
+  "py_structured_exception" \
+  'py -x '"'"'raise ValueError("boom")'"'"'; echo "$MCSH_EXCEPTION|$MCSH_EXCEPTION_MSG|$MCSH_EXCEPTION_LANG"; case "$MCSH_EXCEPTION_TB" in *"<string>"*) echo s:0;; *) echo s:1;; esac' \
+  0 \
+  $'ValueError|boom|python\ns:0\n'
+
+run_case \
+  "py_exception_status" \
+  'py '"'"'raise RuntimeError("bad")'"'"'; echo s:$?' \
+  0 \
+  $'s:1\n' \
+  'RuntimeError: bad'
+
+run_case \
   "param_len_special_at_star" \
   'set -- aa b; echo ${#@}; echo ${#*}' \
   0 \
