@@ -45,7 +45,7 @@ All checklist rows should be implemented as `sh.*` and mirrored via `bash.*` ali
 | `sh.vars` mapping | live get/set/del/iter/contains/len | CRUD and iteration tests | map directly to shell var store APIs | done |
 | `sh.env` mapping | exported env view with set+export on write | read exported vars; write exports | filter by export attr | done |
 | attrs/declare APIs | attrs read/write and declare flags | integer/readonly/exported flag tests | use shell declare internals | done |
-| type conversion | list->array, dict->assoc, scalar->scalar | roundtrip for each type | canonical conversion helpers | in-progress |
+| type conversion | scalar baseline in ash mode; list/dict deferred to Bash-compat mode | roundtrip for in-scope types | canonical conversion helpers | deferred |
 
 ## Phase 4: Function bridge and import wrappers
 
@@ -72,7 +72,7 @@ All checklist rows should be implemented as `sh.*` and mirrored via `bash.*` ali
 |---|---|---|---|---|
 | `py -t/-u` | shell-side tie and untie | shell write reflected in Python, and reverse | install/remove variable hooks | done |
 | `sh.tie/untie` | python-side getter/setter ties | getter invoked on read, setter on write | tie registry keyed by var name | done |
-| tie types | `scalar`, `integer`, `array`, `assoc`, auto-detect | each tie type roundtrip | explicit converters per tie type | in-progress |
+| tie types | `scalar`/`integer` in ash mode; `array`/`assoc` deferred to Bash-compat mode | each in-scope tie type roundtrip | explicit converters per tie type | deferred |
 
 ## Phase 7: Shared variables
 

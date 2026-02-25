@@ -4,11 +4,14 @@ This file tracks intentionally deferred or partial items in the shell/Python bri
 
 ## Deferred
 
-- Full typed shell arrays/associative arrays are not implemented as first-class shell variables; bridge type conversion for those is partial.
+- Full typed shell arrays/associative arrays are deferred until Bash-compat mode is introduced.
+  Current ash-target path remains scalar-only by design.
+- Bridge/tie support for `array` and `assoc` is deferred with shell array/hash runtime support.
+- Future enablement should be behind an explicit Bash-extension option (e.g. `set -o bash_ext` or equivalent).
+- Any current list/dict bridge behavior should be treated as non-normative until that mode exists.
 
 ## Partial
 
-- Tie type support includes `scalar`, `integer`, `array`, `assoc`, but non-scalar shell-side representation remains string-based.
 - `sh.stack` frame model is available and includes function names, but does not yet expose a complete call-frame model equivalent to mature shells.
 
 ## In Progress
