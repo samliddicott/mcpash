@@ -23,6 +23,19 @@ The script runs `ash` first, then `mctash`, saves their outputs under `tests/dif
 - You can filter the run with `--case NAME` or swap in alternate shells via the `ASH_BIN`/`MCTASH_CMD` environment variables.
 - Add a descriptive log entry when a divergence is detected so we can trace it back to the spec sentence you are exercising.
 
+## Current man-page coverage
+
+- `man-ash-set.sh` and `set-listing.sh` exercise the `set` builtin (option toggles, `set --`, no-arg listing).
+- `man-ash-test.sh` covers `[`, `test`, and `[[` string/numeric/logical combinations.
+- `man-ash-getopts.sh` checks `getopts` option parsing, OPTARG/OPTIND, and missing arguments handling.
+- `man-ash-redir.sh` validates `>`, `>>`, heredoc/`<<-`, and file descriptor duplication.
+- `man-ash-env.sh` targets `export`, `unset`, and `readonly`.
+- `man-ash-read.sh` runs the `read` builtin with IFS splitting, `-r`, `-n`, and `-d` variations.
+- `man-ash-trap.sh` exercises `trap` registrations, signal ignoring, EXIT handlers, and INT handling.
+- `man-ash-kill-wait.sh` covers `kill` target checks plus `wait` status reporting.
+- `man-ash-resource.sh` touches `hash`, `times`, `umask`, and `ulimit` output behavior.
+- `man-ash-jobs.sh` exercises `jobs`, `fg`, and `bg` job control commands.
+
 ## Next steps
 1. Add cases for each builtin and option sequence described in `man ash` (use subsection identifiers as labels).
 2. Expand to POSIX grammar points (compound commands, parameter expansion, quoting, redirections).
