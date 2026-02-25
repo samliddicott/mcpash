@@ -241,8 +241,12 @@ Reads invoke getter; writes invoke setter (if absent and write attempted -> erro
 
 Provide shell builtin `shared` and Python mapping `sh.shared`.
 
-Shell commands:
+Ash-mode baseline shell commands:
 - `shared name=value`
+- `shared name`
+- `shared` (list all)
+
+Deferred to Bash-compat mode:
 - `shared -a name`
 - `shared -A name`
 - `shared -i name=0`

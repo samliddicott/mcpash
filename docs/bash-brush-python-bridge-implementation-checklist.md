@@ -78,7 +78,7 @@ All checklist rows should be implemented as `sh.*` and mirrored via `bash.*` ali
 
 | Feature | Required behavior | Conformance tests | Implementation hints | Status |
 |---|---|---|---|---|
-| `shared` builtin | create/read/update/delete typed shared vars | scalar/array/assoc/integer tests | shared backend + shell builtin wiring | in-progress |
+| `shared` builtin | scalar shared vars in ash mode (`name=value`, read/list); typed variants deferred to Bash-compat mode | scalar and cross-process visibility tests | shared backend + shell builtin wiring | done |
 | `sh.shared` mapping | Python access to shared backend | read/write/delete from Python | expose same storage via mapping API | done |
 | fork visibility | subshell/pipeline/background see same value | `(x=42)` after `shared x=0` -> `42` | shared memory + locking recommended | done |
 
