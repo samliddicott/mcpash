@@ -19,7 +19,7 @@ This runs focused checks for fragile semantics:
 Run full local conformance gate:
 
 ```sh
-make conformance
+make conformance-full
 ```
 
 This runs, in order:
@@ -28,7 +28,13 @@ This runs, in order:
 2. BusyBox ash corpus (`src/tests/run_busybox_ash.sh run`)
 3. Oil subset corpus (`src/tests/run_oil_subset.sh run ...`)
 
-The gate fails on baseline regressions.
+The full gate fails on baseline regressions.
+
+Run a quick gate (fast smoke + parser coverage):
+
+```sh
+make conformance-quick
+```
 
 ## Useful Overrides
 
@@ -36,9 +42,10 @@ You can override thresholds/timeouts per run:
 
 ```sh
 RUN_TIMEOUT=1200 \
+RUN_MODULE_TIMEOUT=1200 \
 BUSYBOX_MIN_OK=357 BUSYBOX_MAX_FAIL=0 \
 OIL_MIN_PASS=245 OIL_MAX_FAIL=0 \
-make conformance
+make conformance-full
 ```
 
 Known environment-specific BusyBox allowed-fail list can be adjusted:

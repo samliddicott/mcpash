@@ -7,6 +7,7 @@ BUSYBOX_MIN_OK="${BUSYBOX_MIN_OK:-357}"
 BUSYBOX_MAX_FAIL="${BUSYBOX_MAX_FAIL:-0}"
 BUSYBOX_ALLOWED_FAIL_FILES="${BUSYBOX_ALLOWED_FAIL_FILES:-ash-signals-sigquit_exec.tests.fail}"
 RUN_TIMEOUT="${RUN_TIMEOUT:-1200}"
+RUN_MODULE_TIMEOUT="${RUN_MODULE_TIMEOUT:-${RUN_TIMEOUT}}"
 
 OIL_MIN_PASS="${OIL_MIN_PASS:-245}"
 OIL_MAX_FAIL="${OIL_MAX_FAIL:-0}"
@@ -55,7 +56,7 @@ pass "Targeted regressions"
 info "Running BusyBox ash corpus (timeout=${RUN_TIMEOUT}s)"
 busy_log="$tmpdir/busybox.log"
 busy_rc=0
-if ! RUN_TIMEOUT="$RUN_TIMEOUT" "$ROOT/src/tests/run_busybox_ash.sh" run >"$busy_log" 2>&1; then
+if ! RUN_TIMEOUT="$RUN_TIMEOUT" RUN_MODULE_TIMEOUT="$RUN_MODULE_TIMEOUT" "$ROOT/src/tests/run_busybox_ash.sh" run >"$busy_log" 2>&1; then
   busy_rc=$?
 fi
 busy_summary="$(grep 'Summary:' "$busy_log" | tail -n1 || true)"

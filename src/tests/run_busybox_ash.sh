@@ -11,6 +11,7 @@ ASH_TEST_DIR="${BUSYBOX_DIR}/ash_test"
 HUSH_TEST_DIR="${BUSYBOX_DIR}/hush_test"
 ASH_LOG="${ASH_TEST_DIR}/mctash-ash.log"
 RUN_TIMEOUT="${RUN_TIMEOUT:-120}"
+RUN_MODULE_TIMEOUT="${RUN_MODULE_TIMEOUT:-${RUN_TIMEOUT}}"
 
 fetch_if_missing() {
   if [[ -d "${ASH_TEST_DIR}" && -d "${HUSH_TEST_DIR}" ]]; then
@@ -45,11 +46,31 @@ CONFIG_FEATURE_FANCY_ECHO=y
 EOF
 
   cd "${ASH_TEST_DIR}"
-  set +e
-  set -o pipefail
-  timeout "${RUN_TIMEOUT}" ./run-all 2>&1 | tee "${ASH_LOG}"
-  rc=${PIPESTATUS[0]}
-  set -e
+  : > "${ASH_LOG}"
+  modules=()
+  if [[ $# -gt 0 ]]; then
+    modules=("$@")
+  else
+    mapfile -t modules < <(ls -d ash-* | sort)
+  fi
+  total="${#modules[@]}"
+  idx=0
+  rc=0
+  for mod in "${modules[@]}"; do
+    idx=$((idx + 1))
+    echo "[${idx}/${total}] ${mod}" | tee -a "${ASH_LOG}"
+    set +e
+    set -o pipefail
+    timeout "${RUN_MODULE_TIMEOUT}" ./run-all "${mod}" 2>&1 | tee -a "${ASH_LOG}"
+    mod_rc=${PIPESTATUS[0]}
+    set -e
+    if [[ ${mod_rc} -ne 0 ]]; then
+      rc=${mod_rc}
+      if [[ ${mod_rc} -eq 124 ]]; then
+        echo "module timeout: ${mod}" | tee -a "${ASH_LOG}"
+      fi
+    fi
+  done
 
   ok=$(grep -c ' ok$' "${ASH_LOG}" || true)
   fail=$(grep -c ' fail' "${ASH_LOG}" || true)
@@ -62,13 +83,14 @@ EOF
 }
 
 mode="${1:-run}"
+shift || true
 case "${mode}" in
   fetch)
     fetch_if_missing
     ;;
   run)
     fetch_if_missing
-    run_ash
+    run_ash "$@"
     ;;
   *)
     echo "Usage: $0 [fetch|run]" >&2
