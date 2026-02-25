@@ -42,6 +42,23 @@ Legend:
 
 ## Outstanding Parser-Checklist Work
 
-1. Add a production-by-production sub-checklist for word-level grammar interactions (quotes, command substitution nesting, arithmetic contexts) with parse-location anchors.
+1. Expand the word-level sub-checklist above to include explicit parser/expander line anchors and negative-case rows.
 2. Add explicit negative parse tests for ambiguous boundaries (reserved words vs literals in more contexts).
 3. Add parser checklist links to ASDL mapping coverage (`research/parser/asdl_coverage_report.md`) so parse completeness and ASDL completeness advance together.
+
+## Word-Level Grammar Sub-Checklist
+
+Word parsing is split across:
+
+- `src/mctash/word_parser.py` (LST-oriented word structure parser)
+- `src/mctash/expand.py` (`parse_word_parts()` and expansion-time parsing)
+
+| Word-level grammar area | Primary function(s) | Status | Test evidence | Notes |
+|---|---|---|---|---|
+| single quotes, double quotes, escaped characters | `word_parser._parse_parts()`, `expand.parse_word_parts()` | Covered | `tests/busybox/ash_test/ash-parsing/quote*.tests`, `tests/busybox/ash_test/ash-quoting/squote_*.tests`, `tests/oil/oils-master/spec/shell-grammar.test.sh` (`Command with args`) | Core quote tokenization and preservation behavior are exercised. |
+| parameter expansion tokens (`$x`, `$1`, `${...}` basic forms) | `word_parser._parse_param()`, `word_parser._parse_braced_var()`, `expand._parse_dollar()` | Covered | `tests/busybox/ash_test/ash-vars/param_expand_*.tests`, `tests/oil/oils-master/spec/var-op-test.test.sh`, `tests/oil/oils-master/spec/var-sub.test.sh` | Includes unset/null operators and error branches in execution path. |
+| braced parameter operators (`:-`, `:=`, `:+`, `:?`, `#`, `##`, `%`, `%%`, substring) | `word_parser._split_braced_var()`, `expand._split_braced_param()` | Partial | `tests/busybox/ash_test/ash-vars/var-pattern-replacement-in-parameter-expansion-*.tests`, `tests/oil/oils-master/spec/var-op-strip.test.sh`, `tests/oil/oils-master/spec/var-op-test.test.sh` | Major operators covered; exhaustive exotic combinations still partial. |
+| command substitution `$()` and backticks | `word_parser._parse_command_sub()`, `expand._parse_dollar()` / backtick parsing | Covered | `tests/busybox/ash_test/ash-psubst/tick*.tests`, `tests/oil/oils-master/spec/smoke.test.sh` (`command sub`) | Includes nested/common command-sub forms used in suites. |
+| arithmetic substitution `$((...))` | `word_parser._parse_arith_sub()`, `expand._parse_dollar()` | Covered | `tests/busybox/ash_test/ash-arith/*.tests`, `tests/oil/oils-master/spec/posix.test.sh` (`Arithmetic expansion`) | Arithmetic expression surfaces are broadly exercised. |
+| quote-aware field splitting and glob handoff | `expand.parse_word_parts()`, `expand.expand_word()` | Covered | `tests/busybox/ash_test/ash-vars/var_wordsplit_ifs*.tests`, `tests/busybox/ash_test/ash-glob/glob*.tests`, `tests/oil/oils-master/spec/word-split.test.sh` | Includes `IFS` and quote-preservation interactions in regression suite. |
+| deep nested quote/substitution combinations | both paths above | Partial | `tests/busybox/ash_test/ash-quoting/*`, `tests/oil/oils-master/spec/shell-grammar.test.sh` | Strong practical coverage, but no exhaustive combinatorial matrix yet. |
