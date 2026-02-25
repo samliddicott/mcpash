@@ -84,6 +84,12 @@ run_case \
   $'ab\n'
 
 run_case \
+  "param_len_special_at_star" \
+  'set -- aa b; echo ${#@}; echo ${#*}' \
+  0 \
+  $'4\n4\n'
+
+run_case \
   "getopts_bad_var_name" \
   'getopts ab 1x -a; echo s:$?' \
   0 \

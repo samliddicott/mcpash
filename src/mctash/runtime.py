@@ -2294,10 +2294,10 @@ class Runtime:
         if op == "__invalid__":
             raise RuntimeError(self._format_error("syntax error: bad substitution", line=self.current_line))
         if op == "__len__":
-            if name in ["@", "*", "#", "?", "$", "!", "-", "LINENO", "PPID"] or name.isdigit():
+            if name in ["@", "*"]:
+                return str(len(self._ifs_join(self.positional)))
+            if name in ["#", "?", "$", "!", "-", "LINENO", "PPID"] or name.isdigit():
                 v = self._expand_param(name, quoted)
-                if isinstance(v, list):
-                    return str(len(v))
                 return str(len(v))
             value, _ = self._get_param_state(name)
             return str(len(value))
