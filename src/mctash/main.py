@@ -207,6 +207,8 @@ def _option_name_to_letter(name: str) -> str | None:
         "vi": "V",
         "emacs": "E",
         "notify": "b",
+        "nolog": "q",
+        "debug": "debug",
         "quiet": "q",
         "stdin": "s",
         "privileged": "p",

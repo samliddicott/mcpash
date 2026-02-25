@@ -140,6 +140,17 @@ status=$?
 set -e
 [[ "$status" -eq 0 ]] || fail "set_plus_o_list: expected status 0, got $status"
 grep -Fq 'set +o errexit' "$tmpdir/out" || fail "set_plus_o_list: missing errexit line"
+grep -Fq 'set +o nolog' "$tmpdir/out" || fail "set_plus_o_list: missing nolog line"
+grep -Fq 'set +o debug' "$tmpdir/out" || fail "set_plus_o_list: missing debug line"
 printf '[PASS] set_plus_o_list\n'
+
+set +e
+PYTHONPATH="$ROOT/src" python3 -m mctash -c 'set -o nolog; set -o debug; set -o' >"$tmpdir/out" 2>"$tmpdir/err"
+status=$?
+set -e
+[[ "$status" -eq 0 ]] || fail "set_o_nolog_debug: expected status 0, got $status"
+grep -Eq '^nolog[[:space:]]+on$' "$tmpdir/out" || fail "set_o_nolog_debug: expected nolog on"
+grep -Eq '^debug[[:space:]]+on$' "$tmpdir/out" || fail "set_o_nolog_debug: expected debug on"
+printf '[PASS] set_o_nolog_debug\n'
 
 printf '[PASS] all regressions (including startup options)\n'

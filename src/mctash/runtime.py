@@ -97,7 +97,8 @@ class Runtime:
         "notify",
         "nounset",
         "privileged",
-        "quiet",
+        "nolog",
+        "debug",
         "pipefail",
     ]
     SET_O_OPTION_MAP: Dict[str, str] = {
@@ -117,6 +118,8 @@ class Runtime:
         "ignoreeof": "I",
         "stdin": "s",
         "privileged": "p",
+        "nolog": "q",
+        "debug": "debug",
         "quiet": "q",
         "pipefail": "pipefail",
     }
@@ -1864,6 +1867,11 @@ class Runtime:
         if not redirects:
             yield
             return
+        try:
+            sys.stdout.flush()
+            sys.stderr.flush()
+        except Exception:
+            pass
         saved: List[Tuple[int, int]] = []
         saved_active = set(self._active_temp_fds)
         saved_user_fds = set(self._user_fds)
@@ -1922,6 +1930,11 @@ class Runtime:
                     self._dup_fd(redir, is_output=False, default_fd=fd, allowed_fds=transient_fds)
             yield
         finally:
+            try:
+                sys.stdout.flush()
+                sys.stderr.flush()
+            except Exception:
+                pass
             for fd, saved_fd in reversed(saved):
                 if saved_fd >= 0:
                     os.dup2(saved_fd, fd)

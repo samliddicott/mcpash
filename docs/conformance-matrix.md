@@ -64,6 +64,7 @@ In-scope option parity right now:
 - non-interactive startup option parsing (`-`/`+` single-letter flags in implemented set)
 - `-o`/`+o` with supported names
 - `set -o` status listing and `set +o` re-creatable listing
+- includes ash-style `nolog` and `debug` names (plus mctash `pipefail`)
 
 Explicitly out-of-scope for current milestone:
 
