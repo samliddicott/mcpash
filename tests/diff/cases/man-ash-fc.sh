@@ -1,6 +1,6 @@
 #!/usr/bin/env ash
 # Coverage: man ash `fc` builtin (listing history, reverse order, and `-s` re-execution).
-set -euo pipefail
+set -eu
 if ! command -v fc >/dev/null 2>&1; then
   printf 'fc-missing\n'
   exit 0
