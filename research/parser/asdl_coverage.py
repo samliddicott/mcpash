@@ -5,6 +5,25 @@ from pathlib import Path
 
 ASDL_PATH = Path("research/parser/osh_syntax/frontend.syntax.asdl")
 REPORT_PATH = Path("research/parser/asdl_coverage_report.md")
+CHECKLIST_PATH = Path("docs/grammar-production-checklist.md")
+
+CHECKLIST_LINKS = {
+    "word_part": ["`docs/grammar-production-checklist.md#word-level-grammar-sub-checklist`"],
+    "word": ["`docs/grammar-production-checklist.md#word-level-grammar-sub-checklist`"],
+    "command": ["`docs/grammar-production-checklist.md#grammar-families`"],
+    "redir_param": [
+        "`docs/grammar-production-checklist.md#grammar-families`",
+        "`docs/grammar-production-checklist.md#word-level-grammar-sub-checklist`",
+    ],
+    "redir_loc": ["`docs/grammar-production-checklist.md#grammar-families`"],
+    "assign_op": ["`docs/grammar-production-checklist.md#grammar-families`"],
+    "arith_expr": ["`docs/grammar-production-checklist.md#word-level-grammar-sub-checklist`"],
+    "bool_expr": ["`docs/grammar-production-checklist.md#grammar-families`"],
+    "condition": ["`docs/grammar-production-checklist.md#grammar-families`"],
+    "case_arg": ["`docs/grammar-production-checklist.md#grammar-families`"],
+    "pat": ["`docs/grammar-production-checklist.md#grammar-families`"],
+    "for_iter": ["`docs/grammar-production-checklist.md#grammar-families`"],
+}
 
 
 def main() -> None:
@@ -66,11 +85,29 @@ def main() -> None:
             lines.append("(none)")
             lines.append("")
             continue
+        implemented_count = 0
+        missing_count = 0
         for name in variants:
             status = "missing"
             if name in implemented.get(section, set()):
                 status = "implemented"
+                implemented_count += 1
+            else:
+                missing_count += 1
             lines.append(f"- `{name}`: {status}")
+        lines.append("")
+        lines.append(
+            f"Summary: implemented `{implemented_count}`, missing `{missing_count}`."
+        )
+        links = CHECKLIST_LINKS.get(section, [])
+        if links:
+            lines.append("Checklist links:")
+            for link in links:
+                lines.append(f"- {link}")
+        else:
+            lines.append(
+                f"Checklist links: add mapping in `{CHECKLIST_PATH}` / `research/parser/asdl_coverage.py`."
+            )
         lines.append("")
 
     REPORT_PATH.write_text("\n".join(lines), encoding="utf-8")

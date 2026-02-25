@@ -44,7 +44,11 @@ Legend:
 
 1. Expand the word-level sub-checklist above to include explicit parser/expander line anchors and negative-case rows.
 2. Add explicit negative parse tests for ambiguous boundaries (reserved words vs literals in more contexts).
-3. Add parser checklist links to ASDL mapping coverage (`research/parser/asdl_coverage_report.md`) so parse completeness and ASDL completeness advance together.
+3. Extend parser checklist links from ASDL mapping coverage into per-variant action items.
+
+ASDL linkback automation status:
+
+- `research/parser/asdl_coverage.py` now emits checklist links in `research/parser/asdl_coverage_report.md`.
 
 ## Word-Level Grammar Sub-Checklist
 
