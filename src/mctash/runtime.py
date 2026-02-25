@@ -357,13 +357,15 @@ class _PyBridge:
 
     @property
     def stack(self) -> list[dict[str, object]]:
-        source = self._rt.source_stack[-1] if self._rt.source_stack else self._rt.script_name
-        line = self._rt.current_line if self._rt.current_line is not None else 0
-        frames: list[dict[str, object]] = []
-        for fn in reversed(self._rt._call_stack):
-            frames.append({"source": source, "lineno": int(line), "funcname": fn})
-        frames.append({"source": source, "lineno": int(line), "funcname": ""})
-        return frames
+        self._rt._sync_root_frame()
+        line = int(self._rt.current_line if self._rt.current_line is not None else 0)
+        out: list[dict[str, object]] = []
+        for i, fr in enumerate(self._rt._frame_stack):
+            row = dict(fr)
+            if i == len(self._rt._frame_stack) - 1:
+                row["lineno"] = line
+            out.append(row)
+        return list(reversed(out))
 
     def __call__(self, *args: object) -> str:
         cp = self.run(*args, capture_output=True, check=False)
@@ -618,6 +620,7 @@ class Runtime:
         self._py_import_counter: int = 0
         self._var_attrs: Dict[str, set[str]] = {k: {"exported"} for k in self.env.keys()}
         self._typed_vars: Dict[str, object] = {}
+        self._frame_stack: List[Dict[str, object]] = []
         self._call_stack: List[str] = []
         self._py_callables: Dict[str, Any] = {}
         self._py_ties: Dict[str, tuple[Any, Any, str | None]] = {}
@@ -632,6 +635,7 @@ class Runtime:
         self._py_globals["sh"] = _PyBridge(self)
         self._py_globals["bash"] = self._py_globals["sh"]
         self._py_globals["shell"] = self._py_globals["sh"]
+        self._sync_root_frame()
         # Align with ash test assumptions: shell starts with only stdio fds open.
         if threading.current_thread() is threading.main_thread():
             try:
@@ -642,6 +646,38 @@ class Runtime:
 
     def _get_subshell_depth(self) -> int:
         return int(getattr(self._thread_ctx, "subshell_depth", 0))
+
+    def _current_source(self) -> str:
+        if self.source_stack:
+            return self.source_stack[-1]
+        return self.script_name
+
+    @contextmanager
+    def _push_frame(self, *, kind: str, funcname: str = "", source: str | None = None) -> Iterator[None]:
+        frame = {
+            "kind": kind,
+            "source": self._current_source() if source is None else source,
+            "lineno": int(self.current_line or 0),
+            "funcname": funcname,
+        }
+        self._frame_stack.append(frame)
+        try:
+            yield
+        finally:
+            if self._frame_stack:
+                self._frame_stack.pop()
+
+    def _sync_root_frame(self) -> None:
+        root = {
+            "kind": "script",
+            "source": self._current_source(),
+            "lineno": int(self.current_line or 0),
+            "funcname": "",
+        }
+        if self._frame_stack:
+            self._frame_stack[0] = root
+        else:
+            self._frame_stack.append(root)
 
     def _get_shared_store(self) -> _SharedVarStore:
         current = self._get_var("MCTASH_SHARED_FILE")
@@ -663,6 +699,7 @@ class Runtime:
                 self.source_stack[0] = name
             else:
                 self.source_stack = [name]
+        self._sync_root_frame()
 
     def run(self, script: Script) -> int:
         return self._exec_list(script.body)
@@ -780,7 +817,8 @@ class Runtime:
         saved = self._trap_entry_status
         self._trap_entry_status = entry_status
         try:
-            return self._eval_source(action, propagate_exit=True, propagate_return=True)
+            with self._push_frame(kind="trap", funcname="trap"):
+                return self._eval_source(action, propagate_exit=True, propagate_return=True)
         finally:
             self._trap_entry_status = saved
             self._running_trap = False
@@ -1660,17 +1698,18 @@ class Runtime:
             if k != "EXIT" and not (k in {"TERM", "WINCH"} and v != "")
         }
         try:
-            try:
-                status = self._exec_list(body)
-            except SystemExit as e:
-                status = int(e.code) if e.code is not None else 0
-            except (BreakLoop, ContinueLoop):
-                status = 1
-            except ReturnFromFunction:
-                status = 1
-            except RuntimeError as e:
-                print(str(e), file=sys.stderr)
-                status = 1
+            with self._push_frame(kind="subshell"):
+                try:
+                    status = self._exec_list(body)
+                except SystemExit as e:
+                    status = int(e.code) if e.code is not None else 0
+                except (BreakLoop, ContinueLoop):
+                    status = 1
+                except ReturnFromFunction:
+                    status = 1
+                except RuntimeError as e:
+                    print(str(e), file=sys.stderr)
+                    status = 1
             if status < 0:
                 sig_num = -status
                 sig_name = None
@@ -1869,31 +1908,33 @@ class Runtime:
             return 1
         saved_positional = list(self.positional) if args else None
         self.source_stack.append(path)
+        self._sync_root_frame()
         if args:
             self.set_positional_args(args)
         parser_impl = Parser(source, aliases=self.aliases)
         status = 0
         try:
-            while True:
-                node = parser_impl.parse_next()
-                if node is None:
-                    break
-                self.current_line = parser_impl.last_line
-                if self.options.get("n", False):
-                    status = 0
-                    continue
-                if parser_impl.last_lst_item is None:
-                    raise ParseError("internal parse error: missing LST list item")
-                asdl_item = lst_list_item_to_asdl(parser_impl.last_lst_item, strict=True)
-                status = self._exec_list_item(asdl_item_to_list_item(asdl_item))
-                self.last_status = status
-                if status != 0:
-                    self.last_nonzero_status = status
-                self._trap_status_hint = status
-                if not getattr(node, "background", False):
-                    self._run_pending_traps()
-                if status != 0 and self.options.get("e", False):
-                    raise SystemExit(status)
+            with self._push_frame(kind="source", source=path):
+                while True:
+                    node = parser_impl.parse_next()
+                    if node is None:
+                        break
+                    self.current_line = parser_impl.last_line
+                    if self.options.get("n", False):
+                        status = 0
+                        continue
+                    if parser_impl.last_lst_item is None:
+                        raise ParseError("internal parse error: missing LST list item")
+                    asdl_item = lst_list_item_to_asdl(parser_impl.last_lst_item, strict=True)
+                    status = self._exec_list_item(asdl_item_to_list_item(asdl_item))
+                    self.last_status = status
+                    if status != 0:
+                        self.last_nonzero_status = status
+                    self._trap_status_hint = status
+                    if not getattr(node, "background", False):
+                        self._run_pending_traps()
+                    if status != 0 and self.options.get("e", False):
+                        raise SystemExit(status)
         except ReturnFromFunction as e:
             status = e.code
         except (AsdlMappingError, OshAdapterError):
@@ -1903,6 +1944,7 @@ class Runtime:
                 self.set_positional_args(saved_positional)
             if self.source_stack:
                 self.source_stack.pop()
+            self._sync_root_frame()
         return status
 
     def _run_function(self, name: str, args: List[str]) -> int:
@@ -1915,7 +1957,8 @@ class Runtime:
         self._call_stack.append(name)
         status = 0
         try:
-            status = self._exec_list(body)
+            with self._push_frame(kind="function", funcname=name):
+                status = self._exec_list(body)
         except ReturnFromFunction as e:
             status = e.code
         finally:
@@ -4021,11 +4064,12 @@ class Runtime:
         py_stdout = io.StringIO() if stdout_var else None
         py_result: object = None
         try:
-            if py_stdout is not None:
-                with redirect_stdout(py_stdout):
+            with self._push_frame(kind="python", funcname="py"):
+                if py_stdout is not None:
+                    with redirect_stdout(py_stdout):
+                        py_result = self._run_py_payload(payload, code, eval_mode, source_from_stdin)
+                else:
                     py_result = self._run_py_payload(payload, code, eval_mode, source_from_stdin)
-            else:
-                py_result = self._run_py_payload(payload, code, eval_mode, source_from_stdin)
         except KeyboardInterrupt:
             return 130
         except Exception as e:
@@ -4981,7 +5025,12 @@ class Runtime:
             status = 1
         return status
 
-    def _capture_eval(self, source: str, line_bias: int = 0) -> tuple[str, int, bool]:
+    def _capture_eval(
+        self,
+        source: str,
+        line_bias: int = 0,
+        frame_kind: str = "command_subst",
+    ) -> tuple[str, int, bool]:
         tmp = tempfile.TemporaryFile()
         try:
             sys.stdout.flush()
@@ -4997,7 +5046,8 @@ class Runtime:
         base = (self.current_line or 1) + line_bias
         self._line_offset = saved_offset + (base - 1)
         try:
-            status = self._eval_source(source)
+            with self._push_frame(kind=frame_kind):
+                status = self._eval_source(source)
         finally:
             try:
                 sys.stdout.flush()
@@ -5076,7 +5126,7 @@ class Runtime:
         mode = text[0]
         body = text[2:-1]
         if mode == "<":
-            out, _, _ = self._capture_eval(body)
+            out, _, _ = self._capture_eval(body, frame_kind="process_subst")
             fd, path = tempfile.mkstemp(prefix="mctash-psubst-in-")
             with os.fdopen(fd, "wb") as f:
                 f.write(out.encode("utf-8", errors="ignore"))
