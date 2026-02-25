@@ -73,6 +73,7 @@ def main() -> None:
         "redir_param": {"Word", "HereDoc"},
         "redir_loc": {"Fd"},
         "word": {"Compound"},
+        "assign_op": {"Equal", "PlusEqual"},
     }
 
     lines = ["# ASDL Coverage Report", ""]

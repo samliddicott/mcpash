@@ -78,6 +78,12 @@ run_case \
   $'s:4\n'
 
 run_case \
+  "assign_plus_equal" \
+  'x=a; x+=b; echo $x' \
+  0 \
+  $'ab\n'
+
+run_case \
   "redir_bad_fd_builtin" \
   'echo hi >&100; echo s:$?' \
   0 \

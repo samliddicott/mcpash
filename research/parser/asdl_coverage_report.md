@@ -80,10 +80,10 @@ Checklist links:
 - `docs/grammar-production-checklist.md#grammar-families`
 
 ## assign_op
-- `Equal`: missing
-- `PlusEqual`: missing
+- `Equal`: implemented
+- `PlusEqual`: implemented
 
-Summary: implemented `0`, missing `2`.
+Summary: implemented `2`, missing `0`.
 Checklist links:
 - `docs/grammar-production-checklist.md#grammar-families`
 
