@@ -474,6 +474,25 @@ class Parser:
             tok = self._peek()
             if tok is None:
                 break
+            if (
+                not argv
+                and not assignments
+                and tok.kind == "WORD"
+                and tok.value.endswith("()")
+                and tok.value[:-2] in RESERVED_WORDS
+            ):
+                raise ParseError(f'syntax error: unexpected "{tok.value[:-2]}" at {self._where(tok)}')
+            if not argv and not assignments and self._is_word(tok) and tok.value in RESERVED_WORDS:
+                tok1 = self._peek_n(1)
+                tok2 = self._peek_n(2)
+                has_paren_suffix = tok1 is not None and self._is_word(tok1) and tok1.value == "()"
+                has_split_parens = False
+                if tok1 is not None and tok2 is not None:
+                    open_ok = (self._is_word(tok1) and tok1.value == "(") or (tok1.kind == "OP" and tok1.value == "(")
+                    close_ok = (self._is_word(tok2) and tok2.value == ")") or (tok2.kind == "OP" and tok2.value == ")")
+                    has_split_parens = open_ok and close_ok
+                if has_paren_suffix or has_split_parens:
+                    raise ParseError(f'syntax error: unexpected "{tok.value}" at {self._where(tok)}')
             in_dbl_bracket = bool(argv) and argv[0].text == "[["
             if in_dbl_bracket:
                 if self._is_word(tok):
@@ -655,11 +674,10 @@ class Parser:
         if name_tok is None or not self._is_word(name_tok):
             raise ParseError(f"expected function name at {self._where(name_tok)}")
         name = name_tok.value
-        if saw_function_kw and name in RESERVED_WORDS:
-            # bash extension: function name may be reserved words
-            pass
         if name.endswith("()"):
             name = name[:-2]
+        if name in RESERVED_WORDS:
+            raise ParseError(f"expected function name at {self._where(name_tok)}")
         elif self._peek() and self._is_word(self._peek()) and self._peek().value == "()":
             self._advance()
         elif (
@@ -972,6 +990,8 @@ class Parser:
 
     def _is_valid_func_name(self, name: str) -> bool:
         if not name:
+            return False
+        if name in RESERVED_WORDS:
             return False
         if not (name[0].isalpha() or name[0] == "_"):
             return False

@@ -126,6 +126,20 @@ run_case \
   $'\n' \
   'expected do'
 
+run_case \
+  "reserved_word_function_name_ksh_style" \
+  'then() { echo x; }; then' \
+  2 \
+  $'\n' \
+  'unexpected "then"'
+
+run_case \
+  "reserved_word_function_name_function_kw" \
+  'function then { echo x; }; then' \
+  2 \
+  $'\n' \
+  'expected function name'
+
 printf '[PASS] reserved-word contextualization regressions\n'
 
 # Parser rejection checks for ambiguous/unterminated constructs.
