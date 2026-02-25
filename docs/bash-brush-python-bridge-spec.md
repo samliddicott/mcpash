@@ -85,10 +85,10 @@ When `-x` is active and Python raises:
 
 Set shell variables instead of printing traceback:
 
-- `MCSH_EXCEPTION` = exception type name
-- `MCSH_EXCEPTION_MSG` = message
-- `MCSH_EXCEPTION_TB` = array of traceback frames
-- `MCSH_EXCEPTION_LANG` = `python`
+- `PYTHON_EXCEPTION` = exception type name
+- `PYTHON_EXCEPTION_MSG` = message
+- `PYTHON_EXCEPTION_TB` = array of traceback frames
+- `PYTHON_EXCEPTION_LANG` = `python`
 
 Status still non-zero (`1` unless interrupted).
 

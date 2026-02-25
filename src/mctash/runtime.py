@@ -3488,11 +3488,11 @@ class Runtime:
             return 130
         except Exception as e:
             if structured_exc:
-                self._assign_shell_var("MCSH_EXCEPTION", type(e).__name__)
-                self._assign_shell_var("MCSH_EXCEPTION_MSG", str(e))
+                self._assign_shell_var("PYTHON_EXCEPTION", type(e).__name__)
+                self._assign_shell_var("PYTHON_EXCEPTION_MSG", str(e))
                 tb_lines = [ln.rstrip() for ln in traceback.format_tb(e.__traceback__)]
-                self._assign_shell_var("MCSH_EXCEPTION_TB", "\n".join(tb_lines))
-                self._assign_shell_var("MCSH_EXCEPTION_LANG", "python")
+                self._assign_shell_var("PYTHON_EXCEPTION_TB", "\n".join(tb_lines))
+                self._assign_shell_var("PYTHON_EXCEPTION_LANG", "python")
             else:
                 print(f"py: {type(e).__name__}: {e}", file=sys.stderr)
             return 1

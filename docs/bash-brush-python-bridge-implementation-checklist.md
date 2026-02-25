@@ -26,7 +26,7 @@ All checklist rows should be implemented as `sh.*` and mirrored via `bash.*` ali
 | `-v VAR` stdout capture | Capture stdout to shell var and suppress terminal output | Python print lands in var | Redirect Python stdout to buffer | todo |
 | `-r VAR` return capture | Capture callable/expr result in shell var | result lands in var | stringify with stable policy (`repr`/string) | todo |
 | Exit status contract | `0` success, `1` exception, `130` interrupt | unit tests for each path | map runtime exceptions to shell status | todo |
-| `-x` structured exceptions | Populate `MCSH_EXCEPTION*` vars instead of traceback | validate all 4 vars + status | convert traceback frames into shell array | todo |
+| `-x` structured exceptions | Populate `PYTHON_EXCEPTION*` vars instead of traceback | validate all 4 vars + status | convert traceback frames into shell array | todo |
 
 ## Phase 2: `PYTHON ... END_PYTHON` parser integration
 
@@ -87,7 +87,7 @@ All checklist rows should be implemented as `sh.*` and mirrored via `bash.*` ali
 | Feature | Required behavior | Conformance tests | Implementation hints | Status |
 |---|---|---|---|---|
 | `sh.stack` | iterable frames with source/lineno/funcname | stack depth and field validity tests | expose current shell frame list read-only | todo |
-| traceback frame shaping | `MCSH_EXCEPTION_TB[]` useful frame strings | compare expected frame entries | normalize format once and document it | todo |
+| traceback frame shaping | `PYTHON_EXCEPTION_TB[]` useful frame strings | compare expected frame entries | normalize format once and document it | todo |
 
 ## Phase 9: Parser hardening and edge compatibility
 

@@ -121,7 +121,7 @@ run_case \
 
 run_case \
   "py_structured_exception" \
-  'py -x '"'"'raise ValueError("boom")'"'"'; echo "$MCSH_EXCEPTION|$MCSH_EXCEPTION_MSG|$MCSH_EXCEPTION_LANG"; case "$MCSH_EXCEPTION_TB" in *"<string>"*) echo s:0;; *) echo s:1;; esac' \
+  'py -x '"'"'raise ValueError("boom")'"'"'; echo "$PYTHON_EXCEPTION|$PYTHON_EXCEPTION_MSG|$PYTHON_EXCEPTION_LANG"; case "$PYTHON_EXCEPTION_TB" in *"<string>"*) echo s:0;; *) echo s:1;; esac' \
   0 \
   $'ValueError|boom|python\ns:0\n'
 
