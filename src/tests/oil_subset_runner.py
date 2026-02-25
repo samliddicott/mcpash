@@ -28,6 +28,8 @@ class Case:
     expected_stdout: Optional[str] = None
     expected_stderr: Optional[str] = None
     alt_statuses: List[int] = field(default_factory=list)
+    alt_stdouts: List[str] = field(default_factory=list)
+    alt_stderrs: List[str] = field(default_factory=list)
     skipped_reason: Optional[str] = None
     raw_assertions: List[str] = field(default_factory=list)
 
@@ -128,6 +130,18 @@ def parse_spec(path: Path) -> List[Case]:
                     m = re.match(r"## OK [^:]+ status:\s*([0-9]+)\s*$", line)
                     if m:
                         c.alt_statuses.append(int(m.group(1)))
+                    m = re.match(r"## OK [^:]+ stdout:\s*(.*)\s*$", line)
+                    if m:
+                        c.alt_stdouts.append(m.group(1) + "\n")
+                    m = re.match(r"## OK [^:]+ stderr:\s*(.*)\s*$", line)
+                    if m:
+                        c.alt_stderrs.append(m.group(1) + "\n")
+                    m = re.match(r"## OK [^:]+ stdout-json:\s*(.+)\s*$", line)
+                    if m:
+                        c.alt_stdouts.append(json.loads(m.group(1)))
+                    m = re.match(r"## OK [^:]+ stderr-json:\s*(.+)\s*$", line)
+                    if m:
+                        c.alt_stderrs.append(json.loads(m.group(1)))
                 else:
                     c.skipped_reason = f"unsupported assertion directive: {line}"
                 continue
@@ -180,14 +194,18 @@ def run_case(
             errs.append(
                 f"status expected={case.expected_status} actual={proc.returncode}"
             )
-        if case.expected_stdout is not None and proc.stdout != case.expected_stdout:
-            errs.append(
-                f"stdout mismatch expected={case.expected_stdout!r} actual={proc.stdout!r}"
-            )
-        if case.expected_stderr is not None and proc.stderr != case.expected_stderr:
-            errs.append(
-                f"stderr mismatch expected={case.expected_stderr!r} actual={proc.stderr!r}"
-            )
+        if case.expected_stdout is not None:
+            allowed = [case.expected_stdout] + case.alt_stdouts
+            if proc.stdout not in allowed:
+                errs.append(
+                    f"stdout mismatch expected={case.expected_stdout!r} actual={proc.stdout!r}"
+                )
+        if case.expected_stderr is not None:
+            allowed = [case.expected_stderr] + case.alt_stderrs
+            if proc.stderr not in allowed:
+                errs.append(
+                    f"stderr mismatch expected={case.expected_stderr!r} actual={proc.stderr!r}"
+                )
 
         if errs:
             return False, f"FAIL {case.name}: " + "; ".join(errs)
