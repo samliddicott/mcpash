@@ -120,7 +120,8 @@ Local conformance gate (no external CI required):
 
 ## Remaining Ash Parity Gaps (man ash aligned)
 - Builtins not yet implemented to ash-man-page level:
-  - `hash`, `fc`, `jobs`, `fg`, `bg`, `times`, `ulimit`, `umask`
+  - `hash`, `jobs`, `fg`, `bg`, `times`, `ulimit`, `umask`
+  - `fc` baseline list/re-exec added; full editor/history parity remains open
 - Interactive shell behavior not yet complete:
   - true interactive REPL prompt loop
   - login-shell startup file flow (`/etc/profile`, `~/.profile`)

@@ -565,6 +565,7 @@ class Runtime:
         "unalias",
         "wait",
         "kill",
+        "fc",
         "let",
         "getopts",
         "py",
@@ -622,6 +623,7 @@ class Runtime:
         self._typed_vars: Dict[str, object] = {}
         self._frame_stack: List[Dict[str, object]] = []
         self._call_stack: List[str] = []
+        self._history: List[str] = []
         self._py_callables: Dict[str, Any] = {}
         self._py_ties: Dict[str, tuple[Any, Any, str | None]] = {}
         shared_path = self.env.get(
@@ -1844,6 +1846,8 @@ class Runtime:
             return self._run_wait(argv[1:])
         if name == "kill":
             return self._run_kill(argv[1:])
+        if name == "fc":
+            return self._run_fc(argv[1:])
         if name == "let":
             return self._run_let(argv[1:])
         if name == "getopts":
@@ -1966,6 +1970,88 @@ class Runtime:
             self.local_stack.pop()
             self.set_positional_args(saved_positional)
         return status
+
+    def add_history_entry(self, line: str) -> None:
+        text = line.strip("\n")
+        if not text:
+            return
+        self._history.append(text)
+
+    def _history_resolve(self, token: str | None) -> int | None:
+        if not self._history:
+            return None
+        if token is None:
+            return len(self._history) - 1
+        if token.startswith("-") and token[1:].isdigit():
+            rel = int(token)
+            idx = len(self._history) + rel
+            return idx if 0 <= idx < len(self._history) else None
+        if token.isdigit():
+            n = int(token)
+            idx = n - 1
+            return idx if 0 <= idx < len(self._history) else None
+        for i in range(len(self._history) - 1, -1, -1):
+            if self._history[i].startswith(token):
+                return i
+        return None
+
+    def _run_fc(self, args: List[str]) -> int:
+        list_mode = True
+        reverse = False
+        no_numbers = False
+        substitute: str | None = None
+        i = 0
+        while i < len(args) and args[i].startswith("-") and args[i] != "-":
+            a = args[i]
+            if a == "-l":
+                list_mode = True
+            elif a == "-r":
+                reverse = True
+            elif a == "-n":
+                no_numbers = True
+            elif a == "-s":
+                list_mode = False
+            elif a == "-e":
+                # Editor workflow is deferred; keep accepted surface.
+                i += 1
+            else:
+                break
+            i += 1
+        rest = args[i:]
+        if list_mode:
+            first_idx = self._history_resolve(rest[0]) if len(rest) >= 1 else max(0, len(self._history) - 15)
+            last_idx = self._history_resolve(rest[1]) if len(rest) >= 2 else len(self._history) - 1
+            if first_idx is None or last_idx is None or not self._history:
+                return 1
+            lo = min(first_idx, last_idx)
+            hi = max(first_idx, last_idx)
+            seq = list(range(lo, hi + 1))
+            if reverse:
+                seq = list(reversed(seq))
+            for n in seq:
+                if no_numbers:
+                    print(self._history[n])
+                else:
+                    print(f"{n + 1}\t{self._history[n]}")
+            return 0
+
+        if rest and "=" in rest[0]:
+            substitute = rest[0]
+            rest = rest[1:]
+        current_is_fc = bool(self._history) and self._history[-1].lstrip().startswith("fc")
+        default_ref = "-2" if current_is_fc else "-1"
+        idx = self._history_resolve(rest[0] if rest else default_ref)
+        if idx is not None and current_is_fc and idx == len(self._history) - 1 and len(self._history) >= 2:
+            idx -= 1
+        if idx is None:
+            return 1
+        cmd = self._history[idx]
+        if substitute is not None:
+            old, new = substitute.split("=", 1)
+            cmd = cmd.replace(old, new, 1)
+        print(cmd)
+        self.add_history_entry(cmd)
+        return self._eval_source(cmd)
 
     def _run_external(
         self,

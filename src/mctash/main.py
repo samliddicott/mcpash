@@ -375,6 +375,7 @@ def _run_interactive(rt: Runtime) -> int:
             rt._trap_status_hint = status
             buffer.clear()
             continue
+        rt.add_history_entry(src.rstrip("\n"))
         try:
             status = rt._eval_source(src, propagate_exit=True)
         except SystemExit as e:

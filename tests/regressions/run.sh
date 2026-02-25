@@ -607,3 +607,55 @@ grep -Fq 'file exists' "$tmpdir/err" || fail "startup_noclobber_behavior: expect
 printf '[PASS] startup_noclobber_behavior\n'
 
 printf '[PASS] all regressions (including startup options)\n'
+
+if ! PYROOT="$ROOT" python3 - <<'PY'
+import os
+import pty
+import select
+import subprocess
+import time
+
+root = os.environ["PYROOT"]
+env = dict(os.environ)
+env["PYTHONPATH"] = os.path.join(root, "src")
+master, slave = pty.openpty()
+p = subprocess.Popen(
+    ["python3", "-m", "mctash", "-i"],
+    cwd=root,
+    stdin=slave,
+    stdout=slave,
+    stderr=slave,
+    env=env,
+    close_fds=True,
+)
+os.close(slave)
+
+def drain(buf: bytearray, rounds: int = 4):
+    for _ in range(rounds):
+        time.sleep(0.08)
+        while True:
+            r, _, _ = select.select([master], [], [], 0)
+            if not r:
+                break
+            try:
+                buf.extend(os.read(master, 4096))
+            except OSError:
+                return
+
+out = bytearray()
+drain(out)
+for line in [b"echo one\n", b"echo two\n", b"fc -l -n -2 -1\n", b"fc -s two=TWO -3\n", b"exit\n"]:
+    os.write(master, line)
+    drain(out)
+
+p.wait(timeout=5)
+text = out.decode("utf-8", "ignore")
+ok = ("echo one" in text and "echo two" in text and "echo TWO" in text and "TWO" in text)
+if not ok:
+    print(text)
+    raise SystemExit(1)
+PY
+then
+  fail "interactive_fc_smoke"
+fi
+printf '[PASS] interactive_fc_smoke\n'

@@ -89,7 +89,8 @@ Explicitly out-of-scope for current milestone:
 Additional ash-man-page parity gaps (tracked for next phase):
 
 - Builtins not yet implemented to ash-man-page level:
-  - `hash`, `fc`, `jobs`, `fg`, `bg`, `times`, `ulimit`, `umask`
+  - `hash`, `jobs`, `fg`, `bg`, `times`, `ulimit`, `umask`
+  - `fc` now has baseline list/re-exec behavior, but editor/history parity remains partial
 - Interactive startup contract not complete:
   - true interactive REPL prompt loop
   - login-shell startup file flow (`/etc/profile`, `~/.profile`)
