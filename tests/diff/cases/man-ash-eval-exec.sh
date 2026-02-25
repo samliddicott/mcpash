@@ -1,6 +1,6 @@
 #!/usr/bin/env ash
 # Coverage: man ash 'eval' and 'exec' builtins (command evaluation, replacing shell process).
-set -euo pipefail
+set -eu
 VAR=echo
 eval 'printf "eval-run=%s\n" "${VAR}"'
 printf 'before-exec\n'
