@@ -237,6 +237,31 @@ run_case \
   $'fac\n120\n'
 
 run_case \
+  "py_tie_scalar_roundtrip" \
+  'py '"'"'x="seed"'"'"'; py -t x; x=after; py -e '"'"'x'"'"'' \
+  0 \
+  $'after\n'
+
+run_case \
+  "py_tie_integer_cast" \
+  'py '"'"'n=0; sh.tie("TN", lambda: n, lambda v: globals().__setitem__("n", v), type="integer")'"'"'; TN=12; py -e '"'"'n'"'"'' \
+  0 \
+  $'12\n'
+
+run_case \
+  "py_tie_readonly_write_error" \
+  'py '"'"'sh.tie("RO", lambda: "r", None)'"'"'; RO=x' \
+  1 \
+  $'\n' \
+  'tied variable is read-only'
+
+run_case \
+  "py_sh_stack_contains_function" \
+  "f(){ py -e 'sh.stack[0][\"funcname\"]'; }; f" \
+  0 \
+  $'f\n'
+
+run_case \
   "param_len_special_at_star" \
   'set -- aa b; echo ${#@}; echo ${#*}' \
   0 \

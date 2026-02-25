@@ -258,9 +258,13 @@ class _PyBridge:
 
     @property
     def stack(self) -> list[dict[str, object]]:
-        source = self._rt.script_name or (self._rt.source_stack[0] if self._rt.source_stack else "")
+        source = self._rt.source_stack[-1] if self._rt.source_stack else self._rt.script_name
         line = self._rt.current_line if self._rt.current_line is not None else 0
-        return [{"source": source, "lineno": int(line), "funcname": ""}]
+        frames: list[dict[str, object]] = []
+        for fn in reversed(self._rt._call_stack):
+            frames.append({"source": source, "lineno": int(line), "funcname": fn})
+        frames.append({"source": source, "lineno": int(line), "funcname": ""})
+        return frames
 
     def __call__(self, *args: object) -> str:
         cp = self.run(*args, capture_output=True, check=False)
@@ -342,7 +346,10 @@ class _PyBridge:
             raise TypeError("getter must be callable")
         if setter is not None and not callable(setter):
             raise TypeError("setter must be callable when provided")
-        self._rt._py_ties[name] = (getter, setter, type)
+        tie_type = type or "scalar"
+        if tie_type not in {"scalar", "integer", "array", "assoc"}:
+            raise ValueError(f"unsupported tie type: {tie_type}")
+        self._rt._py_ties[name] = (getter, setter, tie_type)
 
     def untie(self, name: str) -> None:
         self._rt._py_ties.pop(name, None)
@@ -509,6 +516,7 @@ class Runtime:
         self._last_eval_hard_error: bool = False
         self._pipeline_input_latency: float | None = None
         self._var_attrs: Dict[str, set[str]] = {k: {"exported"} for k in self.env.keys()}
+        self._call_stack: List[str] = []
         self._py_callables: Dict[str, Any] = {}
         self._py_ties: Dict[str, tuple[Any, Any, str | None]] = {}
         self._shared_vars: Dict[str, str] = {}
@@ -1313,6 +1321,13 @@ class Runtime:
                         if name in self.readonly_vars:
                             print(self._format_error(f"{name}: is read only", line=self.current_line), file=sys.stderr)
                             raise SystemExit(2)
+                        if name in self._py_ties:
+                            if op == "+=":
+                                self._assign_shell_var(name, self._get_var(name) + value)
+                            else:
+                                self._assign_shell_var(name, value)
+                            local_env[name] = self._get_var(name)
+                            continue
                         if op == "+=":
                             self.env[name] = self.env.get(name, "") + value
                         else:
@@ -1344,6 +1359,13 @@ class Runtime:
                     if name in self.readonly_vars:
                         print(self._format_error(f"{name}: is read only", line=self.current_line), file=sys.stderr)
                         raise SystemExit(2)
+                    if name in self._py_ties:
+                        if op == "+=":
+                            self._assign_shell_var(name, self._get_var(name) + value)
+                        else:
+                            self._assign_shell_var(name, value)
+                        local_env[name] = self._get_var(name)
+                        continue
                     if op == "+=":
                         local_env[name] = local_env.get(name, "") + value
                     else:
@@ -1362,6 +1384,8 @@ class Runtime:
                     print(str(e), file=sys.stderr)
                     return 1
                 self.env.update(local_env)
+                for tied_name in self._py_ties:
+                    self.env[tied_name] = self._get_var(tied_name)
                 if self._cmd_sub_used:
                     status = self._cmd_sub_status
                     self._cmd_sub_used = False
@@ -1764,12 +1788,14 @@ class Runtime:
         saved_positional = list(self.positional)
         self.set_positional_args(args)
         self.local_stack.append({})
+        self._call_stack.append(name)
         status = 0
         try:
             status = self._exec_list(body)
         except ReturnFromFunction as e:
             status = e.code
         finally:
+            self._call_stack.pop()
             self.local_stack.pop()
             self.set_positional_args(saved_positional)
         return status
@@ -3130,9 +3156,9 @@ class Runtime:
     def _get_var(self, name: str) -> str:
         tied = self._py_ties.get(name)
         if tied is not None:
-            getter, _, _ = tied
+            getter, _, tie_type = tied
             try:
-                return self._py_to_shell(getter())
+                return self._tie_value_to_shell(getter(), tie_type)
             except Exception:
                 return ""
         for scope in reversed(self.local_stack):
@@ -3326,10 +3352,11 @@ class Runtime:
         value = self._coerce_var_value(name, value)
         tied = self._py_ties.get(name)
         if tied is not None:
-            _, setter, _ = tied
+            _, setter, tie_type = tied
             if callable(setter):
-                setter(value)
+                setter(self._shell_to_tie_value(value, tie_type))
                 return
+            raise RuntimeError(f"{name}: tied variable is read-only")
         for scope in reversed(self.local_stack):
             if name in scope:
                 scope[name] = value
@@ -3559,10 +3586,11 @@ class Runtime:
         value = self._coerce_var_value(name, value)
         tied = self._py_ties.get(name)
         if tied is not None:
-            _, setter, _ = tied
+            _, setter, tie_type = tied
             if callable(setter):
-                setter(value)
+                setter(self._shell_to_tie_value(value, tie_type))
                 return
+            raise RuntimeError(f"{name}: tied variable is read-only")
         for scope in reversed(self.local_stack):
             if name in scope:
                 scope[name] = value
@@ -3841,6 +3869,7 @@ class Runtime:
         for name in untie_vars:
             self._py_ties.pop(name, None)
         for name in tie_vars:
+            self._py_globals[name] = self._get_var(name)
             self._py_ties[name] = (
                 (lambda n=name: self._py_globals.get(n, "")),
                 (lambda v, n=name: self._py_globals.__setitem__(n, v)),
@@ -4062,6 +4091,42 @@ class Runtime:
         elif "lowercase" in attrs:
             out = out.lower()
         return out
+
+    def _tie_value_to_shell(self, getter: object, tie_type: str | None) -> str:
+        value = getter()  # type: ignore[misc]
+        if tie_type == "integer":
+            try:
+                return str(int(value))
+            except (TypeError, ValueError):
+                return "0"
+        if tie_type == "array":
+            if isinstance(value, (list, tuple)):
+                return " ".join(self._py_to_shell(v) for v in value)
+            return self._py_to_shell(value)
+        if tie_type == "assoc":
+            if isinstance(value, dict):
+                return " ".join(f"{k}={self._py_to_shell(v)}" for k, v in value.items())
+            return self._py_to_shell(value)
+        return self._py_to_shell(value)
+
+    def _shell_to_tie_value(self, value: str, tie_type: str | None) -> object:
+        if tie_type == "integer":
+            try:
+                return int(value, 10)
+            except ValueError:
+                return 0
+        if tie_type == "array":
+            return shlex.split(value) if value else []
+        if tie_type == "assoc":
+            out: dict[str, str] = {}
+            for tok in shlex.split(value):
+                if "=" not in tok:
+                    out[tok] = ""
+                else:
+                    k, v = tok.split("=", 1)
+                    out[k] = v
+            return out
+        return value
 
     def _get_var_attrs(self, name: str) -> dict[str, bool]:
         attrs = set(self._var_attrs.get(name, set()))
