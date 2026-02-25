@@ -3199,12 +3199,22 @@ class Runtime:
                 return
         self.env[name] = value
 
+    def _is_valid_name(self, name: str) -> bool:
+        if not name:
+            return False
+        if not (name[0].isalpha() or name[0] == "_"):
+            return False
+        return all(ch.isalnum() or ch == "_" for ch in name)
+
     def _run_getopts(self, args: List[str]) -> int:
         if len(args) < 2:
             self._report_error("usage: getopts optstring var [arg ...]", line=self.current_line, context="getopts")
             return 2
         optspec = args[0]
         var_name = args[1]
+        if not self._is_valid_name(var_name):
+            self._report_error(f"{var_name}: bad variable name", line=self.current_line, context="getopts")
+            return 2
         argv = args[2:] if len(args) > 2 else list(self.positional)
         argv_sig = tuple(argv)
         silent = optspec.startswith(":")

@@ -84,6 +84,26 @@ run_case \
   $'ab\n'
 
 run_case \
+  "getopts_bad_var_name" \
+  'getopts ab 1x -a; echo s:$?' \
+  0 \
+  $'s:2\n' \
+  'bad variable name'
+
+run_case \
+  "getopts_silent_missing_arg" \
+  'OPTIND=1; getopts :a: opt -a; echo "s:$? opt:$opt arg:$OPTARG ind:$OPTIND"' \
+  0 \
+  $'s:0 opt:: arg:a ind:2\n'
+
+run_case \
+  "getopts_missing_arg_nonsilent" \
+  'OPTIND=1; getopts a: opt -a; echo "s:$? opt:$opt arg:$OPTARG ind:$OPTIND"' \
+  0 \
+  $'s:0 opt:? arg: ind:2\n' \
+  'No arg for -a option'
+
+run_case \
   "redir_bad_fd_builtin" \
   'echo hi >&100; echo s:$?' \
   0 \
