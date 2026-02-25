@@ -207,6 +207,36 @@ run_case \
   $'pop\n'
 
 run_case \
+  "py_sh_vars_attrs" \
+  'py '"'"'sh.vars["AX"]="ab"; sh.vars.set_attrs("AX", uppercase=True); sh.vars["AX"]="xy"; print(sh.vars.attrs("AX").get("uppercase", False)); print(sh.vars["AX"])'"'"'' \
+  0 \
+  $'True\nXY\n'
+
+run_case \
+  "py_sh_vars_declare_integer" \
+  'py '"'"'sh.vars.declare("IV", "07", integer=True); print(sh.vars["IV"])'"'"'' \
+  0 \
+  $'7\n'
+
+run_case \
+  "py_sh_env_exported" \
+  'py '"'"'sh.env["EX_BRIDGE"]="vv"'"'"'; python3 -c '"'"'import os; print(os.getenv("EX_BRIDGE",""))'"'"'' \
+  0 \
+  $'vv\n'
+
+run_case \
+  "py_sh_fn_assignment_declare_wrapper" \
+  'py '"'"'sh.fn["sum2"]=lambda a,b:int(a)+int(b)'"'"'; declare -F sum2; sum2 4 6' \
+  0 \
+  $'sum2\n10\n'
+
+run_case \
+  "py_from_import_callable_wrapper" \
+  'from math import factorial as fac; declare -F fac; fac 5' \
+  0 \
+  $'fac\n120\n'
+
+run_case \
   "param_len_special_at_star" \
   'set -- aa b; echo ${#@}; echo ${#*}' \
   0 \

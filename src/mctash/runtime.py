@@ -119,6 +119,7 @@ class _PyVarsMapping(MutableMapping[str, str]):
             removed = True
         if not removed:
             raise KeyError(key)
+        self._rt._var_attrs.pop(key, None)
 
     def __iter__(self) -> Iterator[str]:
         seen: set[str] = set()
@@ -135,6 +136,15 @@ class _PyVarsMapping(MutableMapping[str, str]):
     def __len__(self) -> int:
         return sum(1 for _ in self.__iter__())
 
+    def attrs(self, name: str) -> dict[str, bool]:
+        return self._rt._get_var_attrs(name)
+
+    def set_attrs(self, name: str, **flags: object) -> None:
+        self._rt._set_var_attrs(name, **flags)
+
+    def declare(self, name: str, value: object = "", **flags: object) -> None:
+        self._rt._declare_var(name, self._rt._py_to_shell(value), **flags)
+
 
 class _PyEnvMapping(MutableMapping[str, str]):
     def __init__(self, rt: "Runtime") -> None:
@@ -146,12 +156,16 @@ class _PyEnvMapping(MutableMapping[str, str]):
         return self._rt.env[key]
 
     def __setitem__(self, key: str, value: object) -> None:
-        self._rt.env[key] = self._rt._py_to_shell(value)
+        shell_value = self._rt._py_to_shell(value)
+        self._rt._assign_shell_var(key, shell_value)
+        self._rt.env[key] = self._rt._get_var(key)
+        self._rt._set_var_attrs(key, exported=True)
 
     def __delitem__(self, key: str) -> None:
         if key not in self._rt.env:
             raise KeyError(key)
         del self._rt.env[key]
+        self._rt._set_var_attrs(key, exported=False)
 
     def __iter__(self) -> Iterator[str]:
         return iter(self._rt.env.keys())
@@ -200,7 +214,7 @@ class _PyFnNamespace(MutableMapping[str, object]):
     def __setitem__(self, key: str, value: object) -> None:
         if not callable(value):
             raise TypeError("sh.fn assignment currently requires a Python callable")
-        self._rt._py_callables[key] = value
+        self._rt._install_python_callable(key, value, wrapper_target=key, create_wrapper=True)
 
     def __delitem__(self, key: str) -> None:
         removed = False
@@ -494,6 +508,7 @@ class Runtime:
         self._line_offset: int = 0
         self._last_eval_hard_error: bool = False
         self._pipeline_input_latency: float | None = None
+        self._var_attrs: Dict[str, set[str]] = {k: {"exported"} for k in self.env.keys()}
         self._py_callables: Dict[str, Any] = {}
         self._py_ties: Dict[str, tuple[Any, Any, str | None]] = {}
         self._shared_vars: Dict[str, str] = {}
@@ -1426,7 +1441,7 @@ class Runtime:
                     self.env = local_env
                     try:
                         with self._redirected_fds(node.redirects):
-                            result = self._py_callables[name](*argv[1:])
+                            result = self._invoke_py_callable(self._py_callables[name], argv[1:])
                     except RuntimeError as e:
                         print(str(e), file=sys.stderr)
                         return 1
@@ -3299,12 +3314,16 @@ class Runtime:
         return "".join(out)
 
     def _set_local(self, name: str, value: str) -> None:
+        value = self._coerce_var_value(name, value)
         if not self.local_stack:
             self.env[name] = value
             return
         self.local_stack[-1][name] = value
 
     def _assign_shell_var(self, name: str, value: str) -> None:
+        if name in self.readonly_vars:
+            raise RuntimeError(f"{name}: is read only")
+        value = self._coerce_var_value(name, value)
         tied = self._py_ties.get(name)
         if tied is not None:
             _, setter, _ = tied
@@ -3351,6 +3370,11 @@ class Runtime:
 
     def _run_declare(self, args: List[str]) -> int:
         if args and args[0] == "-F":
+            if len(args) > 1:
+                for name in args[1:]:
+                    if name in self.functions:
+                        print(name)
+                return 0
             for name in sorted(self.functions.keys()):
                 print(name)
             return 0
@@ -3530,6 +3554,9 @@ class Runtime:
         return 0
 
     def _set_var(self, name: str, value: str) -> None:
+        if name in self.readonly_vars:
+            raise RuntimeError(f"{name}: is read only")
+        value = self._coerce_var_value(name, value)
         tied = self._py_ties.get(name)
         if tied is not None:
             _, setter, _ = tied
@@ -3822,6 +3849,10 @@ class Runtime:
 
         if not payload and (tie_vars or untie_vars):
             return 0
+        callable_mode = (
+            bool(payload)
+            and (callable(self._resolve_py_name(payload[0])) or payload[0] in self._py_callables)
+        )
         source_from_stdin = False
         if not payload:
             source_from_stdin = True
@@ -3855,6 +3886,8 @@ class Runtime:
             self._assign_shell_var(stdout_var, py_stdout.getvalue())
         if return_var is not None:
             self._assign_shell_var(return_var, self._py_to_shell(py_result))
+        if callable_mode and py_result is not None and stdout_var is None and return_var is None and not eval_mode:
+            print(self._py_to_shell(py_result))
         if eval_mode and py_result is not None and stdout_var is None and return_var is None:
             print(self._py_to_shell(py_result))
         return 0
@@ -3895,24 +3928,23 @@ class Runtime:
         try:
             mod = self._load_py_module(mod_ref)
             if name == "*":
-                imported = 0
                 for k in dir(mod):
                     if k.startswith("_"):
                         continue
                     obj = getattr(mod, k)
+                    self._py_globals[k] = obj
                     if callable(obj):
-                        self._py_globals[k] = obj
-                        self._py_callables[k] = obj
-                        imported += 1
-                return 0 if imported >= 0 else 1
+                        self._install_python_callable(k, obj, wrapper_target=k, create_wrapper=True)
+                return 0
             if not hasattr(mod, name):
                 self._report_error(f"{name}: not found in module {mod_ref}", line=self.current_line, context="from")
                 return 1
             obj = getattr(mod, name)
             out_name = alias or name
-            self._py_globals[out_name] = obj
             if callable(obj):
-                self._py_callables[out_name] = obj
+                self._install_python_callable(out_name, obj, wrapper_target=out_name, create_wrapper=True)
+            else:
+                self._py_globals[out_name] = obj
             return 0
         except Exception as e:
             self._report_error(f"{type(e).__name__}: {e}", line=self.current_line, context="from")
@@ -3939,10 +3971,10 @@ class Runtime:
 
         target = self._resolve_py_name(payload[0])
         if callable(target):
-            return target(*payload[1:])
+            return self._invoke_py_callable(target, payload[1:])
         py_callable = self._py_callables.get(payload[0])
         if py_callable is not None:
-            return py_callable(*payload[1:])
+            return self._invoke_py_callable(py_callable, payload[1:])
         exec(code, self._py_globals, self._py_globals)
         return None
 
@@ -3968,6 +4000,123 @@ class Runtime:
         if isinstance(value, str):
             return value
         return repr(value)
+
+    def _cast_shell_arg(self, text: str) -> object:
+        if re.match(r"^[+-]?[0-9]+$", text):
+            try:
+                return int(text, 10)
+            except ValueError:
+                return text
+        if re.match(r"^[+-]?(?:[0-9]*\.[0-9]+|[0-9]+\.[0-9]*)(?:[eE][+-]?[0-9]+)?$", text):
+            try:
+                return float(text)
+            except ValueError:
+                return text
+        low = text.lower()
+        if low == "true":
+            return True
+        if low == "false":
+            return False
+        return text
+
+    def _invoke_py_callable(self, func: object, args: List[str]) -> object:
+        casted: list[object] = [self._cast_shell_arg(a) for a in args]
+        try:
+            return func(*casted)  # type: ignore[misc]
+        except TypeError:
+            return func(*args)  # type: ignore[misc]
+
+    def _install_python_callable(
+        self,
+        name: str,
+        obj: object,
+        *,
+        wrapper_target: str | None = None,
+        create_wrapper: bool = False,
+    ) -> None:
+        self._py_globals[name] = obj
+        self._py_callables[name] = obj
+        if not create_wrapper:
+            return
+        if not self._is_valid_name(name):
+            return
+        target = wrapper_target or name
+        source = f'{name}() {{ py {shlex.quote(target)} "$@"; }}'
+        status = self._eval_source(source, parse_context="py-wrapper")
+        if status != 0:
+            raise RuntimeError(f"failed to define shell wrapper function: {name}")
+
+    def _coerce_var_value(self, name: str, value: str) -> str:
+        attrs = self._var_attrs.get(name, set())
+        out = value
+        if "integer" in attrs:
+            try:
+                out = str(int(out, 0))
+            except ValueError:
+                try:
+                    out = str(int(out, 10))
+                except ValueError:
+                    out = "0"
+        if "uppercase" in attrs:
+            out = out.upper()
+        elif "lowercase" in attrs:
+            out = out.lower()
+        return out
+
+    def _get_var_attrs(self, name: str) -> dict[str, bool]:
+        attrs = set(self._var_attrs.get(name, set()))
+        if name in self.env:
+            attrs.add("exported")
+        if name in self.readonly_vars:
+            attrs.add("readonly")
+        return {key: True for key in sorted(attrs)}
+
+    def _set_var_attrs(self, name: str, **flags: object) -> None:
+        known = {"exported", "integer", "readonly", "uppercase", "lowercase", "nameref", "trace"}
+        attrs = set(self._var_attrs.get(name, set()))
+        for key, raw in flags.items():
+            if key not in known:
+                raise ValueError(f"unknown attribute: {key}")
+            enabled = bool(raw)
+            if key == "readonly":
+                if enabled:
+                    self.readonly_vars.add(name)
+                else:
+                    self.readonly_vars.discard(name)
+                continue
+            if key == "exported":
+                if enabled:
+                    self.env[name] = self._get_var(name)
+                else:
+                    self.env.pop(name, None)
+                continue
+            if enabled:
+                attrs.add(key)
+                if key == "uppercase":
+                    attrs.discard("lowercase")
+                if key == "lowercase":
+                    attrs.discard("uppercase")
+            else:
+                attrs.discard(key)
+        if attrs:
+            self._var_attrs[name] = attrs
+        else:
+            self._var_attrs.pop(name, None)
+        current = self._get_var(name)
+        if current != "":
+            coerced = self._coerce_var_value(name, current)
+            if coerced != current:
+                for scope in reversed(self.local_stack):
+                    if name in scope:
+                        scope[name] = coerced
+                        break
+                else:
+                    self.env[name] = coerced
+
+    def _declare_var(self, name: str, value: str = "", **flags: object) -> None:
+        self._assign_shell_var(name, value)
+        if flags:
+            self._set_var_attrs(name, **flags)
 
     def _call_shell_function_from_python(self, name: str, args: List[str]) -> str:
         if name not in self.functions:
