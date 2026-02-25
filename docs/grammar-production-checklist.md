@@ -43,7 +43,7 @@ Legend:
 ## Outstanding Parser-Checklist Work
 
 1. Expand the word-level sub-checklist above to include explicit parser/expander line anchors and negative-case rows.
-2. Add explicit negative parse tests for ambiguous boundaries (reserved words vs literals in more contexts).
+2. Extend explicit negative parse tests for ambiguous boundaries (reserved words vs literals) beyond the current local regression set.
 3. Extend parser checklist links from ASDL mapping coverage into per-variant action items.
 
 ASDL linkback automation status:

@@ -79,7 +79,7 @@ Legend:
 
 ## Open Gaps (Next "Shall" Expansion)
 
-1. Add requirement rows for startup option semantics from `man ash` synopsis where in milestone scope.
+1. Keep startup-option parity tracked in `docs/startup-option-matrix.md`; add requirement-level rows in this document only where they intersect POSIX Chapter 2 semantics.
 2. Refine grammar-production-level trace (nonterminal-by-nonterminal) for parser completeness reporting:
    - `docs/grammar-production-checklist.md`
 3. Add per-requirement negative tests for diagnostics formatting and ambiguous parse errors.

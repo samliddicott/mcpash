@@ -1,4 +1,4 @@
-# Conformance Matrix (2026-02-24)
+# Conformance Matrix (2026-02-25)
 
 This is a practical conformance snapshot, not a formal certification report.
 
@@ -25,6 +25,13 @@ Latest corpus result:
     subset runner, not known semantic failures in these slices.
   - In this runner, `## status: 99` is treated as an expected non-zero failure
     sentinel used by some Oil grammar tests.
+
+Local regression gate status:
+
+- `make regressions` includes:
+  - reserved-word contextualization checks (literal-vs-keyword contexts)
+  - parser rejection checks (unterminated quote, missing `done`, unexpected tokens)
+  - startup option behavior checks (`-u`, `-f`, `-C`, `set -o/+o` listing)
 
 ## Overall
 
