@@ -633,6 +633,7 @@ class Runtime:
         self._call_stack: List[str] = []
         self._history: List[str] = []
         self._cmd_hash: Dict[str, str] = {}
+        self._errexit_suppressed: int = 0
         self._py_callables: Dict[str, Any] = {}
         self._py_ties: Dict[str, tuple[Any, Any, str | None]] = {}
         shared_path = self.env.get(
@@ -677,6 +678,14 @@ class Runtime:
         finally:
             if self._frame_stack:
                 self._frame_stack.pop()
+
+    @contextmanager
+    def _suppress_errexit(self) -> Iterator[None]:
+        self._errexit_suppressed += 1
+        try:
+            yield
+        finally:
+            self._errexit_suppressed = max(0, self._errexit_suppressed - 1)
 
     def _sync_root_frame(self) -> None:
         root = {
@@ -861,7 +870,7 @@ class Runtime:
             self._trap_status_hint = status
             if not getattr(item, "background", False):
                 self._run_pending_traps()
-            if status != 0 and self.options.get("e", False):
+            if status != 0 and self.options.get("e", False) and self._errexit_suppressed == 0:
                 raise SystemExit(status)
         self._run_pending_traps()
         return status
@@ -1403,11 +1412,13 @@ class Runtime:
         if isinstance(node, CaseCommand):
             return self._run_case(node)
         if isinstance(node, IfCommand):
-            status = self._exec_list(node.cond)
+            with self._suppress_errexit():
+                status = self._exec_list(node.cond)
             if status == 0:
                 return self._exec_list(node.then_body)
             for elif_cond, elif_body in node.elifs:
-                status = self._exec_list(elif_cond)
+                with self._suppress_errexit():
+                    status = self._exec_list(elif_cond)
                 if status == 0:
                     return self._exec_list(elif_body)
             if node.else_body is not None:
@@ -1419,7 +1430,8 @@ class Runtime:
             try:
                 while True:
                     try:
-                        cond_status = self._exec_list(node.cond)
+                        with self._suppress_errexit():
+                            cond_status = self._exec_list(node.cond)
                     except ContinueLoop as e:
                         if e.count > 1:
                             raise ContinueLoop(e.count - 1)
@@ -1960,7 +1972,7 @@ class Runtime:
                     self._trap_status_hint = status
                     if not getattr(node, "background", False):
                         self._run_pending_traps()
-                    if status != 0 and self.options.get("e", False):
+                    if status != 0 and self.options.get("e", False) and self._errexit_suppressed == 0:
                         raise SystemExit(status)
         except ReturnFromFunction as e:
             status = e.code
@@ -4000,7 +4012,8 @@ class Runtime:
         for name in args[idx:]:
             if mode_vars and name in self.readonly_vars:
                 self._report_error(f"{name}: is read only", line=self.current_line, context="unset")
-                raise SystemExit(2)
+                status = 2
+                continue
             if not mode_vars:
                 self.functions.pop(name, None)
                 continue
@@ -5221,7 +5234,13 @@ class Runtime:
             negate = True
             tokens = tokens[1:]
         result = False
-        if len(tokens) >= 2 and tokens[0] == "-f":
+        if len(tokens) >= 2 and tokens[0] == "-e":
+            result = os.path.exists(tokens[1])
+        elif len(tokens) >= 2 and tokens[0] == "-n":
+            result = tokens[1] != ""
+        elif len(tokens) >= 2 and tokens[0] == "-z":
+            result = tokens[1] == ""
+        elif len(tokens) >= 2 and tokens[0] == "-f":
             result = os.path.isfile(tokens[1])
         elif len(tokens) >= 2 and tokens[0] == "-d":
             result = os.path.isdir(tokens[1])
@@ -5285,7 +5304,7 @@ class Runtime:
                 self._trap_status_hint = status
                 if not getattr(node, "background", False):
                     self._run_pending_traps()
-                if status != 0 and self.options.get("e", False):
+                if status != 0 and self.options.get("e", False) and self._errexit_suppressed == 0:
                     raise SystemExit(status)
         except ReturnFromFunction as e:
             status = e.code

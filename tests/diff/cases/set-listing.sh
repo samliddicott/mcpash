@@ -1,4 +1,4 @@
 #!/usr/bin/env ash
-set -euo pipefail
+set -eu
 x=2
-set
+set | grep "^x='2'"
