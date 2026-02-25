@@ -24,12 +24,12 @@ Scope note:
 | `-u` | nounset | Implemented | Startup behavior active; unset parameter error exits with status 2. |
 | `-v` | verbose | Partial | Parsed and exposed in options; full ash-verbose output parity not claimed. |
 | `-x` | xtrace | Partial | Parsed and used; formatting parity is implementation-specific. |
-| `-I` | ignoreeof | Parsed (out-of-scope runtime effect) | Interactive behavior not in current scope. |
-| `-i` | interactive | Parsed (out-of-scope runtime effect) | Interactive mode parity not in current scope. |
-| `-m` | monitor | Parsed (out-of-scope runtime effect) | Full job control parity not in current scope. |
+| `-I` | ignoreeof | Partial | Interactive REPL path honors ignore-EOF loop on TTY; full dash UX parity not claimed. |
+| `-i` | interactive | Implemented (partial parity) | Forces interactive REPL mode; full editor/history/job-control parity still pending. |
+| `-m` | monitor | Partial | Auto-set for interactive shells; full job-control semantics are pending. |
 | `-q` | nolog | Parsed | Included in `set -o/+o` listing compatibility. |
-| `-V` | vi | Parsed (out-of-scope runtime effect) | Interactive editor mode parity not in current scope. |
-| `-E` | emacs | Parsed (out-of-scope runtime effect) | Interactive editor mode parity not in current scope. |
+| `-V` | vi | Partial | Readline vi editing mode is requested when available; full dash editor parity not claimed. |
+| `-E` | emacs | Partial | Readline emacs editing mode is requested when available; full dash editor parity not claimed. |
 | `-b` | notify | Parsed (out-of-scope runtime effect) | Job notification parity not in current scope. |
 | `-p` | privileged | Parsed | Listed and tracked; full privilege-mode semantics not claimed. |
 | `-s` | stdin | Parsed | Command intake mode control supported in startup parser path. |
@@ -46,12 +46,12 @@ Scope note:
 | `verbose` | Partial | Maps to `-v`. |
 | `xtrace` | Partial | Maps to `-x`. |
 | `noclobber` | Implemented | Maps to `-C`. |
-| `vi` | Parsed (out-of-scope runtime effect) | Maps to `-V`. |
-| `emacs` | Parsed (out-of-scope runtime effect) | Maps to `-E`. |
-| `interactive` | Parsed (out-of-scope runtime effect) | Maps to `-i`. |
-| `monitor` | Parsed (out-of-scope runtime effect) | Maps to `-m`. |
+| `vi` | Partial | Maps to `-V`; readline-backed mode request when available. |
+| `emacs` | Partial | Maps to `-E`; readline-backed mode request when available. |
+| `interactive` | Implemented (partial parity) | Maps to `-i`; forces REPL path. |
+| `monitor` | Partial | Maps to `-m`; full job-control semantics pending. |
 | `notify` | Parsed (out-of-scope runtime effect) | Maps to `-b`. |
-| `ignoreeof` | Parsed (out-of-scope runtime effect) | Maps to `-I`. |
+| `ignoreeof` | Partial | Maps to `-I`; implemented for TTY REPL path. |
 | `stdin` | Parsed | Maps to `-s`. |
 | `privileged` | Parsed | Maps to `-p`. |
 | `nolog` | Parsed | Maps to `-q`; included for ash listing compatibility. |

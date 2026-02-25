@@ -126,6 +126,8 @@ def main(argv: List[str] | None = None) -> int:
     interactive = bool(rt.options.get("i", False)) or (args.script is None and os.isatty(0))
 
     if interactive and args.script is None:
+        if "m" not in startup_changes:
+            rt.options["m"] = True
         _source_startup_files(rt, login_shell=login_shell, interactive=True)
         return _run_interactive(rt)
 
@@ -278,6 +280,11 @@ def _apply_startup_options(rt: Runtime, changes: Dict[str, bool]) -> None:
         if k.startswith("__"):
             continue
         rt.options[k] = v
+    # ash behavior: vi/emacs modes are mutually exclusive.
+    if rt.options.get("V", False):
+        rt.options["E"] = False
+    if rt.options.get("E", False):
+        rt.options["V"] = False
 
 
 def _source_startup_files(rt: Runtime, *, login_shell: bool, interactive: bool) -> None:
@@ -329,13 +336,18 @@ def _run_interactive(rt: Runtime) -> int:
     _configure_line_editor(rt)
     buffer: List[str] = []
     status = 0
+    eof_count = 0
     while True:
         try:
             prompt = rt.env.get("PS2", "> ") if buffer else rt.env.get("PS1", "$ ")
             line = input(prompt)
+            eof_count = 0
         except EOFError:
-            if rt.options.get("I", False):
+            if rt.options.get("I", False) and os.isatty(0):
+                eof_count += 1
                 print()
+                if eof_count >= 50:
+                    break
                 continue
             print()
             break
