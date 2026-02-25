@@ -5,7 +5,6 @@ This file tracks intentionally deferred or partial items in the shell/Python bri
 ## Deferred
 
 - Full typed shell arrays/associative arrays are not implemented as first-class shell variables; bridge type conversion for those is partial.
-- Full `PYTHON` command-line shell-syntax integration for inline pipeline terminator forms (e.g. placing `|` on the `END_PYTHON` line) is not supported.
 
 ## Partial
 

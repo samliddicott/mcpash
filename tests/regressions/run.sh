@@ -183,6 +183,12 @@ run_case \
   $'xxyy\n'
 
 run_case \
+  "python_block_inline_end_pipeline" \
+  $'PYTHON\nprint("ii")\nEND_PYTHON | cat' \
+  0 \
+  $'ii\n'
+
+run_case \
   "py_interrupt_status_130" \
   'py '"'"'raise KeyboardInterrupt()'"'"'; echo s:$?' \
   130 \

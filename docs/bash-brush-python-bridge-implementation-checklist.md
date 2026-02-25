@@ -36,7 +36,7 @@ All checklist rows should be implemented as `sh.*` and mirrored via `bash.*` ali
 | Dedent default | Dedent enabled by default | indented block executes | use textwrap-like dedent rules | done |
 | `--no-dedent` | Preserve raw indentation | indented block fails/preserves as expected | add per-command option flag | done |
 | Same-line options | `PYTHON -x -r out` works | capture + structured exception tests | reuse `py` option parser | done |
-| Shell syntax integration | redirection and pipeline still valid | `PYTHON 2>e`; `echo x | PYTHON | cat` | treat block command as normal command node | in-progress |
+| Shell syntax integration | redirection and pipeline still valid | `PYTHON 2>e`; `echo x | PYTHON | cat` | treat block command as normal command node | done |
 
 ## Phase 3: Injected `sh` object core mappings
 

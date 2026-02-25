@@ -365,6 +365,14 @@ class TokenReader:
                 end_index = i + 1 if has_newline else i
                 self._advance_to(end_index)
                 return "".join(parts)
+            if line.startswith(terminator):
+                rest = line[len(terminator) :]
+                # Accept END_PYTHON trailer operators on the same physical line
+                # (e.g. "END_PYTHON | cat"), but reject identifiers like
+                # END_PYTHON_FOO.
+                if rest and (rest[0] in " \t;|&<>()" or rest.startswith("#")):
+                    self._advance_to(line_start + len(terminator))
+                    return "".join(parts)
             parts.append(line)
             if has_newline:
                 parts.append("\n")
