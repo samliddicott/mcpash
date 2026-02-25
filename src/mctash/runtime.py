@@ -3848,6 +3848,16 @@ class Runtime:
 
     def _run_set(self, args: List[str]) -> int:
         if not args:
+            entries: dict[str, str] = {}
+            for scope in self.local_stack:
+                for name, value in scope.items():
+                    if name not in entries:
+                        entries[name] = value
+            for name, value in self.env.items():
+                if name not in entries:
+                    entries[name] = value
+            for name in sorted(entries):
+                print(f"{name}={self._quote_set_value(entries[name])}")
             return 0
         if args[0] == "--":
             self.set_positional_args(args[1:])
@@ -3891,6 +3901,11 @@ class Runtime:
             return 0
         self.set_positional_args(args)
         return 0
+
+    def _quote_set_value(self, value: str) -> str:
+        if value == "":
+            return "''"
+        return "'" + value.replace("'", "'\"'\"'") + "'"
 
     def _run_export(self, args: List[str]) -> int:
         unexport = False

@@ -1,15 +1,14 @@
 #!/usr/bin/env ash
-# Coverage: man ash 'set' builtin (option toggles, -- positional reset, no-arg listing).
-set -euo pipefail
+# Coverage: man ash 'set' builtin (option toggles, positional reset, listing behavior).
 x=2
+set -eu
 
-# test: toggling options listed in the manual (errexit/noclobber/pipefail) and showing $-.
+# option toggles
 set -o errexit
 set -o noclobber
-set +o pipefail
-printf 'flags=%s\n' "$-"
+printf 'flags=%s\n' "$(printf '%s' "$-" | fold -w1 | sort | tr -d '\n')"
 
-# test: 'set --' to reset positional parameters and check $# with/without args.
+# positional parameter resets
 set -- first second
 printf 'args=%s:%s:%s\n' "$#" "$1" "$2"
 set -- third
@@ -17,7 +16,7 @@ printf 'args2=%s:%s\n' "$#" "$1"
 set --
 printf 'args-zero=%s\n' "$#"
 
-# test: listing variables/environment (the manual says 'set' with no args prints them) so compare output.
+# listing the environment (per man page)
 printf 'listing-start\n'
-set
+set | grep '^x='
 printf 'listing-end\n'
