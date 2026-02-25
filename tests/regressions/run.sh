@@ -152,6 +152,61 @@ run_case \
   'missing END_PYTHON'
 
 run_case \
+  "python_block_dedent_default" \
+  $'PYTHON\n    if True:\n        print("ded")\nEND_PYTHON' \
+  0 \
+  $'ded\n'
+
+run_case \
+  "python_block_no_dedent" \
+  $'PYTHON --no-dedent\n    print("nd")\nEND_PYTHON\necho s:$?' \
+  0 \
+  $'s:1\n' \
+  'IndentationError'
+
+run_case \
+  "py_sh_vars_mapping" \
+  'py '"'"'sh.vars["BRIDGE_X"]="42"'"'"'; echo "$BRIDGE_X"' \
+  0 \
+  $'42\n'
+
+run_case \
+  "py_bash_alias_mapping" \
+  'py '"'"'bash.vars["BRIDGE_B"]="ok"'"'"'; echo "$BRIDGE_B"' \
+  0 \
+  $'ok\n'
+
+run_case \
+  "py_sh_fn_callable_from_shell" \
+  'py '"'"'sh.fn["pyadd"]=lambda a,b:int(a)+int(b)'"'"'; pyadd 2 3' \
+  0 \
+  $'5\n'
+
+run_case \
+  "py_sh_call_basic" \
+  "py -e 'sh(\"echo hi\")'" \
+  0 \
+  $'hi\n'
+
+run_case \
+  "py_sh_run_capture_output" \
+  'py '"'"'cp=sh.run("echo rr", capture_output=True); sh.vars["R"]=cp.stdout.strip()'"'"'; echo "$R"' \
+  0 \
+  $'rr\n'
+
+run_case \
+  "py_sh_run_check_error" \
+  'py -x '"'"'sh.run("exit 7", check=True)'"'"'; echo "$PYTHON_EXCEPTION"' \
+  0 \
+  $'ShellCalledProcessError\n'
+
+run_case \
+  "py_sh_popen_capture" \
+  'py '"'"'p=sh.popen("echo pop", stdout=sh.PIPE); out,_=p.communicate(); sh.vars["PO"]=out.strip()'"'"'; echo "$PO"' \
+  0 \
+  $'pop\n'
+
+run_case \
   "param_len_special_at_star" \
   'set -- aa b; echo ${#@}; echo ${#*}' \
   0 \

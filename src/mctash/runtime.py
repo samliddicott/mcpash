@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import glob
+import importlib
+import importlib.util
 import io
 import os
 import select
@@ -15,9 +17,12 @@ import time
 import fnmatch
 import re
 import traceback
+import textwrap
 import uuid
 from contextlib import contextmanager, redirect_stdout
-from typing import Dict, Iterable, List, Optional, Tuple
+from collections.abc import MutableMapping
+from dataclasses import dataclass
+from typing import Any, Dict, Iterable, Iterator, List, Optional, Tuple
 
 from .ast_nodes import (
     AndOr,
@@ -81,6 +86,150 @@ class ArithExpansionFailure(Exception):
         self.code = code
 
 
+@dataclass
+class ShellCalledProcessError(Exception):
+    returncode: int
+    cmd: str
+    stdout: str
+    stderr: str
+
+    def __str__(self) -> str:
+        return f"ShellCalledProcessError(returncode={self.returncode}, cmd={self.cmd!r})"
+
+
+class _PyVarsMapping(MutableMapping[str, str]):
+    def __init__(self, rt: "Runtime") -> None:
+        self._rt = rt
+
+    def __getitem__(self, key: str) -> str:
+        return self._rt._get_var(key)
+
+    def __setitem__(self, key: str, value: object) -> None:
+        self._rt._assign_shell_var(key, self._rt._py_to_shell(value))
+
+    def __delitem__(self, key: str) -> None:
+        removed = False
+        for scope in reversed(self._rt.local_stack):
+            if key in scope:
+                del scope[key]
+                removed = True
+                break
+        if key in self._rt.env:
+            del self._rt.env[key]
+            removed = True
+        if not removed:
+            raise KeyError(key)
+
+    def __iter__(self) -> Iterator[str]:
+        seen: set[str] = set()
+        for scope in self._rt.local_stack:
+            for k in scope:
+                if k not in seen:
+                    seen.add(k)
+                    yield k
+        for k in self._rt.env:
+            if k not in seen:
+                seen.add(k)
+                yield k
+
+    def __len__(self) -> int:
+        return sum(1 for _ in self.__iter__())
+
+
+class _PyEnvMapping(MutableMapping[str, str]):
+    def __init__(self, rt: "Runtime") -> None:
+        self._rt = rt
+
+    def __getitem__(self, key: str) -> str:
+        if key not in self._rt.env:
+            raise KeyError(key)
+        return self._rt.env[key]
+
+    def __setitem__(self, key: str, value: object) -> None:
+        self._rt.env[key] = self._rt._py_to_shell(value)
+
+    def __delitem__(self, key: str) -> None:
+        if key not in self._rt.env:
+            raise KeyError(key)
+        del self._rt.env[key]
+
+    def __iter__(self) -> Iterator[str]:
+        return iter(self._rt.env.keys())
+
+    def __len__(self) -> int:
+        return len(self._rt.env)
+
+
+class _PySharedMapping(MutableMapping[str, str]):
+    def __init__(self, rt: "Runtime") -> None:
+        self._rt = rt
+
+    def __getitem__(self, key: str) -> str:
+        if key not in self._rt._shared_vars:
+            raise KeyError(key)
+        return self._rt._shared_vars[key]
+
+    def __setitem__(self, key: str, value: object) -> None:
+        self._rt._shared_vars[key] = self._rt._py_to_shell(value)
+
+    def __delitem__(self, key: str) -> None:
+        if key not in self._rt._shared_vars:
+            raise KeyError(key)
+        del self._rt._shared_vars[key]
+
+    def __iter__(self) -> Iterator[str]:
+        return iter(self._rt._shared_vars.keys())
+
+    def __len__(self) -> int:
+        return len(self._rt._shared_vars)
+
+
+class _PyFnNamespace(MutableMapping[str, object]):
+    def __init__(self, rt: "Runtime") -> None:
+        self._rt = rt
+
+    def __getitem__(self, key: str) -> object:
+        if key in self._rt._py_callables:
+            return self._rt._py_callables[key]
+        if key in self._rt.functions:
+            def _caller(*args: object) -> str:
+                return self._rt._call_shell_function_from_python(key, [str(a) for a in args])
+            return _caller
+        raise KeyError(key)
+
+    def __setitem__(self, key: str, value: object) -> None:
+        if not callable(value):
+            raise TypeError("sh.fn assignment currently requires a Python callable")
+        self._rt._py_callables[key] = value
+
+    def __delitem__(self, key: str) -> None:
+        removed = False
+        if key in self._rt._py_callables:
+            del self._rt._py_callables[key]
+            removed = True
+        if key in self._rt.functions:
+            del self._rt.functions[key]
+            removed = True
+        if not removed:
+            raise KeyError(key)
+
+    def __iter__(self) -> Iterator[str]:
+        seen = set(self._rt.functions.keys())
+        for k in seen:
+            yield k
+        for k in self._rt._py_callables.keys():
+            if k not in seen:
+                yield k
+
+    def __len__(self) -> int:
+        return sum(1 for _ in self.__iter__())
+
+    def __getattr__(self, name: str):
+        if name.startswith("_"):
+            raise AttributeError(name)
+        return self[name]
+
+
 class _PyBridge:
     PIPE = subprocess.PIPE
     STDOUT = subprocess.STDOUT
@@ -88,6 +237,101 @@ class _PyBridge:
 
     def __init__(self, rt: "Runtime") -> None:
         self._rt = rt
+        self.vars = _PyVarsMapping(rt)
+        self.env = _PyEnvMapping(rt)
+        self.fn = _PyFnNamespace(rt)
+        self.shared = _PySharedMapping(rt)
+
+    @property
+    def stack(self) -> list[dict[str, object]]:
+        source = self._rt.script_name or (self._rt.source_stack[0] if self._rt.source_stack else "")
+        line = self._rt.current_line if self._rt.current_line is not None else 0
+        return [{"source": source, "lineno": int(line), "funcname": ""}]
+
+    def __call__(self, *args: object) -> str:
+        cp = self.run(*args, capture_output=True, check=False)
+        if cp.returncode != 0:
+            raise ShellCalledProcessError(
+                returncode=int(cp.returncode),
+                cmd=self._coerce_script(args),
+                stdout=cp.stdout or "",
+                stderr=cp.stderr or "",
+            )
+        out = cp.stdout or ""
+        return out[:-1] if out.endswith("\n") else out
+
+    def _coerce_script(self, args: tuple[object, ...]) -> str:
+        if len(args) == 1 and isinstance(args[0], str):
+            return args[0]
+        return shlex.join([str(a) for a in args])
+
+    def run(
+        self,
+        *args: object,
+        capture_output: bool = False,
+        stdout: Any = None,
+        stderr: Any = None,
+        check: bool = False,
+        input: str | None = None,
+        shell: bool = True,
+        cwd: str | None = None,
+        env: dict[str, str] | None = None,
+        timeout: float | None = None,
+    ) -> subprocess.CompletedProcess[str]:
+        if not shell:
+            raise ValueError("sh.run(shell=False) is not supported in this phase")
+        script = self._coerce_script(args)
+        if capture_output:
+            if stdout is None:
+                stdout = subprocess.PIPE
+            if stderr is None:
+                stderr = subprocess.PIPE
+        cp = self._rt._run_shell_subprocess(
+            script=script,
+            stdout=stdout,
+            stderr=stderr,
+            input_text=input,
+            cwd=cwd,
+            env=env,
+            timeout=timeout,
+        )
+        if check and cp.returncode != 0:
+            raise ShellCalledProcessError(
+                returncode=int(cp.returncode),
+                cmd=script,
+                stdout=cp.stdout or "",
+                stderr=cp.stderr or "",
+            )
+        return cp
+
+    def popen(
+        self,
+        *args: object,
+        stdout: Any = None,
+        stderr: Any = None,
+        stdin: Any = None,
+        cwd: str | None = None,
+        env: dict[str, str] | None = None,
+    ) -> subprocess.Popen[str]:
+        script = self._coerce_script(args)
+        return self._rt._popen_shell_subprocess(
+            script=script,
+            stdin=stdin,
+            stdout=stdout,
+            stderr=stderr,
+            cwd=cwd,
+            env=env,
+        )
+
+    def tie(self, name: str, getter: Any, setter: Any = None, type: str | None = None) -> None:
+        if not callable(getter):
+            raise TypeError("getter must be callable")
+        if setter is not None and not callable(setter):
+            raise TypeError("setter must be callable when provided")
+        self._rt._py_ties[name] = (getter, setter, type)
+
+    def untie(self, name: str) -> None:
+        self._rt._py_ties.pop(name, None)
 
 
 class Runtime:
@@ -145,6 +389,8 @@ class Runtime:
         "trap",
         "let",
         "py",
+        "from",
+        "shared",
     }
     SPECIAL_BUILTINS = {
         ":",
@@ -200,6 +446,8 @@ class Runtime:
         "let",
         "getopts",
         "py",
+        "from",
+        "shared",
     }
 
     def __init__(self) -> None:
@@ -246,6 +494,9 @@ class Runtime:
         self._line_offset: int = 0
         self._last_eval_hard_error: bool = False
         self._pipeline_input_latency: float | None = None
+        self._py_callables: Dict[str, Any] = {}
+        self._py_ties: Dict[str, tuple[Any, Any, str | None]] = {}
+        self._shared_vars: Dict[str, str] = {}
         self._py_globals: Dict[str, object] = {"__builtins__": __builtins__}
         # Canonical injected name is `sh`; `bash` is kept for compatibility.
         self._py_globals["sh"] = _PyBridge(self)
@@ -1169,6 +1420,24 @@ class Runtime:
                     return status
                 finally:
                     self.env = saved_env
+            if name in self._py_callables:
+                saved_env = self.env
+                try:
+                    self.env = local_env
+                    try:
+                        with self._redirected_fds(node.redirects):
+                            result = self._py_callables[name](*argv[1:])
+                    except RuntimeError as e:
+                        print(str(e), file=sys.stderr)
+                        return 1
+                except Exception as e:
+                    print(f"{name}: {type(e).__name__}: {e}", file=sys.stderr)
+                    return 1
+                finally:
+                    self.env = saved_env
+                if result is not None:
+                    print(self._py_to_shell(result))
+                return 0
             try:
                 exec_env = dict(local_env)
                 # Local variables should shadow exported globals for external
@@ -1379,6 +1648,10 @@ class Runtime:
             return self._run_getopts(argv[1:])
         if name == "py":
             return self._run_py(argv[1:])
+        if name == "from":
+            return self._run_from_import(argv[1:])
+        if name == "shared":
+            return self._run_shared(argv[1:])
         if name in ["[", "[[", "test"]:
             return self._run_test(name, argv[1:])
         if name == "exit":
@@ -2840,6 +3113,13 @@ class Runtime:
             raise RuntimeError(self._format_error(f"{target}: {e.strerror}", line=self.current_line))
 
     def _get_var(self, name: str) -> str:
+        tied = self._py_ties.get(name)
+        if tied is not None:
+            getter, _, _ = tied
+            try:
+                return self._py_to_shell(getter())
+            except Exception:
+                return ""
         for scope in reversed(self.local_stack):
             if name in scope:
                 return scope[name]
@@ -3025,6 +3305,12 @@ class Runtime:
         self.local_stack[-1][name] = value
 
     def _assign_shell_var(self, name: str, value: str) -> None:
+        tied = self._py_ties.get(name)
+        if tied is not None:
+            _, setter, _ = tied
+            if callable(setter):
+                setter(value)
+                return
         for scope in reversed(self.local_stack):
             if name in scope:
                 scope[name] = value
@@ -3244,6 +3530,12 @@ class Runtime:
         return 0
 
     def _set_var(self, name: str, value: str) -> None:
+        tied = self._py_ties.get(name)
+        if tied is not None:
+            _, setter, _ = tied
+            if callable(setter):
+                setter(value)
+                return
         for scope in reversed(self.local_stack):
             if name in scope:
                 scope[name] = value
@@ -3431,13 +3723,27 @@ class Runtime:
         rendered = "".join(rendered_parts)
         if isinstance(sys.stdout, io.StringIO) and self._fd_redirect_depth == 0:
             sys.stdout.write(rendered)
-        return 0
+            return 0
+        # Use latin-1 to preserve byte-oriented escapes like \xHH.
+        data = rendered.encode("latin-1", errors="ignore")
+        try:
+            os.write(1, data)
+            return 0
+        except OSError as e:
+            if getattr(e, "errno", None) == 32:
+                print("ash: write error: Broken pipe", file=sys.stderr)
+                return 1
+            print(f"ash: write error: {e.strerror}", file=sys.stderr)
+            return 1
 
     def _run_py(self, args: List[str]) -> int:
         eval_mode = False
         structured_exc = False
+        no_dedent = False
         stdout_var: str | None = None
         return_var: str | None = None
+        tie_vars: list[str] = []
+        untie_vars: list[str] = []
         i = 0
         while i < len(args):
             a = args[i]
@@ -3454,16 +3760,50 @@ class Runtime:
                 structured_exc = True
                 i += 1
                 continue
+            if a == "--no-dedent":
+                no_dedent = True
+                i += 1
+                continue
             if a == "-v":
                 if i + 1 >= len(args):
-                    self._report_error("usage: py [-e] [-x] [-v VAR] [-r VAR] CODE", line=self.current_line, context="py")
+                    self._report_error(
+                        "usage: py [-e] [-x] [--no-dedent] [-v VAR] [-r VAR] [CODE]",
+                        line=self.current_line,
+                        context="py",
+                    )
                     return 2
                 stdout_var = args[i + 1]
                 i += 2
                 continue
+            if a == "-t":
+                if i + 1 >= len(args):
+                    self._report_error(
+                        "usage: py [-e] [-x] [--no-dedent] [-v VAR] [-r VAR] [-t VAR] [-u VAR] [CODE]",
+                        line=self.current_line,
+                        context="py",
+                    )
+                    return 2
+                tie_vars.append(args[i + 1])
+                i += 2
+                continue
+            if a == "-u":
+                if i + 1 >= len(args):
+                    self._report_error(
+                        "usage: py [-e] [-x] [--no-dedent] [-v VAR] [-r VAR] [-t VAR] [-u VAR] [CODE]",
+                        line=self.current_line,
+                        context="py",
+                    )
+                    return 2
+                untie_vars.append(args[i + 1])
+                i += 2
+                continue
             if a == "-r":
                 if i + 1 >= len(args):
-                    self._report_error("usage: py [-e] [-x] [-v VAR] [-r VAR] CODE", line=self.current_line, context="py")
+                    self._report_error(
+                        "usage: py [-e] [-x] [--no-dedent] [-v VAR] [-r VAR] [-t VAR] [-u VAR] [CODE]",
+                        line=self.current_line,
+                        context="py",
+                    )
                     return 2
                 return_var = args[i + 1]
                 i += 2
@@ -3471,10 +3811,23 @@ class Runtime:
             self._report_error(f"illegal option {a}", line=self.current_line, context="py")
             return 2
         payload = args[i:]
+        for name in untie_vars:
+            self._py_ties.pop(name, None)
+        for name in tie_vars:
+            self._py_ties[name] = (
+                (lambda n=name: self._py_globals.get(n, "")),
+                (lambda v, n=name: self._py_globals.__setitem__(n, v)),
+                "scalar",
+            )
+
+        if not payload and (tie_vars or untie_vars):
+            return 0
         source_from_stdin = False
         if not payload:
             source_from_stdin = True
             code = sys.stdin.read()
+            if not no_dedent:
+                code = textwrap.dedent(code)
         else:
             code = " ".join(payload)
         py_stdout = io.StringIO() if stdout_var else None
@@ -3506,6 +3859,77 @@ class Runtime:
             print(self._py_to_shell(py_result))
         return 0
 
+    def _run_shared(self, args: List[str]) -> int:
+        if not args:
+            for k in sorted(self._shared_vars.keys()):
+                print(f"{k}={self._shared_vars[k]}")
+            return 0
+        status = 0
+        for arg in args:
+            if "=" in arg:
+                name, value = arg.split("=", 1)
+                self._shared_vars[name] = value
+                continue
+            if arg not in self._shared_vars:
+                status = 1
+                continue
+            print(self._shared_vars[arg])
+        return status
+
+    def _run_from_import(self, args: List[str]) -> int:
+        # Syntax: from <module|path.py> import <name|*> [as alias]
+        if len(args) < 3:
+            self._report_error("usage: from MOD import NAME [as ALIAS]", line=self.current_line, context="from")
+            return 2
+        mod_ref = args[0]
+        if args[1] != "import":
+            self._report_error("usage: from MOD import NAME [as ALIAS]", line=self.current_line, context="from")
+            return 2
+        name = args[2]
+        alias = None
+        if len(args) >= 5 and args[3] == "as":
+            alias = args[4]
+        elif len(args) > 3:
+            self._report_error("usage: from MOD import NAME [as ALIAS]", line=self.current_line, context="from")
+            return 2
+        try:
+            mod = self._load_py_module(mod_ref)
+            if name == "*":
+                imported = 0
+                for k in dir(mod):
+                    if k.startswith("_"):
+                        continue
+                    obj = getattr(mod, k)
+                    if callable(obj):
+                        self._py_globals[k] = obj
+                        self._py_callables[k] = obj
+                        imported += 1
+                return 0 if imported >= 0 else 1
+            if not hasattr(mod, name):
+                self._report_error(f"{name}: not found in module {mod_ref}", line=self.current_line, context="from")
+                return 1
+            obj = getattr(mod, name)
+            out_name = alias or name
+            self._py_globals[out_name] = obj
+            if callable(obj):
+                self._py_callables[out_name] = obj
+            return 0
+        except Exception as e:
+            self._report_error(f"{type(e).__name__}: {e}", line=self.current_line, context="from")
+            return 1
+
+    def _load_py_module(self, ref: str):
+        if ref.endswith(".py") or ref.startswith("./") or ref.startswith("../") or ref.startswith("/"):
+            path = os.path.abspath(ref)
+            mod_name = f"_mctash_import_{uuid.uuid4().hex}"
+            spec = importlib.util.spec_from_file_location(mod_name, path)
+            if spec is None or spec.loader is None:
+                raise RuntimeError(f"unable to load module from {ref}")
+            mod = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(mod)
+            return mod
+        return importlib.import_module(ref)
+
     def _run_py_payload(self, payload: List[str], code: str, eval_mode: bool, source_from_stdin: bool) -> object:
         if eval_mode:
             return eval(code, self._py_globals, self._py_globals)
@@ -3516,6 +3940,9 @@ class Runtime:
         target = self._resolve_py_name(payload[0])
         if callable(target):
             return target(*payload[1:])
+        py_callable = self._py_callables.get(payload[0])
+        if py_callable is not None:
+            return py_callable(*payload[1:])
         exec(code, self._py_globals, self._py_globals)
         return None
 
@@ -3541,17 +3968,71 @@ class Runtime:
         if isinstance(value, str):
             return value
         return repr(value)
-        # Use latin-1 to preserve byte-oriented escapes like \\xHH.
-        data = rendered.encode("latin-1", errors="ignore")
-        try:
-            os.write(1, data)
-            return 0
-        except OSError as e:
-            if getattr(e, "errno", None) == 32:
-                print("ash: write error: Broken pipe", file=sys.stderr)
-                return 1
-            print(f"ash: write error: {e.strerror}", file=sys.stderr)
-            return 1
+
+    def _call_shell_function_from_python(self, name: str, args: List[str]) -> str:
+        if name not in self.functions:
+            raise KeyError(name)
+        status, out, _ = self._capture_command_output(
+            SimpleCommand(argv=[Word(name)] + [Word(a) for a in args], assignments=[], redirects=[], line=self.current_line),
+            data=None,
+            force_epipe=False,
+        )
+        text = out.decode("utf-8", errors="replace")
+        if status != 0:
+            raise ShellCalledProcessError(returncode=int(status), cmd=name, stdout=text, stderr="")
+        return text.rstrip("\n")
+
+    def _run_shell_subprocess(
+        self,
+        *,
+        script: str,
+        stdout: Any = None,
+        stderr: Any = None,
+        input_text: str | None = None,
+        cwd: str | None = None,
+        env: dict[str, str] | None = None,
+        timeout: float | None = None,
+    ) -> subprocess.CompletedProcess[str]:
+        cmd = [sys.executable, "-m", "mctash", "-c", script]
+        child_env = dict(os.environ)
+        child_env.update(self.env)
+        if env:
+            child_env.update({str(k): str(v) for k, v in env.items()})
+        return subprocess.run(
+            cmd,
+            input=input_text,
+            text=True,
+            stdout=stdout,
+            stderr=stderr,
+            cwd=cwd,
+            env=child_env,
+            timeout=timeout,
+        )
+
+    def _popen_shell_subprocess(
+        self,
+        *,
+        script: str,
+        stdin: Any = None,
+        stdout: Any = None,
+        stderr: Any = None,
+        cwd: str | None = None,
+        env: dict[str, str] | None = None,
+    ) -> subprocess.Popen[str]:
+        cmd = [sys.executable, "-m", "mctash", "-c", script]
+        child_env = dict(os.environ)
+        child_env.update(self.env)
+        if env:
+            child_env.update({str(k): str(v) for k, v in env.items()})
+        return subprocess.Popen(
+            cmd,
+            stdin=stdin,
+            stdout=stdout,
+            stderr=stderr,
+            text=True,
+            cwd=cwd,
+            env=child_env,
+        )
 
     def _decode_backslash_escapes(self, text: str) -> str:
         out: List[str] = []
