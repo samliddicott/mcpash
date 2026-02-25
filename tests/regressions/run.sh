@@ -293,9 +293,21 @@ run_case \
 
 run_case \
   "py_sh_stack_contains_function" \
-  "f(){ py -e 'sh.stack[0][\"funcname\"]'; }; f" \
+  "f(){ py -e 'next((fr[\"funcname\"] for fr in sh.stack if fr[\"funcname\"]==\"f\"), \"\")'; }; f" \
   0 \
   $'f\n'
+
+run_case \
+  "py_sh_stack_innermost_is_python" \
+  "f(){ py -e 'sh.stack[0][\"kind\"]+\":\"+sh.stack[0][\"funcname\"]'; }; f" \
+  0 \
+  $'python:py\n'
+
+run_case \
+  "py_sh_stack_contains_command_subst_frame" \
+  'x=$(py -e '"'"'next((fr["kind"] for fr in sh.stack if fr["kind"]=="command_subst"), "")'"'"'); echo "$x"' \
+  0 \
+  $'command_subst\n'
 
 run_case \
   "shared_builtin_basic" \
