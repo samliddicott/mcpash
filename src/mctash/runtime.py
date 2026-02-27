@@ -4837,9 +4837,7 @@ class Runtime:
 
     def _run_read(self, args: List[str]) -> int:
         raw_mode = False
-        n_chars: int | None = None
         delimiter = "\n"
-        timeout_sec: float | None = None
         prompt: str | None = None
 
         names: List[str] = []
@@ -4864,76 +4862,34 @@ class Runtime:
                 i += 2
                 continue
             if a == "-n":
-                if i + 1 >= len(args):
-                    self._report_error("read: option requires an argument -- n")
-                    return 2
-                try:
-                    n_chars = int(args[i + 1])
-                except ValueError:
-                    self._report_error("read: invalid number")
-                    return 2
-                i += 2
-                continue
-            if a.startswith("-n") and len(a) > 2:
-                try:
-                    n_chars = int(a[2:])
-                except ValueError:
-                    self._report_error("read: invalid number")
-                    return 2
-                i += 1
-                continue
+                self._report_error("read: Illegal option -n")
+                return 2
             if a == "-d":
-                if i + 1 >= len(args):
-                    self._report_error("read: option requires an argument -- d")
-                    return 2
-                d = args[i + 1]
-                delimiter = "\0" if d == "" else d[0]
-                i += 2
-                continue
+                self._report_error("read: Illegal option -d")
+                return 2
             if a == "-t":
-                if i + 1 >= len(args):
-                    self._report_error("read: option requires an argument -- t")
-                    return 2
-                try:
-                    timeout_sec = float(args[i + 1])
-                except ValueError:
-                    self._report_error("read: invalid timeout")
-                    return 2
-                i += 2
+                self._report_error("read: Illegal option -t")
                 continue
             self._report_error(f"read: unknown option {a}")
             return 2
         else:
             names = []
 
-        implicit_reply = not names
         if not names:
-            names = ["REPLY"]
+            self._report_error("read: arg count")
+            return 2
 
         if prompt is not None and os.isatty(0):
             os.write(2, prompt.encode("utf-8", errors="surrogateescape"))
 
-        if timeout_sec == 0:
-            ready = self._stdin_ready_now()
-            if len(names) == 1:
-                self.env[names[0]] = ""
-            else:
-                for name in names:
-                    self.env[name] = ""
-            return 0 if ready else 1
-
         text, ok = self._read_from_fd0(
             delimiter=delimiter,
             raw_mode=raw_mode,
-            n_chars=n_chars,
-            timeout_sec=timeout_sec,
+            n_chars=None,
+            timeout_sec=None,
         )
         if not ok and text == "":
             return 1
-
-        if implicit_reply and len(names) == 1 and names[0] == "REPLY":
-            self.env[names[0]] = text
-            return 0 if ok or text != "" else 1
 
         values = self._split_read_fields(text, names)
         for name, value in zip(names, values):
