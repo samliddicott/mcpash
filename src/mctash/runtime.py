@@ -5153,7 +5153,7 @@ class Runtime:
             else:
                 path = self._find_in_path(name)
                 if path:
-                    print(path, flush=True)
+                    print(f"{name} is {path}", flush=True)
                 else:
                     print(f"type: {name}: not found", file=sys.stderr)
                     status = 127
