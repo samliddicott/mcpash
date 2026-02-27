@@ -2410,6 +2410,13 @@ class Runtime:
                 sig_num = n
                 i += 2
                 continue
+            if a.startswith("-") and a != "-" and a[1:].isdigit():
+                try:
+                    sig_num = int(a[1:], 10)
+                except ValueError:
+                    return 1
+                i += 1
+                continue
             if a.startswith("-") and a != "-" and not a[1:].isdigit():
                 spec = self._normalize_signal_spec(a[1:])
                 if spec is None:
