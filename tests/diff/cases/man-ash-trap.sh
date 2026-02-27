@@ -1,6 +1,6 @@
 #!/usr/bin/env ash
 # Coverage: man ash trap builtin (setting handlers, ignoring, EXIT, INT).
-set -euo pipefail
+set -eu
 trap 'printf trap-exit\n' EXIT
 trap '' HUP
 trap 'printf trap-int\n' INT
