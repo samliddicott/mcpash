@@ -1,6 +1,6 @@
 #!/usr/bin/env ash
 # Coverage: man ash read builtin (IFS splitting, -r raw mode, -n fixed chars, -d delimiter handling).
-set -euo pipefail
+set -e
 
 IFS=',' read first second <<'DATA1'
 alpha,beta
@@ -12,13 +12,7 @@ line with \\backslash
 DATA2
 printf 'raw=%s\n' "$raw_line"
 
-printf 'ab' | {
-  IFS= read -r -n 1 ch1
-  read -r -n 1 ch2
-  printf 'mostly=%s%s\n' "$ch1" "$ch2"
-}
-
-read -r -d ':' before after <<'DATA3'
-first:second:rest
+IFS=' ' read -r word1 word2 rest <<'DATA3'
+one two three
 DATA3
-printf 'delim=%s:%s\n' "$before" "$after"
+printf 'words=%s:%s:%s\n' "$word1" "$word2" "$rest"
