@@ -2352,6 +2352,12 @@ class Runtime:
     def _run_fg(self, args: List[str]) -> int:
         if len(args) > 1:
             return 2
+        if not self.options.get("m", False):
+            token = args[0] if args else "%%"
+            if not token.startswith("%"):
+                token = f"%{token}"
+            self._report_error(f"job {token} not created under job control", line=self.current_line, context="fg")
+            return 1
         job_id = self._resolve_job_id(args[0] if args else None)
         if job_id is None:
             return 1
@@ -2367,6 +2373,12 @@ class Runtime:
         # Threaded background jobs start immediately; no stopped-state resume yet.
         if len(args) > 1:
             return 2
+        if not self.options.get("m", False):
+            token = args[0] if args else "%%"
+            if not token.startswith("%"):
+                token = f"%{token}"
+            self._report_error(f"job {token} not created under job control", line=self.current_line, context="bg")
+            return 1
         job_id = self._resolve_job_id(args[0] if args else None)
         if job_id is None:
             return 1
