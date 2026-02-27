@@ -1,15 +1,14 @@
-# POSIX "Shall" Trace (Selected High-Risk Areas)
+# POSIX "Shall" Trace (Requirement-Level Working Trace)
 
 Date: 2026-02-24
 
 Scope:
 
-- Requirement-level trace for selected normative areas in POSIX Shell Command Language (Issue 8, XCU Chapter 2).
-- Focused on sections most likely to regress in shell implementations:
-  - expansions
-  - redirections / here-doc
-  - exit status / diagnostic behavior
-  - traps/signals
+- Requirement-level working trace for normative areas in POSIX Shell Command Language (Issue 8, XCU Chapter 2).
+- This file links each row to concrete executable evidence:
+  - BusyBox ash corpus tests
+  - Oil POSIX/spec subset tests
+  - local differential cases (`tests/diff/cases`)
 
 References:
 
@@ -24,6 +23,11 @@ Legend:
 - `Partial`: significant evidence exists but not full corner-case closure.
 - `Gap`: not sufficiently evidenced yet.
 
+Case link notation:
+
+- BusyBox/Oil evidence references file paths.
+- Differential evidence references concrete runnable scripts in `tests/diff/cases`.
+
 ## 2.6 Word Expansions
 
 | Requirement (normative intent) | Status | Evidence | Notes |
@@ -34,6 +38,37 @@ Legend:
 | Command substitution result participates correctly in later expansion phases | Partial | `tests/busybox/ash_test/ash-psubst/tick*.tests`, `tests/oil/oils-master/spec/smoke.test.sh` (`command sub`) | Strong coverage, but exhaustive nested quoting matrices are still partial. |
 | Field splitting uses `IFS` rules and preserves/elides fields appropriately | Verified | `tests/busybox/ash_test/ash-vars/var_wordsplit_ifs*.tests`, `tests/busybox/ash_test/ash-z_slow/many_ifs.tests`, `tests/oil/oils-master/spec/word-split.test.sh` | Includes hard edge cases for `read`/`IFS` interactions. |
 | Pathname expansion (globbing) occurs after splitting and follows pattern semantics | Partial | `tests/busybox/ash_test/ash-glob/glob*.tests`, `tests/busybox/ash_test/ash-vars/param_glob.tests` | Covered for ash corpus patterns; formal full-space proof remains open. |
+
+## 2.2 Quoting
+
+| Requirement (normative intent) | Status | Evidence | Notes |
+|---|---|---|---|
+| Single quotes preserve literal characters until closing quote | Verified | `tests/busybox/ash_test/ash-quoting/squote_in_varexp.tests`, `tests/oil/oils-master/spec/shell-grammar.test.sh` | Includes literalization and embedding behavior. |
+| Double quotes preserve most literal characters while allowing parameter/command/arithmetic expansion | Verified | `tests/busybox/ash_test/ash-quoting/*.tests`, `tests/oil/oils-master/spec/var-sub.test.sh`, `tests/oil/oils-master/spec/shell-grammar.test.sh` | Expansion in quoted contexts is broadly exercised. |
+| Backslash escaping obeys quoting context and newline-continuation rules | Partial | `tests/busybox/ash_test/ash-parsing/bkslash_newline*.tests`, `tests/busybox/ash_test/ash-parsing/escape*.tests`, `tests/oil/oils-master/spec/shell-grammar.test.sh` | Covered in parser suites; not yet exhaustively traced by requirement row. |
+
+## 2.3 Token Recognition
+
+| Requirement (normative intent) | Status | Evidence | Notes |
+|---|---|---|---|
+| Tokenization recognizes operators, words, and separators per shell lexical rules | Verified | `tests/busybox/ash_test/ash-parsing/*.tests`, `tests/oil/oils-master/spec/shell-grammar.test.sh` | Parser/lexer acceptance tests cover broad operator/word spaces. |
+| Comment handling and escaped newline handling preserve command structure | Verified | `tests/busybox/ash_test/ash-parsing/comment*.tests`, `tests/busybox/ash_test/ash-parsing/bkslash_newline*.tests` | Core lexical conventions are covered in parsing corpus. |
+| Here-doc token recognition and deferred body attachment follow grammar sequencing | Verified | `tests/busybox/ash_test/ash-heredoc/heredoc*.tests`, `tests/oil/oils-master/spec/posix.test.sh` (`Multiple here docs on one line`) | Queue/order behavior is validated. |
+
+## 2.4 Reserved Words
+
+| Requirement (normative intent) | Status | Evidence | Notes |
+|---|---|---|---|
+| Reserved words are recognized only in grammar-appropriate positions | Partial | `tests/busybox/ash_test/ash-parsing/groups_and_keywords1.tests`, `tests/busybox/ash_test/ash-misc/for_with_keywords.tests`, `tests/oil/oils-master/spec/shell-grammar.test.sh` | Strong functional evidence; still partial for exhaustive context matrix. |
+| Compound-command keywords (`if`, `then`, `fi`, `case`, `esac`, loops) parse and execute in order | Verified | `tests/busybox/ash_test/ash-misc/if_false_exitcode.tests`, `tests/busybox/ash_test/ash-misc/case1.tests`, `tests/busybox/ash_test/ash-misc/while*.tests`, `tests/oil/oils-master/spec/if_.test.sh`, `tests/oil/oils-master/spec/case_.test.sh` | Execution semantics covered across multiple corpora. |
+
+## 2.5 Parameters and Variables
+
+| Requirement (normative intent) | Status | Evidence | Notes |
+|---|---|---|---|
+| Variable assignment, retrieval, and unset/readonly behavior follow shell rules | Verified | `tests/busybox/ash_test/ash-vars/readonly*.tests`, `tests/busybox/ash_test/ash-vars/unset.tests`, `tests/diff/cases/man-ash-env.sh` | Differential case adds direct ash-vs-mctash behavior checks. |
+| Positional parameters and special parameters (`$?`, `$#`, `$*`, `$@`) track command execution semantics | Verified | `tests/busybox/ash_test/ash-vars/var_posix*.tests`, `tests/busybox/ash_test/ash-misc/and-or.tests`, `tests/diff/cases/man-ash-set.sh` | Includes option/position reset and status sensitivity. |
+| Parameter-length and default/assign/error operators behave for unset/null branches | Verified | `tests/busybox/ash_test/ash-vars/param_expand_*.tests`, `tests/oil/oils-master/spec/var-op-test.test.sh`, `tests/regressions/run.sh` (`param_len_special_at_star`) | Verified against broad operator matrix. |
 
 ## 2.7 Redirection
 
@@ -51,6 +86,37 @@ Legend:
 | Command-not-found and non-executable failures map to shell-expected statuses (`127`/`126`) | Verified | `tests/busybox/ash_test/ash-misc/exitcode_ENOENT.tests`, `tests/busybox/ash_test/ash-misc/exitcode_EACCES.tests`, `tests/oil/oils-master/spec/command_.test.sh` | Slash-path and PATH lookup diagnostics were recently corrected. |
 | Pipeline status follows shell option semantics (`pipefail` off/on) | Verified | `tests/busybox/ash_test/ash-misc/pipefail.tests`, `tests/oil/oils-master/spec/pipeline.test.sh` (`Exit code is last status`) | Oil includes one intentional ash-vs-OSH semantic difference on last-pipeline-process behavior. |
 | `!` pipeline negation inverts status per shell grammar semantics | Verified | `tests/busybox/ash_test/ash-parsing/negate.tests`, `tests/oil/oils-master/spec/pipeline.test.sh` (`! turns non-zero into zero`, `! turns zero into 1`) | Negation is stable across simple and compound contexts. |
+
+## 2.12 Shell Execution Environment
+
+| Requirement (normative intent) | Status | Evidence | Notes |
+|---|---|---|---|
+| Prefix assignments and exported environment entries are applied for command execution | Verified | `tests/busybox/ash_test/ash-misc/assignment*.tests`, `tests/busybox/ash_test/ash-standalone/nofork_env.tests`, `tests/diff/cases/man-ash-env.sh` | Includes shell variable/export interaction paths. |
+| Exec replacement and no-return behavior are correct for successful `exec` | Verified | `tests/busybox/ash_test/ash-misc/exec.tests`, `tests/diff/cases/man-ash-eval-exec.sh` | Differential case checks post-exec non-return path. |
+| Threaded runtime deviations from forked shell process model are documented and bounded | Partial | `docs/threaded-runtime-deviations.md` | Design/documentation exists; conformance framing remains partial by construction. |
+
+## 2.13 Shell Variables
+
+| Requirement (normative intent) | Status | Evidence | Notes |
+|---|---|---|---|
+| Shell options/variables exposed by builtins (`set`, readonly/export state) are reflected consistently | Partial | `tests/busybox/ash_test/ash-vars/*.tests`, `tests/diff/cases/man-ash-set.sh`, `tests/diff/cases/set-listing.sh` | Functional behavior is covered; output formatting parity remains partial. |
+| `$PWD` behavior across `cd` aligns with shell semantics in non-interactive runs | Verified | `tests/diff/cases/man-ash-pwd.sh`, `tests/diff/cases/man-ash-cd-source.sh` | Differential cases enforce parity on observed outputs. |
+
+## 2.14 Special Built-In Utilities
+
+| Requirement (normative intent) | Status | Evidence | Notes |
+|---|---|---|---|
+| `set` option toggles and positional updates follow special-builtin semantics | Verified | `tests/diff/cases/man-ash-set.sh`, `tests/diff/cases/set-listing.sh`, `tests/busybox/ash_test/ash-getopts/*.tests` | Status/option interactions are checked directly. |
+| `eval` evaluates constructed command text in current shell context | Verified | `tests/diff/cases/man-ash-eval-exec.sh`, `tests/busybox/ash_test/ash-misc/eval*.tests` | Includes error-status-sensitive execution paths. |
+| `command`/`builtin` affect lookup and bypass behavior correctly | Verified | `tests/diff/cases/man-ash-alias.sh`, `tests/busybox/ash_test/ash-misc/command*.tests` | Lookup semantics validated in both corpora. |
+| `readonly`, `export`, `unset`, `trap`, `times`, `umask`, `ulimit` obey core semantics | Partial | `tests/diff/cases/man-ash-env.sh`, `tests/diff/cases/man-ash-trap.sh`, `tests/diff/cases/man-ash-resource.sh`, `tests/busybox/ash_test/ash-vars/readonly*.tests`, `tests/busybox/ash_test/ash-signals/signal*.tests` | Core behavior covered; full option matrices are still partial. |
+
+## 2.15 Shell Grammar Lexical Conventions
+
+| Requirement (normative intent) | Status | Evidence | Notes |
+|---|---|---|---|
+| Newline, semicolon, and continuation handling produce expected command boundaries | Verified | `tests/busybox/ash_test/ash-parsing/noeol*.tests`, `tests/busybox/ash_test/ash-parsing/bkslash_newline*.tests`, `tests/oil/oils-master/spec/shell-grammar.test.sh` | Command boundary behavior is well covered. |
+| Grammar-level parse failures return non-zero and avoid executing malformed constructs | Partial | `tests/busybox/ash_test/ash-parsing/nodone*.tests`, `tests/oil/oils-master/spec/shell-grammar.test.sh` (`Invalid token`), `tests/diff/cases/man-ash-redir.sh` | Rejection semantics covered; diagnostic text equivalence still partial. |
 
 ## 2.11 Signals, Traps, and Related Error Paths
 
@@ -80,7 +146,7 @@ Legend:
 
 ## Open Gaps (Next "Shall" Expansion)
 
-1. Keep startup-option parity tracked in `docs/startup-option-matrix.md`; add requirement-level rows in this document only where they intersect POSIX Chapter 2 semantics.
-2. Refine grammar-production-level trace (nonterminal-by-nonterminal) for parser completeness reporting:
+1. Refine grammar-production-level trace (nonterminal-by-nonterminal) for parser completeness reporting:
    - `docs/grammar-production-checklist.md`
-3. Add per-requirement negative tests for diagnostics formatting and ambiguous parse errors.
+2. Add per-requirement negative tests for diagnostics formatting and ambiguous parse errors.
+3. Keep startup-option parity tracked in `docs/startup-option-matrix.md`; add requirement-level rows here only when they materially alter POSIX Chapter 2 behavior.
