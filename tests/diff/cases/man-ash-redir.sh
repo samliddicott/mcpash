@@ -1,6 +1,6 @@
 #!/usr/bin/env ash
 # Coverage: man ash redirection section (>, >>, <, heredoc/<<-, fd duplication).
-set -euo pipefail
+set -eu
 
 tmp=$(mktemp)
 tmp2=$(mktemp)
