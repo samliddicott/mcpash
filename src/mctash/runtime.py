@@ -2333,6 +2333,8 @@ class Runtime:
                 i += 1
                 continue
             return 2
+        if not self.options.get("m", False):
+            return 0
         job_ids = sorted(set(self._bg_jobs.keys()) | set(self._bg_status.keys()))
         for job_id in job_ids:
             pid = self._bg_pids.get(job_id)
@@ -2357,7 +2359,7 @@ class Runtime:
             if not token.startswith("%"):
                 token = f"%{token}"
             self._report_error(f"job {token} not created under job control", line=self.current_line, context="fg")
-            return 1
+            return 2
         job_id = self._resolve_job_id(args[0] if args else None)
         if job_id is None:
             return 1
@@ -2378,7 +2380,7 @@ class Runtime:
             if not token.startswith("%"):
                 token = f"%{token}"
             self._report_error(f"job {token} not created under job control", line=self.current_line, context="bg")
-            return 1
+            return 2
         job_id = self._resolve_job_id(args[0] if args else None)
         if job_id is None:
             return 1
