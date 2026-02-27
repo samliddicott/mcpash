@@ -4816,7 +4816,7 @@ class Runtime:
         if args and args[0] == "-n":
             newline = False
             args = args[1:]
-        data = " ".join(args)
+        data = " ".join(self._decode_backslash_escapes(a) for a in args)
         if newline:
             data += "\n"
         if self._force_broken_pipe and self._fd_redirect_depth == 0:

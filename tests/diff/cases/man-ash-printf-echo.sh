@@ -1,6 +1,6 @@
 #!/usr/bin/env ash
 # Coverage: man ash 'print' (printf) and 'echo' variation (no-newline, -n, quoting, escapes) plus escape sequences.
-set -euo pipefail
+set -eu
 printf 'printf-line=%s\n' 'line1'
 printf 'printf-multi=%s %s\n' 'two' 'parts'
 printf 'printf-null=%s\n' ''
