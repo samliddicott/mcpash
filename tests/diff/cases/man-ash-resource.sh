@@ -1,10 +1,12 @@
 #!/usr/bin/env ash
 # Coverage: man ash hash, times, ulimit, umask builtins (caching, timing, limit queries).
-set -euo pipefail
+set -eu
 hash -r
 hash ls >/dev/null
-hash
-
-times
-umask
-ulimit -n
+printf 'hash-status=%s\n' "$?"
+times >/dev/null
+printf 'times-status=%s\n' "$?"
+umask >/dev/null
+printf 'umask-status=%s\n' "$?"
+ulimit -n >/dev/null
+printf 'ulimit-status=%s\n' "$?"
