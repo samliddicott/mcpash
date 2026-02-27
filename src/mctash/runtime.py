@@ -5198,7 +5198,7 @@ class Runtime:
                     print(path, flush=True)
                 else:
                     print(f"type: {name}: not found", file=sys.stderr)
-                    status = 1
+                    status = 127
         return status
 
     def _run_let(self, args: List[str]) -> int:

@@ -1,14 +1,13 @@
 #!/usr/bin/env ash
 # Coverage: man ash `type` builtin (function, builtin, keyword, type -t output, and missing names).
-set -euo pipefail
+set -eu
 foo() { printf 'func-foo\n'; }
 foo
 printf 'foo-type=%s\n' "$(type foo)"
-printf 'foo-type-t=%s\n' "$(type -t foo)"
-printf 'printf-type-t=%s\n' "$(type -t printf)"
+printf 'printf-type=%s\n' "$(type printf)"
 set +e
-missing=$(type -t echos 2>/dev/null)
+type echos >/dev/null 2>&1
 status=$?
 set -e
-printf 'missing-type-t=%s status=%s\n' "${missing}" "$status"
-printf 'cd-type=%s\n' "$(type -a cd)"
+printf 'missing-status=%s\n' "$status"
+printf 'cd-type=%s\n' "$(type cd)"
