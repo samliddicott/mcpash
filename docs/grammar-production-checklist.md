@@ -40,6 +40,36 @@ Legend:
 | reserved-word contextualization | parser context + `parse_command()` dispatch | Partial | `tests/busybox/ash_test/ash-parsing/groups_and_keywords*.tests`, `tests/oil/oils-master/spec/shell-grammar.test.sh` | Common contexts are covered; exhaustive reserved-word ambiguity matrix remains open. |
 | grammar rejection paths (invalid productions) | all parse entry points (error exits) | Partial | `tests/busybox/ash_test/ash-parsing/nodone*.tests`, `tests/oil/oils-master/spec/shell-grammar.test.sh` (`Invalid token`) | Rejections are covered; exact diagnostic text parity is not a strict claim yet. |
 
+## POSIX 2.10 Production-to-Test Mapping
+
+This section is the concrete closure board for grammar productions we rely on for ash parity.
+
+| POSIX production (2.10 family) | Parser path(s) | Status | Primary evidence | Differential anchor |
+|---|---|---|---|---|
+| `program` / complete command stream | `parse_next()`, `parse_list()` | Covered | `tests/busybox/ash_test/ash-parsing/noeol*.tests`, `tests/oil/oils-master/spec/shell-grammar.test.sh` | `tests/diff/cases/man-ash-logic.sh` |
+| `complete_command` / separators (`;`, `&`, newline) | `parse_list()`, `parse_compound_list()` | Covered | `tests/busybox/ash_test/ash-parsing/and_or_and_backgrounding.tests` | `tests/diff/cases/man-ash-logic.sh` |
+| `and_or` lists (`&&`, `||`) | `parse_and_or()` | Covered | `tests/busybox/ash_test/ash-misc/and-or.tests` | `tests/diff/cases/man-ash-logic.sh` |
+| `pipeline` with optional leading `!` | `parse_pipeline()` | Covered | `tests/busybox/ash_test/ash-parsing/negate.tests`, `tests/oil/oils-master/spec/pipeline.test.sh` | `tests/diff/cases/man-ash-logic.sh` |
+| `simple_command` (assignment words, words, redirects) | `parse_command()` | Covered | `tests/busybox/ash_test/ash-misc/assignment*.tests`, `tests/busybox/ash_test/ash-redir/redir*.tests` | `tests/diff/cases/man-ash-set.sh`, `tests/diff/cases/man-ash-redir.sh` |
+| `cmd_prefix`/`cmd_suffix` redirect+word interleave | `parse_command()` | Partial | `tests/busybox/ash_test/ash-redir/redir_exec*.tests`, `tests/oil/oils-master/spec/command-parsing.test.sh` | `tests/diff/cases/man-ash-redir.sh` |
+| `redirect_list` and IO-number redirects | `parse_command()` + redir parser | Covered | `tests/busybox/ash_test/ash-redir/redir_to_bad_fd*.tests`, `tests/oil/oils-master/spec/redirect.test.sh` | `tests/diff/cases/man-ash-redir.sh` |
+| `io_here` and heredoc attachment/order | heredoc queueing in parser | Covered | `tests/busybox/ash_test/ash-heredoc/heredoc*.tests`, `tests/oil/oils-master/spec/posix.test.sh` (`Multiple here docs on one line`) | `tests/diff/cases/man-ash-redir.sh` |
+| `compound_command` brace group | `parse_group()` | Covered | `tests/busybox/ash_test/ash-parsing/group*.tests`, `tests/oil/oils-master/spec/shell-grammar.test.sh` | `tests/diff/cases/man-ash-logic.sh` |
+| `subshell` | `parse_subshell()` | Covered | `tests/busybox/ash_test/ash-misc/while_in_subshell.tests`, `tests/oil/oils-master/spec/shell-grammar.test.sh` | `tests/diff/cases/man-ash-logic.sh` |
+| `for_clause` | `parse_for()` | Covered | `tests/busybox/ash_test/ash-misc/for*.tests`, `tests/oil/oils-master/spec/loop.test.sh` | `tests/diff/cases/man-ash-logic.sh` |
+| `case_clause` / `case_item_ns` | `parse_case()` | Covered | `tests/busybox/ash_test/ash-misc/case1.tests`, `tests/oil/oils-master/spec/case_.test.sh` | `tests/diff/cases/man-ash-logic.sh` |
+| `if_clause` / `elif` / `else` | `parse_if()` | Covered | `tests/busybox/ash_test/ash-misc/elif*.tests`, `tests/oil/oils-master/spec/if_.test.sh` | `tests/diff/cases/man-ash-logic.sh` |
+| `while_clause` / `until_clause` | `parse_while()` | Covered | `tests/busybox/ash_test/ash-misc/while*.tests`, `tests/busybox/ash_test/ash-misc/until1.tests`, `tests/oil/oils-master/spec/loop.test.sh` | `tests/diff/cases/man-ash-logic.sh` |
+| `function_definition` | `parse_function_def()` | Covered | `tests/busybox/ash_test/ash-misc/func*.tests`, `tests/oil/oils-master/spec/shell-grammar.test.sh` (`Function def`) | `tests/diff/cases/man-ash-type.sh` |
+| reserved word disambiguation by parser context | parser context + command dispatch | Partial | `tests/busybox/ash_test/ash-parsing/groups_and_keywords*.tests`, `tests/oil/oils-master/spec/shell-grammar.test.sh` | `tests/diff/cases/man-ash-logic.sh` |
+| invalid productions are rejected safely | all parse entry points | Partial | `tests/busybox/ash_test/ash-parsing/nodone*.tests`, `tests/oil/oils-master/spec/shell-grammar.test.sh` (`Invalid token`) | `tests/diff/cases/man-ash-redir.sh` |
+
+## Production Gaps to Close Next
+
+1. Add explicit differential cases for ambiguous reserved-word/literal boundaries.
+2. Add negative parse cases for malformed nested compound commands.
+3. Expand `cmd_prefix/cmd_suffix` interleaving matrix with assignment+redir+builtin combinations.
+
 ## Outstanding Parser-Checklist Work
 
 1. Expand the word-level sub-checklist above to include explicit parser/expander line anchors and negative-case rows.
