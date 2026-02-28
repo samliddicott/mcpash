@@ -459,6 +459,8 @@ class _PyBridge:
 
 
 class Runtime:
+    _thread_diag_lock = threading.Lock()
+    _thread_diag_emitted: set[str] = set()
     SET_O_LIST_ORDER: List[str] = [
         "errexit",
         "noglob",
@@ -1035,6 +1037,10 @@ class Runtime:
             return
         if getattr(self._thread_ctx, "unshared_fs_files", False):
             return
+        mode = self._thread_unshare_mode()
+        if mode == "off":
+            self._emit_thread_diag_once("unshare disabled (MCTASH_UNSHARE_MODE=off)")
+            return
         try:
             libc = ctypes.CDLL(None, use_errno=True)
             unshare = libc.unshare
@@ -1045,9 +1051,30 @@ class Runtime:
             rc = int(unshare(CLONE_FS | CLONE_FILES))
             if rc == 0:
                 self._thread_ctx.unshared_fs_files = True
+                return
+            err = ctypes.get_errno()
+            self._emit_thread_diag_once(f"unshare(CLONE_FS|CLONE_FILES) failed errno={err}")
         except Exception:
             # Best effort only; fallback keeps current shared-thread behavior.
+            self._emit_thread_diag_once("unshare(CLONE_FS|CLONE_FILES) unavailable")
             return
+
+    def _thread_unshare_mode(self) -> str:
+        mode = self.env.get("MCTASH_UNSHARE_MODE", os.environ.get("MCTASH_UNSHARE_MODE", "auto"))
+        return mode.strip().lower() if isinstance(mode, str) else "auto"
+
+    def _thread_diag_enabled(self) -> bool:
+        v = self.env.get("MCTASH_THREAD_DIAG", os.environ.get("MCTASH_THREAD_DIAG", "0"))
+        return str(v).strip().lower() in {"1", "true", "yes", "on"}
+
+    def _emit_thread_diag_once(self, msg: str) -> None:
+        if not self._thread_diag_enabled():
+            return
+        with self._thread_diag_lock:
+            if msg in self._thread_diag_emitted:
+                return
+            self._thread_diag_emitted.add(msg)
+        print(f"mctash: thread-runtime: {msg}", file=sys.stderr)
 
     def _exec_and_or(self, node: AndOr, track_status: bool = True) -> int:
         status = self._exec_pipeline(node.pipelines[0])

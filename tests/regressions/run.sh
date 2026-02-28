@@ -458,6 +458,13 @@ run_case \
   0 \
   $'s:2\n'
 
+run_case \
+  "thread_unshare_fallback_diag" \
+  'export MCTASH_UNSHARE_MODE=off MCTASH_THREAD_DIAG=1; ( : ) & wait %1; echo s:$?' \
+  0 \
+  $'s:0\n' \
+  'thread-runtime: unshare disabled'
+
 printf '[PASS] all targeted regressions\n'
 
 # Reserved-word contextualization checks.
