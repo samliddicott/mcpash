@@ -5034,8 +5034,7 @@ class Runtime:
             names = []
 
         if not names:
-            self._report_error("read: arg count")
-            return 2
+            names = ["REPLY"]
 
         if prompt is not None and os.isatty(0):
             os.write(2, prompt.encode("utf-8", errors="surrogateescape"))
