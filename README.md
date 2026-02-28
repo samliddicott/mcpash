@@ -55,6 +55,20 @@ PERF_RUNS=9 PERF_INCLUDE_BUSYBOX=1 make perf-baseline
 PERF_MAX_REGRESSION=1.20 PERF_MIN_DELTA_MS=8 make perf-compare
 ```
 
+Run strict race-stimulation regressions (fail on first mismatch, no tolerated failures):
+
+```sh
+make stress-race
+```
+
+Useful overrides:
+
+```sh
+RACE_REPEATS=200 RACE_UNSHARE_MODES=auto,off,fail make stress-race
+```
+
+Note: fallback modes (`off`, `fail`) are useful for diagnostics and may expose current isolation bugs; any failure should be treated as actionable.
+
 This runs focused checks for fragile semantics:
 
 - `read` + mixed `IFS` edge behavior

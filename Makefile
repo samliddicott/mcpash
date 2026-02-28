@@ -5,7 +5,7 @@ OIL_MIN_PASS ?= 245
 OIL_MAX_FAIL ?= 0
 SUMMARY_FILE ?= docs/reports/parity-summary.json
 
-.PHONY: regressions bridge-conformance diff-conformance busybox-conformance parity-summary perf-baseline perf-compare conformance conformance-full conformance-quick
+.PHONY: regressions bridge-conformance diff-conformance busybox-conformance parity-summary perf-baseline perf-compare stress-race conformance conformance-full conformance-quick
 
 regressions:
 	@./tests/regressions/run.sh
@@ -27,6 +27,9 @@ perf-baseline:
 
 perf-compare:
 	@./scripts/compare_perf_baseline.sh docs/reports/perf-baseline.json
+
+stress-race:
+	@./tests/stress/race.sh
 
 conformance: conformance-full
 
