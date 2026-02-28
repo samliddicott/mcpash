@@ -1,6 +1,6 @@
 # POSIX 2.10 Grammar Production Checklist
 
-Date: 2026-02-25
+Date: 2026-02-28
 
 Purpose:
 
@@ -69,6 +69,28 @@ This section is the concrete closure board for grammar productions we rely on fo
 1. Add explicit differential cases for ambiguous reserved-word/literal boundaries.
 2. Add negative parse cases for malformed nested compound commands.
 3. Expand `cmd_prefix/cmd_suffix` interleaving matrix with assignment+redir+builtin combinations.
+
+## Partial-Row Closure Map
+
+Each `Partial` row now has an explicit next artifact target.
+
+| Partial row | Current evidence | Next test artifact (explicit) | Target status |
+|---|---|---|---|
+| Grammar families: `reserved-word contextualization` | `tests/busybox/ash_test/ash-parsing/groups_and_keywords*.tests`, `tests/oil/oils-master/spec/shell-grammar.test.sh` | Extend `tests/regressions/run.sh` reserved-word block with additional ambiguity rows (`function`, `case`, `for`, `in` literal-vs-keyword contexts) and add `tests/diff/cases/man-ash-grammar-reserved.sh` | Covered |
+| Grammar families: `grammar rejection paths` | `tests/busybox/ash_test/ash-parsing/nodone*.tests`, `tests/oil/oils-master/spec/shell-grammar.test.sh` | Add `tests/diff/cases/man-ash-grammar-negative.sh` for malformed nested compounds and separator/operator mismatch cases | Covered |
+| Production map: `cmd_prefix/cmd_suffix` interleave | `tests/busybox/ash_test/ash-redir/redir_exec*.tests`, `tests/oil/oils-master/spec/command-parsing.test.sh` | Add `tests/diff/cases/man-ash-prefix-suffix.sh` matrix (assignment+redir+builtin/external/function orderings) | Covered |
+| Production map: `reserved word disambiguation by parser context` | busybox/oil parsing suites + `tests/diff/cases/man-ash-logic.sh` | Same artifacts as reserved-word contextualization above (`tests/regressions/run.sh` + `tests/diff/cases/man-ash-grammar-reserved.sh`) | Covered |
+| Production map: `invalid productions are rejected safely` | busybox/oil rejection suites + `tests/diff/cases/man-ash-redir.sh` | Same artifact as grammar rejection above (`tests/diff/cases/man-ash-grammar-negative.sh`) with explicit status/diagnostic assertions | Covered |
+| Word sub-checklist: braced parameter operators | busybox/oil var-op suites | Add targeted regression cases in `tests/regressions/run.sh` for mixed/default/pattern operators and malformed operator combinations; add diff anchor `tests/diff/cases/man-ash-var-ops.sh` | Covered |
+| Word sub-checklist: deep nested quote/substitution combinations | busybox/oil quoting suites | Add regression matrix in `tests/regressions/run.sh` for nested quote+`$()`+`$(( ))` compositions; add diff anchor `tests/diff/cases/man-ash-word-nesting.sh` | Covered |
+
+Execution order for closure:
+
+1. `man-ash-prefix-suffix.sh`
+2. `man-ash-grammar-negative.sh`
+3. `man-ash-grammar-reserved.sh`
+4. `man-ash-var-ops.sh`
+5. `man-ash-word-nesting.sh`
 
 ## Outstanding Parser-Checklist Work
 
