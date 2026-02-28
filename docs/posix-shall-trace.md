@@ -144,10 +144,28 @@ Case link notation:
 | Here-doc grammar attachment/order and multi-here-doc parsing follow shell grammar constraints | Verified | `tests/busybox/ash_test/ash-heredoc/heredoc*.tests`, `tests/oil/oils-master/spec/posix.test.sh` (`Multiple here docs on one line`) | Includes parser queueing/order-sensitive cases. |
 | Case grammar variants (optional trailing `;;`, pattern alternation, oneline forms) parse correctly | Verified | `tests/busybox/ash_test/ash-misc/case1.tests`, `tests/oil/oils-master/spec/shell-grammar.test.sh` (`Case without last dsemi`, `Case with 2 options`, oneline forms), `tests/oil/oils-master/spec/case_.test.sh` | Covers core POSIX case grammar forms in scope. |
 
+### 2.9/2.10 ASDL Alignment Notes
+
+| Runtime grammar area | mctash parser/LST node | OSH ASDL anchor | Current alignment |
+|---|---|---|---|
+| Simple command / assignment / redirects | `LstSimpleCommand`, `LstShAssignmentCommand`, `LstRedirect` | `command.Simple`, `assign_pair`, `redir` (from `src/syntax/osh/syntax.asdl`) | Aligned in current mapper path (`src/mctash/asdl_map.py`). |
+| List / and-or / pipeline | `LstListNode`, `LstAndOr`, `LstPipeline` | `command.CommandList`, `command.AndOr`, `command.Pipeline` | Aligned; operator positions preserved where available. |
+| Compound commands (`if/while/for/case`) | `LstIfCommand`, `LstWhileCommand`, `LstForCommand`, `LstCaseCommand` | `command.If`, `command.WhileUntil`, `command.ForEach`, `command.Case` | Aligned for ash scope and tested productions. |
+| Group/subshell/function | `LstGroupCommand`, `LstSubshellCommand`, `LstFunctionDef` | `command.BraceGroup`, `command.Subshell`, `command.ShFunction` | Aligned; function form coverage remains ash-style in-scope. |
+| Word parts / substitutions | `LstWord` and parts (`Param`, `Braced`, `CommandSub`, `ArithSub`, quote parts) | `word_t` variants and expression nodes in OSH ASDL | Aligned for tested word-expansion grammar surface. |
+
+### 2.9/2.10 POSIX vs OSH-ASDL Tension Log
+
+- No normative POSIX conflict currently blocks the ash-scope mapping for 2.9/2.10.
+- Any future divergence (e.g., Bash-extension grammar admitted ahead of POSIX rows) should be recorded here and reflected in:
+  - `docs/grammar-production-checklist.md`
+  - `docs/gap-board.md`
+
 ## Open Gaps (Next "Shall" Expansion)
 
 1. Refine grammar-production-level trace (nonterminal-by-nonterminal) for parser completeness reporting:
    - `docs/grammar-production-checklist.md`
+   - `docs/gap-board.md`
 2. Add per-requirement negative tests for diagnostics formatting and ambiguous parse errors.
 3. Keep startup-option parity tracked in `docs/startup-option-matrix.md`; add requirement-level rows here only when they materially alter POSIX Chapter 2 behavior.
 4. Keep `fc` differential parity tracked as an environment blocker where comparator `ash` lacks `fc`:
