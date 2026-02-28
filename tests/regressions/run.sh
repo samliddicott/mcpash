@@ -521,6 +521,18 @@ run_case \
   $'s:0\n' \
   "can't access tty; job control turned off"
 
+run_case \
+  "thread_long_running_mixed_stress" \
+  'orig="$PWD"; base="/tmp/mctash-stress2-$$"; rm -rf "$base"; mkdir -p "$base"; pre=$( [ -e /proc/$$/fd/9 ] && echo yes || echo no ); miss=0; total=0; for r in 1 2 3 4 5 6; do d="$base/$r"; mkdir -p "$d"; pids=""; for i in 1 2 3; do ( cd /; exec 9>/dev/null; printf "R${r}J${i}\n" | cat > >(cat > "$d/$i.out") ) & pids="$pids $!"; done; for p in $pids; do wait "$p"; done; for i in 1 2 3; do total=$((total+1)); grep -qx "R${r}J${i}" "$d/$i.out" || miss=$((miss+1)); done; done; post=$( [ -e /proc/$$/fd/9 ] && echo yes || echo no ); after="$PWD"; [ "$after" = "$orig" ] && c=same || c=diff; rm -rf "$base"; echo "$pre:$post:$c:$miss:$total"' \
+  0 \
+  $'no:no:same:0:18\n'
+
+run_case \
+  "monitor_mode_interactive_pty" \
+  'out=$(PYTHONPATH=src script -qec "python3 -m mctash -i -c '\''set -m; sleep 0.05 & jobs -p >/dev/null; echo m:\$?; wait'\''" /dev/null | tr -d "\r"); echo "$out"' \
+  0 \
+  $'m:0\n'
+
 printf '[PASS] all targeted regressions\n'
 
 # Reserved-word contextualization checks.
