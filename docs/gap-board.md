@@ -64,6 +64,6 @@ Reference summary source: `docs/posix-shall-trace.md`.
 
 | Bucket | Status | Next concrete step |
 |---|---|---|
-| Requirement-level trace completeness (all "shall" rows) | untested | Expand `docs/posix-shall-trace.md` to include explicit case-id links for every row.
-| Grammar production closure | untested | Fill `docs/grammar-production-checklist.md` with parser production-to-test mapping.
+| Requirement-level trace completeness (all "shall" rows) | partial | Continue adding explicit case-id links for every remaining row in `docs/posix-shall-trace.md`.
+| Grammar production closure | partial | Extend `docs/grammar-production-checklist.md` from production-family mapping to finer negative/ambiguity matrices.
 | Threaded-runtime parity checks | untested | Add dedicated differential cases for thread-specific cwd/fd behavior from `docs/threaded-runtime-deviations.md`.
