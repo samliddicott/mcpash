@@ -59,6 +59,7 @@ Process-substitution thread-edge regressions:
   - `process_subst_output_basic`
   - `process_subst_cwd_isolation`
   - `process_subst_fd_isolation`
+  - `thread_combined_bg_pipeline_process_subst`
 
 ## Operational policy
 
@@ -71,6 +72,6 @@ Process-substitution thread-edge regressions:
 
 ## Open work
 
-- Expand thread-sensitive coverage to deeper nested combinations (background + pipeline + process substitution in one flow).
+- Expand thread-sensitive coverage to additional multi-job combined flows (multiple concurrent background pipelines + process substitution).
 - Add explicit failure-mode reporting when `unshare(CLONE_FS|CLONE_FILES)` is unavailable.
 - Add dedicated tests for nested background jobs touching cwd/fd simultaneously.

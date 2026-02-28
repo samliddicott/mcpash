@@ -489,6 +489,12 @@ run_case \
   0 \
   $'no:no\n'
 
+run_case \
+  "thread_combined_bg_pipeline_process_subst" \
+  'orig="$PWD"; out="/tmp/mctash-combo-out-$$.txt"; pre=$( [ -e /proc/$$/fd/9 ] && echo yes || echo no ); ( cd /; exec 9>/dev/null; printf "combo\n" | cat > >(cat > "$out") ) & wait %1; post=$( [ -e /proc/$$/fd/9 ] && echo yes || echo no ); after="$PWD"; data="$(cat "$out")"; rm -f "$out"; [ "$after" = "$orig" ] && c=same || c=diff; echo "$pre:$post:$c:$data"' \
+  0 \
+  $'no:no:same:combo\n'
+
 printf '[PASS] all targeted regressions\n'
 
 # Reserved-word contextualization checks.
