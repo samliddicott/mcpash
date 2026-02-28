@@ -1,6 +1,6 @@
 # POSIX "Shall" Trace (Requirement-Level Working Trace)
 
-Date: 2026-02-24
+Date: 2026-02-28
 
 Scope:
 
@@ -76,7 +76,7 @@ Case link notation:
 |---|---|---|---|
 | Input/output redirections (`<`, `>`, `>>`) apply to command environment correctly | Verified | `tests/busybox/ash_test/ash-redir/redir*.tests`, `tests/oil/oils-master/spec/redirect.test.sh` | Includes builtin/external combinations and restore behavior. |
 | IO-number redirections (`n>`, `n<`, `n>&m`, `n<&m`) work and reject invalid FD forms | Verified | `tests/busybox/ash_test/ash-redir/redir_to_bad_fd*.tests`, `tests/busybox/ash_test/ash-redir/redir_escapednum.tests`, `tests/oil/oils-master/spec/redirect.test.sh` (`<&`, `2>&1`) | Error paths validated in both corpora. |
-| Here-doc delimiter quoting controls expansion; body capture is syntactically correct | Partial | `tests/busybox/ash_test/ash-heredoc/heredoc*.tests`, `tests/oil/oils-master/spec/posix.test.sh` (`Multiple here docs on one line`) | Wide coverage; remaining edge space is mostly undocumented ultra-corners. |
+| Here-doc delimiter quoting controls expansion; body capture is syntactically correct | Partial | `tests/busybox/ash_test/ash-heredoc/heredoc*.tests`, `tests/oil/oils-master/spec/posix.test.sh` (`Multiple here docs on one line`), `tests/diff/cases/man-ash-redir.sh` | Wide coverage; remaining edge space is mostly undocumented ultra-corners. |
 | Redirection failures produce non-success status and do not silently continue incorrectly | Verified | `tests/busybox/ash_test/ash-redir/redir_to_bad_fd.tests`, `tests/oil/oils-master/spec/command_.test.sh` (`Permission denied`, `Not a dir`) | Status/diagnostic mapping is now stable in tested paths. |
 
 ## 2.8 Exit Status and Errors
@@ -99,7 +99,7 @@ Case link notation:
 
 | Requirement (normative intent) | Status | Evidence | Notes |
 |---|---|---|---|
-| Shell options/variables exposed by builtins (`set`, readonly/export state) are reflected consistently | Partial | `tests/busybox/ash_test/ash-vars/*.tests`, `tests/diff/cases/man-ash-set.sh`, `tests/diff/cases/set-listing.sh` | Functional behavior is covered; output formatting parity remains partial. |
+| Shell options/variables exposed by builtins (`set`, readonly/export state) are reflected consistently | Partial | `tests/busybox/ash_test/ash-vars/*.tests`, `tests/diff/cases/man-ash-set.sh`, `tests/diff/cases/set-listing.sh`, `tests/diff/cases/man-ash-set-monitor.sh` | Functional behavior is covered; output formatting parity remains partial. |
 | `$PWD` behavior across `cd` aligns with shell semantics in non-interactive runs | Verified | `tests/diff/cases/man-ash-pwd.sh`, `tests/diff/cases/man-ash-cd-source.sh` | Differential cases enforce parity on observed outputs. |
 
 ## 2.14 Special Built-In Utilities
@@ -109,7 +109,7 @@ Case link notation:
 | `set` option toggles and positional updates follow special-builtin semantics | Verified | `tests/diff/cases/man-ash-set.sh`, `tests/diff/cases/set-listing.sh`, `tests/busybox/ash_test/ash-getopts/*.tests` | Status/option interactions are checked directly. |
 | `eval` evaluates constructed command text in current shell context | Verified | `tests/diff/cases/man-ash-eval-exec.sh`, `tests/busybox/ash_test/ash-misc/eval*.tests` | Includes error-status-sensitive execution paths. |
 | `command`/`builtin` affect lookup and bypass behavior correctly | Verified | `tests/diff/cases/man-ash-alias.sh`, `tests/busybox/ash_test/ash-misc/command*.tests` | Lookup semantics validated in both corpora. |
-| `readonly`, `export`, `unset`, `trap`, `times`, `umask`, `ulimit` obey core semantics | Partial | `tests/diff/cases/man-ash-env.sh`, `tests/diff/cases/man-ash-trap.sh`, `tests/diff/cases/man-ash-resource.sh`, `tests/busybox/ash_test/ash-vars/readonly*.tests`, `tests/busybox/ash_test/ash-signals/signal*.tests` | Core behavior covered; full option matrices are still partial. |
+| `readonly`, `export`, `unset`, `trap`, `times`, `umask`, `ulimit` obey core semantics | Partial | `tests/diff/cases/man-ash-env.sh`, `tests/diff/cases/man-ash-trap.sh`, `tests/diff/cases/man-ash-trap-full.sh`, `tests/diff/cases/man-ash-trap-nested.sh`, `tests/diff/cases/man-ash-resource.sh`, `tests/diff/cases/man-ash-ulimit-flags.sh`, `tests/diff/cases/man-ash-ulimit-set.sh`, `tests/diff/cases/man-ash-ulimit-errors.sh`, `tests/diff/cases/man-ash-ulimit-soft-hard.sh`, `tests/busybox/ash_test/ash-vars/readonly*.tests`, `tests/busybox/ash_test/ash-signals/signal*.tests` | Core behavior covered with extended differential matrices; full option/signal universes remain partial. |
 
 ## 2.15 Shell Grammar Lexical Conventions
 
@@ -122,7 +122,7 @@ Case link notation:
 
 | Requirement (normative intent) | Status | Evidence | Notes |
 |---|---|---|---|
-| `trap` installs and runs handlers for supported signals and EXIT where applicable | Partial | `tests/busybox/ash_test/ash-signals/signal*.tests`, `tests/busybox/ash_test/ash-signals/return_in_trap1.tests`, `tests/busybox/ash_test/ash-signals/save-ret.tests` | BusyBox signal suite passes; interactive-only behaviors are out of current scope. |
+| `trap` installs and runs handlers for supported signals and EXIT where applicable | Partial | `tests/busybox/ash_test/ash-signals/signal*.tests`, `tests/busybox/ash_test/ash-signals/return_in_trap1.tests`, `tests/busybox/ash_test/ash-signals/save-ret.tests`, `tests/diff/cases/man-ash-trap.sh`, `tests/diff/cases/man-ash-trap-matrix.sh`, `tests/diff/cases/man-ash-trap-signals.sh`, `tests/diff/cases/man-ash-trap-full.sh`, `tests/diff/cases/man-ash-trap-nested.sh` | Non-interactive trap matrix is broad; exhaustive signal-by-signal and interactive semantics remain out of scope. |
 | Signal handling does not break command execution and wait/child behavior in tested cases | Verified | `tests/busybox/ash_test/ash-signals/reap1.tests`, `tests/busybox/ash_test/ash-signals/sigquit_exec.tests`, `tests/busybox/ash_test/ash-misc/wait*.tests` | Covers practical trap/wait integration paths. |
 
 ## 2.9 Shell Commands
@@ -133,7 +133,7 @@ Case link notation:
 | Lists and and/or chains (`;`, `&`, `&&`, `||`) execute with short-circuit semantics | Verified | `tests/busybox/ash_test/ash-misc/and-or.tests`, `tests/busybox/ash_test/ash-parsing/and_or_and_backgrounding.tests`, `tests/oil/oils-master/spec/shell-grammar.test.sh` (`a && b || c`) | Backgrounding and chain precedence are exercised. |
 | Compound commands (`if`, `case`, `while`, `until`, `for`, grouping, subshell) execute with correct control-flow behavior | Verified | `tests/busybox/ash_test/ash-misc/if_false_exitcode.tests`, `tests/busybox/ash_test/ash-misc/case1.tests`, `tests/busybox/ash_test/ash-misc/while*.tests`, `tests/busybox/ash_test/ash-misc/for*.tests`, `tests/busybox/ash_test/ash-parsing/group*.tests`, `tests/oil/oils-master/spec/if_.test.sh`, `tests/oil/oils-master/spec/case_.test.sh`, `tests/oil/oils-master/spec/loop.test.sh` | Includes nested loop break/continue and subshell cases in current corpora. |
 | Function definition and invocation preserve positional/local scope behavior in tested cases | Partial | `tests/busybox/ash_test/ash-misc/func*.tests`, `tests/busybox/ash_test/ash-misc/source_argv_and_shift.tests`, `tests/oil/oils-master/spec/shell-grammar.test.sh` (`Function def`) | Strong coverage for current scope; full interactive/debug corner behavior not claimed. |
-| Special builtins (`eval`, `command`, `exec`, `set`, `readonly`, etc.) honor command semantics in tested paths | Partial | `tests/busybox/ash_test/ash-misc/eval*.tests`, `tests/busybox/ash_test/ash-misc/exec.tests`, `tests/busybox/ash_test/ash-vars/readonly*.tests`, `tests/busybox/ash_test/ash-getopts/*.tests`, `tests/oil/oils-master/spec/command_.test.sh` | In-scope behavior is validated; full option surface parity still being expanded. |
+| Special builtins (`eval`, `command`, `exec`, `set`, `readonly`, etc.) honor command semantics in tested paths | Partial | `tests/busybox/ash_test/ash-misc/eval*.tests`, `tests/busybox/ash_test/ash-misc/exec.tests`, `tests/busybox/ash_test/ash-vars/readonly*.tests`, `tests/busybox/ash_test/ash-getopts/*.tests`, `tests/oil/oils-master/spec/command_.test.sh`, `tests/diff/cases/man-ash-set.sh`, `tests/diff/cases/man-ash-env.sh`, `tests/diff/cases/man-ash-eval-exec.sh`, `tests/diff/cases/man-ash-alias.sh`, `tests/diff/cases/man-ash-getopts.sh` | In-scope behavior is validated with differential evidence; full option-surface parity remains partial. |
 
 ## 2.10 Shell Grammar
 
@@ -150,3 +150,5 @@ Case link notation:
    - `docs/grammar-production-checklist.md`
 2. Add per-requirement negative tests for diagnostics formatting and ambiguous parse errors.
 3. Keep startup-option parity tracked in `docs/startup-option-matrix.md`; add requirement-level rows here only when they materially alter POSIX Chapter 2 behavior.
+4. Keep `fc` differential parity tracked as an environment blocker where comparator `ash` lacks `fc`:
+   - `docs/fc-comparator-blocker.md`
