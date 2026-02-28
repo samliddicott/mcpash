@@ -4989,6 +4989,8 @@ class Runtime:
     def _run_read(self, args: List[str]) -> int:
         raw_mode = False
         delimiter = "\n"
+        n_chars: int | None = None
+        timeout_sec: float | None = None
         prompt: str | None = None
 
         names: List[str] = []
@@ -5005,22 +5007,66 @@ class Runtime:
                 raw_mode = True
                 i += 1
                 continue
-            if a == "-p":
-                if i + 1 >= len(args):
-                    self._report_error("read: option requires an argument -- p")
-                    return 2
-                prompt = args[i + 1]
-                i += 2
+            if a == "-p" or a.startswith("-p"):
+                if a == "-p":
+                    if i + 1 >= len(args):
+                        self._report_error("read: option requires an argument -- p")
+                        return 2
+                    prompt = args[i + 1]
+                    i += 2
+                else:
+                    prompt = a[2:]
+                    i += 1
                 continue
-            if a == "-n":
-                self._report_error("read: Illegal option -n")
-                return 2
-            if a == "-d":
-                self._report_error("read: Illegal option -d")
-                return 2
-            if a == "-t":
-                self._report_error("read: Illegal option -t")
-                return 2
+            if a == "-n" or a.startswith("-n"):
+                val = None
+                if a == "-n":
+                    if i + 1 >= len(args):
+                        self._report_error("read: option requires an argument -- n")
+                        return 2
+                    val = args[i + 1]
+                    i += 2
+                else:
+                    val = a[2:]
+                    i += 1
+                try:
+                    n_chars = max(0, int(val))
+                except ValueError:
+                    self._report_error("read: Illegal number")
+                    return 2
+                continue
+            if a == "-d" or a.startswith("-d"):
+                val = None
+                if a == "-d":
+                    if i + 1 >= len(args):
+                        self._report_error("read: option requires an argument -- d")
+                        return 2
+                    val = args[i + 1]
+                    i += 2
+                else:
+                    val = a[2:]
+                    i += 1
+                delimiter = "\0" if val == "" else val[0]
+                continue
+            if a == "-t" or a.startswith("-t"):
+                val = None
+                if a == "-t":
+                    if i + 1 >= len(args):
+                        self._report_error("read: option requires an argument -- t")
+                        return 2
+                    val = args[i + 1]
+                    i += 2
+                else:
+                    val = a[2:]
+                    i += 1
+                try:
+                    timeout_sec = float(val)
+                except ValueError:
+                    self._report_error("read: Illegal number")
+                    return 2
+                if timeout_sec < 0:
+                    timeout_sec = 0.0
+                continue
             self._report_error(f"read: unknown option {a}")
             return 2
         else:
@@ -5034,11 +5080,19 @@ class Runtime:
         if prompt is not None and os.isatty(0):
             os.write(2, prompt.encode("utf-8", errors="surrogateescape"))
 
+        if timeout_sec == 0.0:
+            ready = self._stdin_ready_now()
+            if not ready:
+                return 1
+            for name in names:
+                self.env[name] = ""
+            return 0
+
         text, ok = self._read_from_fd0(
             delimiter=delimiter,
             raw_mode=raw_mode,
-            n_chars=None,
-            timeout_sec=None,
+            n_chars=n_chars,
+            timeout_sec=timeout_sec,
         )
         if not ok and text == "":
             return 1
