@@ -1,0 +1,32 @@
+{
+  "default": {
+    "max_regression_ratio": 1.25,
+    "min_delta_ms": 5.0
+  },
+  "workloads": {
+    "cold_start": {
+      "max_regression_ratio": 1.15,
+      "min_delta_ms": 3.0
+    },
+    "small_script": {
+      "max_regression_ratio": 1.15,
+      "min_delta_ms": 3.0
+    },
+    "pipeline_heavy": {
+      "max_regression_ratio": 1.25,
+      "min_delta_ms": 20.0
+    },
+    "bridge_heavy": {
+      "max_regression_ratio": 1.20,
+      "min_delta_ms": 8.0
+    },
+    "diff_subset": {
+      "max_regression_ratio": 1.30,
+      "min_delta_ms": 40.0
+    },
+    "busybox_spotcheck": {
+      "max_regression_ratio": 1.30,
+      "min_delta_ms": 50.0
+    }
+  }
+}

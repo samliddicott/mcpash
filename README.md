@@ -55,6 +55,22 @@ PERF_RUNS=9 PERF_INCLUDE_BUSYBOX=1 make perf-baseline
 PERF_MAX_REGRESSION=1.20 PERF_MIN_DELTA_MS=8 make perf-compare
 ```
 
+Per-workload perf thresholds are defined in:
+
+- `docs/reports/perf-thresholds.json`
+
+Generate a natural-variation report (batch-to-batch median spread/CV):
+
+```sh
+make perf-variation
+```
+
+Variation tuning overrides:
+
+```sh
+PERF_VARIATION_BATCHES=10 PERF_VARIATION_RUNS_PER_BATCH=5 make perf-variation
+```
+
 Run strict race-stimulation regressions (fail on first mismatch, no tolerated failures):
 
 ```sh
