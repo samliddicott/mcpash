@@ -3092,6 +3092,7 @@ class Runtime:
             .replace("\ue003", "[[]")
             .replace("\ue004", "[]]")
             .replace("\ue005", "[\\\\]")
+            .replace("\ue006", "/")
             .replace("\ue008", "!")
         )
         out: List[str] = []
@@ -3138,13 +3139,14 @@ class Runtime:
 
     def _glob_pattern_display(self, text: str) -> str:
         return (
-            text.replace("\ue001", "*")
-            .replace("\ue002", "?")
-            .replace("\ue003", "[")
-            .replace("\ue004", "]")
-            .replace("\ue005", "\\")
-            .replace("\ue007", "-")
-            .replace("\ue008", "!")
+            text.replace("\ue001", "\\*")
+            .replace("\ue002", "\\?")
+            .replace("\ue003", "\\[")
+            .replace("\ue004", "\\]")
+            .replace("\ue005", "\\\\")
+            .replace("\ue006", "\\/")
+            .replace("\ue007", "\\-")
+            .replace("\ue008", "\\!")
         )
 
     def _tilde_expand(self, text: str) -> str:
