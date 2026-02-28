@@ -67,4 +67,4 @@ Reference summary source: `docs/posix-shall-trace.md`.
 |---|---|---|
 | Requirement-level trace completeness (all "shall" rows) | partial | Continue adding explicit case-id links for every remaining row in `docs/posix-shall-trace.md`.
 | Grammar production closure | partial | Closure-order artifacts are completed; remaining work is deeper word-level/operator combinatorics and diagnostic text parity.
-| Threaded-runtime parity checks | untested | Add dedicated differential cases for thread-specific cwd/fd behavior from `docs/threaded-runtime-deviations.md`.
+| Threaded-runtime parity checks | partial | Core cwd/fd/var isolation cases are now covered (`man-ash-thread-cwd.sh`, `man-ash-thread-fd.sh`, `man-ash-thread-vars.sh`); expand to deeper nested and process-substitution edges.

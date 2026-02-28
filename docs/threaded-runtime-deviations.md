@@ -1,6 +1,6 @@
 # Threaded Runtime Deviations (vs fork-first ash/dash model)
 
-Date: 2026-02-24
+Date: 2026-02-28
 
 This project intentionally uses a threaded execution model in places where traditional ash/dash shells use process forking.
 
@@ -14,6 +14,7 @@ This project intentionally uses a threaded execution model in places where tradi
 - Background jobs and some subshell-like execution paths can run in threads.
 - Signal/trap behavior has been aligned to pass BusyBox ash corpus, but internals differ.
 - Runtime now uses per-thread subshell-depth tracking and thread-local job context.
+- Background worker threads now attempt Linux `unshare(CLONE_FS|CLONE_FILES)` to isolate cwd/fd side effects from the parent thread.
 
 ## Known deviation classes
 
@@ -33,6 +34,15 @@ This project intentionally uses a threaded execution model in places where tradi
 - Process isolation gives implicit per-process FD/CWD state.
 - Thread model requires explicit handling to avoid cross-thread side effects.
 
+## Current tested guarantees
+
+- Parent cwd remains stable while a background subshell performs `cd`:
+  - `tests/diff/cases/man-ash-thread-cwd.sh`
+- Parent fd table does not retain background-opened fd entries from subshell `exec` redirections:
+  - `tests/diff/cases/man-ash-thread-fd.sh`
+- Parent variable scope does not receive background subshell variable mutations:
+  - `tests/diff/cases/man-ash-thread-vars.sh`
+
 ## Operational policy
 
 - Behavioral target remains ash/POSIX externally.
@@ -44,6 +54,6 @@ This project intentionally uses a threaded execution model in places where tradi
 
 ## Open work
 
-- Add explicit per-thread CWD strategy.
-- Add stronger per-thread FD ownership/restoration rules.
-- Add dedicated tests for threaded-vs-fork-sensitive scenarios.
+- Expand thread-sensitive coverage beyond background subshells to process-substitution and pipeline edge paths.
+- Add explicit failure-mode reporting when `unshare(CLONE_FS|CLONE_FILES)` is unavailable.
+- Add dedicated tests for nested background jobs touching cwd/fd simultaneously.
