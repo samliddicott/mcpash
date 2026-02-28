@@ -16,6 +16,7 @@ References:
 - POSIX rationale (XCU C.2): `https://pubs.opengroup.org/onlinepubs/9699919799/xrat/V4_xcu_chap02.html`
 - BusyBox ash tests: `tests/busybox/ash_test`
 - Oil subset tests: `tests/oil/oils-master/spec`
+- 2.9/2.10 strict map: `docs/posix-2.9-2.10-trace.md`
 
 Legend:
 
