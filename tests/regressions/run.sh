@@ -508,6 +508,19 @@ run_case \
   $'s:0\n' \
   'thread-runtime: unshare forced-fail'
 
+run_case \
+  "thread_high_load_concurrency_isolation" \
+  'orig="$PWD"; d="/tmp/mctash-stress-$$"; mkdir -p "$d"; pre=$( [ -e /proc/$$/fd/9 ] && echo yes || echo no ); pids=""; for i in 1 2 3 4 5; do ( cd /; exec 9>/dev/null; printf "J$i\n" | cat > >(cat > "$d/$i.out") ) & pids="$pids $!"; done; for p in $pids; do wait "$p"; done; post=$( [ -e /proc/$$/fd/9 ] && echo yes || echo no ); after="$PWD"; [ "$after" = "$orig" ] && c=same || c=diff; count=$(cat "$d"/*.out | wc -l | tr -d " "); miss=0; for i in 1 2 3 4 5; do grep -qx "J$i" "$d/$i.out" || miss=$((miss+1)); done; rm -rf "$d"; echo "$pre:$post:$c:$count:$miss"' \
+  0 \
+  $'no:no:same:5:0\n'
+
+run_case \
+  "monitor_mode_noninteractive_diag" \
+  'set -m >/dev/null; echo s:$?' \
+  0 \
+  $'s:0\n' \
+  "can't access tty; job control turned off"
+
 printf '[PASS] all targeted regressions\n'
 
 # Reserved-word contextualization checks.

@@ -63,6 +63,8 @@ Process-substitution thread-edge regressions:
   - `thread_combined_bg_pipeline_process_subst`
   - `thread_multi_job_concurrency_isolation`
   - `thread_unshare_forced_fail_diag`
+  - `thread_high_load_concurrency_isolation`
+  - `monitor_mode_noninteractive_diag`
 
 ## Operational policy
 
@@ -75,6 +77,6 @@ Process-substitution thread-edge regressions:
 
 ## Open work
 
-- Expand thread-sensitive coverage to higher-load multi-job combinations (more concurrent background pipelines + process substitution).
-- Add explicit failure-mode reporting when `unshare(CLONE_FS|CLONE_FILES)` is unavailable.
-- Add dedicated tests for nested background jobs touching cwd/fd simultaneously.
+- Expand thread-sensitive coverage to long-running mixed workloads (concurrent background jobs + repeated process substitutions).
+- Add explicit failure-mode reporting for specific unshare errno classes where behavior differs materially.
+- Add interactive/pty-backed monitor-mode behavior coverage beyond non-interactive diagnostics.
