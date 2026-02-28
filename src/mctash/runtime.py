@@ -2548,6 +2548,8 @@ class Runtime:
             return 0
 
         rest = args[i:]
+        if len(rest) > 1:
+            return 2
         if not rest:
             print(_fmt(_cur_value(limit_key)))
             return 0
@@ -2558,7 +2560,7 @@ class Runtime:
         else:
             try:
                 new_lim = int(target, 10)
-            except ValueError:
+            except (ValueError, OverflowError):
                 return 2
 
         soft, hard = resource.getrlimit(limit_key)
@@ -2575,6 +2577,8 @@ class Runtime:
             resource.setrlimit(limit_key, (new_soft, new_hard))
         except (OSError, ValueError):
             return 1
+        except OverflowError:
+            return 2
         return 0
 
     def _expand_aliases(self, argv: List[str]) -> List[str]:
