@@ -5026,8 +5026,10 @@ class Runtime:
         else:
             names = []
 
+        implicit_reply = False
         if not names:
             names = ["REPLY"]
+            implicit_reply = True
 
         if prompt is not None and os.isatty(0):
             os.write(2, prompt.encode("utf-8", errors="surrogateescape"))
@@ -5041,7 +5043,10 @@ class Runtime:
         if not ok and text == "":
             return 1
 
-        values = self._split_read_fields(text, names)
+        if implicit_reply and names == ["REPLY"]:
+            values = [text]
+        else:
+            values = self._split_read_fields(text, names)
         for name, value in zip(names, values):
             self.env[name] = value
         return 0 if ok or text != "" else 1
