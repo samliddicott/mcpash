@@ -38,10 +38,19 @@ This project intentionally uses a threaded execution model in places where tradi
 
 - Parent cwd remains stable while a background subshell performs `cd`:
   - `tests/diff/cases/man-ash-thread-cwd.sh`
+- Parent cwd remains stable while a background pipeline performs `cd`:
+  - `tests/diff/cases/man-ash-thread-pipeline-cwd.sh`
 - Parent fd table does not retain background-opened fd entries from subshell `exec` redirections:
   - `tests/diff/cases/man-ash-thread-fd.sh`
+- Parent fd table does not retain background-opened fd entries from pipeline-side `exec` redirections:
+  - `tests/diff/cases/man-ash-thread-pipeline-fd.sh`
 - Parent variable scope does not receive background subshell variable mutations:
   - `tests/diff/cases/man-ash-thread-vars.sh`
+
+Runtime diagnostics knobs:
+
+- `MCTASH_UNSHARE_MODE=off` disables Linux `unshare(CLONE_FS|CLONE_FILES)` in background worker threads.
+- `MCTASH_THREAD_DIAG=1` emits one-time fallback diagnostics when unshare is disabled/unavailable/fails.
 
 ## Operational policy
 

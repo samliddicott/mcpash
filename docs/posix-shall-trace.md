@@ -93,7 +93,7 @@ Case link notation:
 |---|---|---|---|
 | Prefix assignments and exported environment entries are applied for command execution | Verified | `tests/busybox/ash_test/ash-misc/assignment*.tests`, `tests/busybox/ash_test/ash-standalone/nofork_env.tests`, `tests/diff/cases/man-ash-env.sh` | Includes shell variable/export interaction paths. |
 | Exec replacement and no-return behavior are correct for successful `exec` | Verified | `tests/busybox/ash_test/ash-misc/exec.tests`, `tests/diff/cases/man-ash-eval-exec.sh` | Differential case checks post-exec non-return path. |
-| Threaded runtime deviations from forked shell process model are documented and bounded | Partial | `docs/threaded-runtime-deviations.md`, `tests/diff/cases/man-ash-thread-cwd.sh`, `tests/diff/cases/man-ash-thread-fd.sh`, `tests/diff/cases/man-ash-thread-vars.sh` | Design + differential evidence exists for core cwd/fd/var isolation; broader threaded edge space remains partial. |
+| Threaded runtime deviations from forked shell process model are documented and bounded | Partial | `docs/threaded-runtime-deviations.md`, `tests/diff/cases/man-ash-thread-cwd.sh`, `tests/diff/cases/man-ash-thread-fd.sh`, `tests/diff/cases/man-ash-thread-vars.sh`, `tests/diff/cases/man-ash-thread-pipeline-cwd.sh`, `tests/diff/cases/man-ash-thread-pipeline-fd.sh`, `tests/regressions/run.sh` (`thread_unshare_fallback_diag`) | Design + differential evidence exists for core cwd/fd/var isolation and fallback diagnostics; broader threaded edge space remains partial. |
 
 ## 2.13 Shell Variables
 
