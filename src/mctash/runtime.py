@@ -3,6 +3,7 @@ from __future__ import annotations
 import glob
 import importlib
 import importlib.util
+import ctypes
 import io
 import json
 import os
@@ -975,6 +976,10 @@ class Runtime:
             current_line_snapshot = self.current_line
 
             def _run_bg() -> None:
+                # On Linux, detach filesystem and fd-table sharing for the
+                # worker thread so subshell-like background jobs don't leak
+                # cwd/fd mutations into the parent thread.
+                self._try_unshare_thread_state()
                 bg_rt = Runtime()
                 bg_rt.env = dict(env_snapshot)
                 bg_rt.local_stack = [dict(s) for s in local_snapshot]
@@ -1024,6 +1029,25 @@ class Runtime:
                 time.sleep(0.001)
             return 0
         return self._exec_and_or(item.node)
+
+    def _try_unshare_thread_state(self) -> None:
+        if not sys.platform.startswith("linux"):
+            return
+        if getattr(self._thread_ctx, "unshared_fs_files", False):
+            return
+        try:
+            libc = ctypes.CDLL(None, use_errno=True)
+            unshare = libc.unshare
+            unshare.argtypes = [ctypes.c_int]
+            unshare.restype = ctypes.c_int
+            CLONE_FS = 0x00000200
+            CLONE_FILES = 0x00000400
+            rc = int(unshare(CLONE_FS | CLONE_FILES))
+            if rc == 0:
+                self._thread_ctx.unshared_fs_files = True
+        except Exception:
+            # Best effort only; fallback keeps current shared-thread behavior.
+            return
 
     def _exec_and_or(self, node: AndOr, track_status: bool = True) -> int:
         status = self._exec_pipeline(node.pipelines[0])
