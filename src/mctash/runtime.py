@@ -5303,7 +5303,7 @@ class Runtime:
             if name in self.aliases:
                 print(f"{name} is an alias for {self.aliases[name]}", flush=True)
             elif name in self.functions:
-                print(f"{name} is a shell function", flush=True)
+                print(f"{name} is a function", flush=True)
             elif name in self.BUILTINS:
                 print(f"{name} is a shell builtin", flush=True)
             else:
