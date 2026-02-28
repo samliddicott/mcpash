@@ -3139,14 +3139,14 @@ class Runtime:
 
     def _glob_pattern_display(self, text: str) -> str:
         return (
-            text.replace("\ue001", "\\*")
-            .replace("\ue002", "\\?")
-            .replace("\ue003", "\\[")
-            .replace("\ue004", "\\]")
-            .replace("\ue005", "\\\\")
+            text.replace("\ue001", "*")
+            .replace("\ue002", "?")
+            .replace("\ue003", "[")
+            .replace("\ue004", "]")
+            .replace("\ue005", "\\")
             .replace("\ue006", "\\/")
-            .replace("\ue007", "\\-")
-            .replace("\ue008", "\\!")
+            .replace("\ue007", "-")
+            .replace("\ue008", "!")
         )
 
     def _tilde_expand(self, text: str) -> str:
@@ -4954,10 +4954,27 @@ class Runtime:
 
     def _run_echo(self, args: List[str]) -> int:
         newline = True
-        if args and args[0] == "-n":
-            newline = False
-            args = args[1:]
-        data = " ".join(self._decode_backslash_escapes(a) for a in args)
+        interpret_escapes = False
+        i = 0
+        while i < len(args) and args[i].startswith("-") and args[i] != "-":
+            opt = args[i][1:]
+            if opt == "":
+                break
+            if all(ch in "nEe" for ch in opt):
+                if "n" in opt:
+                    newline = False
+                if "e" in opt:
+                    interpret_escapes = True
+                if "E" in opt:
+                    interpret_escapes = False
+                i += 1
+                continue
+            break
+        args = args[i:]
+        if interpret_escapes:
+            data = " ".join(self._decode_backslash_escapes(a) for a in args)
+        else:
+            data = " ".join(args)
         if newline:
             data += "\n"
         if self._force_broken_pipe and self._fd_redirect_depth == 0:

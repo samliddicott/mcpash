@@ -9,7 +9,6 @@ _GLOB_PROTECT = {
     "[": "\ue003",
     "]": "\ue004",
     "\\": "\ue005",
-    "/": "\ue006",
     "-": "\ue007",
     "!": "\ue008",
 }
@@ -75,7 +74,13 @@ def parse_word_parts(text: str) -> List[WordPart]:
                     i += 2
                     continue
                 flush(False)
-                parts.append(WordPart("LIT", text[i + 1], quoted=True))
+                if text[i + 1] == "/":
+                    # Preserve an explicit escaped slash (\ /) distinctly from
+                    # plain quoted slashes so later pathname display can keep
+                    # the backslash where ash does.
+                    parts.append(WordPart("LIT", "\ue006", quoted=True))
+                else:
+                    parts.append(WordPart("LIT", text[i + 1], quoted=True))
                 i += 2
                 continue
             if ch == "`":
@@ -242,7 +247,7 @@ def _protect_glob_meta(s: str) -> str:
 
 
 def _unprotect_glob_meta(s: str) -> str:
-    return "".join(_GLOB_UNPROTECT.get(ch, ch) for ch in s)
+    return "".join(_GLOB_UNPROTECT.get(ch, "/" if ch == "\ue006" else ch) for ch in s)
 
 
 def _parse_dollar(text: str, i: int, quoted: bool) -> Tuple[WordPart, int]:
