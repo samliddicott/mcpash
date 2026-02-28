@@ -24,6 +24,8 @@ Performance tuning and race-stimulation serve different goals and must not be co
 - concurrent pipeline/process-substitution stability
 - mixed high-load threaded command execution stability
 
-The suite fails fast on first mismatch and logs the failing mode/iteration.
+By default the test run is fail-fast (`RACE_FAIL_FAST=1`): the test run exits on first mismatch and logs mode/iteration.
+
+Optional diagnostic mode (`RACE_FAIL_FAST=0`) continues running to report pass/fail counts, but still exits non-zero if any failure occurred.
 
 Default mode is `auto`. Additional unshare modes (`off`, `fail`) can be enabled for exploratory fault-finding and are expected to reveal fallback-path bugs until closed.

@@ -65,6 +65,7 @@ Useful overrides:
 
 ```sh
 RACE_REPEATS=200 RACE_UNSHARE_MODES=auto,off,fail make stress-race
+RACE_FAIL_FAST=0 RACE_REPEATS=200 make stress-race
 ```
 
 Note: fallback modes (`off`, `fail`) are useful for diagnostics and may expose current isolation bugs; any failure should be treated as actionable.
