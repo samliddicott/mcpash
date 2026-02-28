@@ -36,6 +36,18 @@ make parity-summary
 
 Default summary output: `docs/reports/parity-summary.json`
 
+Validate summary contract for tooling:
+
+```sh
+make parity-summary-validate
+```
+
+Fast local mode (skip BusyBox step, mark as skipped in JSON):
+
+```sh
+PARITY_SKIP_BUSYBOX=1 make parity-summary-validate
+```
+
 Create/update a local performance baseline:
 
 ```sh

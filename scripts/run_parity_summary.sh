@@ -25,6 +25,7 @@ run_step() {
 bridge_rc=0
 diff_rc=0
 busybox_raw_rc=0
+skip_busybox="${PARITY_SKIP_BUSYBOX:-0}"
 
 set +e
 run_step bridge "$ROOT/tests/bridge/run.sh"
@@ -36,15 +37,23 @@ run_step diff "$ROOT/tests/diff/run.sh"
 diff_rc=$?
 set -e
 
-set +e
-run_step busybox env RUN_TIMEOUT="${RUN_TIMEOUT:-1200}" RUN_MODULE_TIMEOUT="${RUN_MODULE_TIMEOUT:-1200}" "$ROOT/src/tests/run_busybox_ash.sh" run
-busybox_raw_rc=$?
-set -e
+busybox_summary=""
+busybox_ok=""
+busybox_fail=""
+busybox_skip=""
+if [[ "$skip_busybox" -eq 0 ]]; then
+  set +e
+  run_step busybox env RUN_TIMEOUT="${RUN_TIMEOUT:-1200}" RUN_MODULE_TIMEOUT="${RUN_MODULE_TIMEOUT:-1200}" "$ROOT/src/tests/run_busybox_ash.sh" run
+  busybox_raw_rc=$?
+  set -e
 
-busybox_summary="$(grep 'Summary:' "${LOG_DIR}/busybox.log" | tail -n1 || true)"
-busybox_ok="$(printf '%s\n' "$busybox_summary" | sed -n 's/.*ok=\([0-9][0-9]*\).*/\1/p')"
-busybox_fail="$(printf '%s\n' "$busybox_summary" | sed -n 's/.*fail=\([0-9][0-9]*\).*/\1/p')"
-busybox_skip="$(printf '%s\n' "$busybox_summary" | sed -n 's/.*skip=\([0-9][0-9]*\).*/\1/p')"
+  busybox_summary="$(grep 'Summary:' "${LOG_DIR}/busybox.log" | tail -n1 || true)"
+  busybox_ok="$(printf '%s\n' "$busybox_summary" | sed -n 's/.*ok=\([0-9][0-9]*\).*/\1/p')"
+  busybox_fail="$(printf '%s\n' "$busybox_summary" | sed -n 's/.*fail=\([0-9][0-9]*\).*/\1/p')"
+  busybox_skip="$(printf '%s\n' "$busybox_summary" | sed -n 's/.*skip=\([0-9][0-9]*\).*/\1/p')"
+else
+  printf '[INFO] busybox    skipped (PARITY_SKIP_BUSYBOX=1)\n' >&2
+fi
 
 BUSYBOX_MIN_OK="${BUSYBOX_MIN_OK:-357}"
 BUSYBOX_MAX_FAIL="${BUSYBOX_MAX_FAIL:-0}"
@@ -57,21 +66,23 @@ if [[ -n "$BUSYBOX_ALLOWED_FAIL_FILES" ]]; then
 else
   allowed_list=()
 fi
-for fail_path in "$ROOT"/tests/busybox/ash_test/*.fail; do
-  [[ -e "$fail_path" ]] || continue
-  base="$(basename "$fail_path")"
-  matched=0
-  for allowed in "${allowed_list[@]}"; do
-    if [[ -n "$allowed" && "$base" == "$allowed" ]]; then
-      allowed_hits=$((allowed_hits + 1))
-      matched=1
-      break
+if [[ "$skip_busybox" -eq 0 ]]; then
+  for fail_path in "$ROOT"/tests/busybox/ash_test/*.fail; do
+    [[ -e "$fail_path" ]] || continue
+    base="$(basename "$fail_path")"
+    matched=0
+    for allowed in "${allowed_list[@]}"; do
+      if [[ -n "$allowed" && "$base" == "$allowed" ]]; then
+        allowed_hits=$((allowed_hits + 1))
+        matched=1
+        break
+      fi
+    done
+    if (( matched == 0 )); then
+      unexpected_busy+=("$base")
     fi
   done
-  if (( matched == 0 )); then
-    unexpected_busy+=("$base")
-  fi
-done
+fi
 
 effective_busy_fail=0
 effective_busy_min_ok="$BUSYBOX_MIN_OK"
@@ -89,6 +100,9 @@ if [[ "$busybox_ok" =~ ^[0-9]+$ && "$busybox_fail" =~ ^[0-9]+$ ]]; then
     busybox_step_ok=1
   fi
 fi
+if [[ "$skip_busybox" -eq 1 ]]; then
+  busybox_step_ok=1
+fi
 
 overall_rc=0
 if [[ "$bridge_rc" -ne 0 || "$diff_rc" -ne 0 || "$busybox_step_ok" -ne 1 ]]; then
@@ -102,6 +116,7 @@ BUSYBOX_ALLOWED_HITS="$allowed_hits" BUSYBOX_ALLOWED_LIST="$BUSYBOX_ALLOWED_FAIL
 BUSYBOX_EFFECTIVE_FAIL="$effective_busy_fail" BUSYBOX_EFFECTIVE_MIN_OK="$effective_busy_min_ok" \
 BUSYBOX_THRESHOLD_FAIL="$BUSYBOX_MAX_FAIL" BUSYBOX_THRESHOLD_MIN_OK="$BUSYBOX_MIN_OK" \
 BUSYBOX_UNEXPECTED="${unexpected_busy[*]-}" \
+PARITY_SKIP_BUSYBOX="$skip_busybox" \
 OVERALL_RC="$overall_rc" \
 python3 - <<'PY'
 import json
@@ -114,6 +129,8 @@ def as_int_or_none(s: str):
         return None
 
 payload = {
+    "schema_version": 1,
+    "generator": "scripts/run_parity_summary.sh",
     "timestamp_utc": os.environ["TS_UTC"],
     "log_dir": os.environ["LOG_DIR"],
     "steps": {
@@ -122,6 +139,7 @@ payload = {
         "busybox": {
             "rc": int(os.environ["BUSYBOX_RAW_RC"]),
             "ok": int(os.environ["BUSYBOX_STEP_OK"]) == 1,
+            "skipped": os.environ.get("PARITY_SKIP_BUSYBOX", "0") == "1",
             "summary_line": os.environ["BUSYBOX_SUMMARY"],
             "ok_count": as_int_or_none(os.environ.get("BUSYBOX_OK", "")),
             "fail_count": as_int_or_none(os.environ.get("BUSYBOX_FAIL", "")),

@@ -1,0 +1,82 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mctash.local/schema/parity-summary-v1",
+  "title": "mctash parity summary",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "generator",
+    "timestamp_utc",
+    "log_dir",
+    "steps",
+    "overall"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "const": 1
+    },
+    "generator": {
+      "type": "string",
+      "minLength": 1
+    },
+    "timestamp_utc": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"
+    },
+    "log_dir": {
+      "type": "string",
+      "minLength": 1
+    },
+    "steps": {
+      "type": "object",
+      "required": [
+        "bridge",
+        "diff",
+        "busybox"
+      ],
+      "properties": {
+        "bridge": {
+          "type": "object",
+          "required": [
+            "rc",
+            "ok"
+          ]
+        },
+        "diff": {
+          "type": "object",
+          "required": [
+            "rc",
+            "ok"
+          ]
+        },
+        "busybox": {
+          "type": "object",
+          "required": [
+            "rc",
+            "ok",
+            "skipped",
+            "summary_line",
+            "allowed_fail_files",
+            "unexpected_fail_files"
+          ]
+        }
+      }
+    },
+    "overall": {
+      "type": "object",
+      "required": [
+        "rc",
+        "ok"
+      ],
+      "properties": {
+        "rc": {
+          "type": "integer"
+        },
+        "ok": {
+          "type": "boolean"
+        }
+      }
+    }
+  }
+}

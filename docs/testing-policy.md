@@ -29,3 +29,10 @@ By default the test run is fail-fast (`RACE_FAIL_FAST=1`): the test run exits on
 Optional diagnostic mode (`RACE_FAIL_FAST=0`) continues running to report pass/fail counts, but still exits non-zero if any failure occurred.
 
 Default mode is `auto`. Additional unshare modes (`off`, `fail`) can be enabled for exploratory fault-finding and are expected to reveal fallback-path bugs until closed.
+
+## Parity Summary Contract
+
+- `make parity-summary` produces `docs/reports/parity-summary.json`.
+- `make parity-summary-validate` enforces a stable JSON contract for tooling and report consumers.
+- Schema source: `docs/reports/parity-summary.schema.json`.
+- For fast local checks, `PARITY_SKIP_BUSYBOX=1 make parity-summary-validate` runs bridge+diff steps and marks BusyBox as skipped in the summary.
