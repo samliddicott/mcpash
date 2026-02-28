@@ -4173,6 +4173,8 @@ class Runtime:
         for name in args[idx:]:
             if mode_vars and name in self.readonly_vars:
                 self._report_error(f"{name}: is read only", line=self.current_line, context="unset")
+                if not self.options.get("i", False):
+                    raise SystemExit(2)
                 status = 2
                 continue
             if not mode_vars:
