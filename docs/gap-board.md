@@ -23,9 +23,9 @@ Status legend:
 | redirection surface | covered | `tests/diff/cases/man-ash-redir.sh` | `>`, `>>`, heredoc, fd duplication smoke paths.
 | `export` / `unset` / `readonly` | covered | `tests/diff/cases/man-ash-env.sh` | Readonly-protection path validated.
 | `read` | covered | `tests/diff/cases/man-ash-read.sh`, `tests/diff/cases/man-ash-read-options.sh` | IFS/raw/cooked/arg-count and option support matrix for this ash target.
-| `trap` | covered | `tests/diff/cases/man-ash-trap.sh`, `tests/diff/cases/man-ash-trap-matrix.sh`, `tests/diff/cases/man-ash-trap-signals.sh`, `tests/diff/cases/man-ash-trap-full.sh` | EXIT/HUP/INT/TERM behavior plus list/clear, numeric-signal, and common signal-name matrix paths.
+| `trap` | covered | `tests/diff/cases/man-ash-trap.sh`, `tests/diff/cases/man-ash-trap-matrix.sh`, `tests/diff/cases/man-ash-trap-signals.sh`, `tests/diff/cases/man-ash-trap-full.sh`, `tests/diff/cases/man-ash-trap-nested.sh` | EXIT/HUP/INT/TERM behavior plus list/clear, numeric-signal, common signal-name, and nested trap interaction paths.
 | `kill` / `wait` | covered | `tests/diff/cases/man-ash-kill-wait.sh` | Includes `kill -0` probe behavior.
-| `hash` / `times` / `ulimit` / `umask` | covered | `tests/diff/cases/man-ash-resource.sh`, `tests/diff/cases/man-ash-ulimit-flags.sh`, `tests/diff/cases/man-ash-ulimit-set.sh`, `tests/diff/cases/man-ash-ulimit-errors.sh` | Includes hash miss, umask roundtrip, expanded ulimit query matrix, set-with-current-value paths, and error-status matrix.
+| `hash` / `times` / `ulimit` / `umask` | covered | `tests/diff/cases/man-ash-resource.sh`, `tests/diff/cases/man-ash-ulimit-flags.sh`, `tests/diff/cases/man-ash-ulimit-set.sh`, `tests/diff/cases/man-ash-ulimit-errors.sh`, `tests/diff/cases/man-ash-ulimit-soft-hard.sh` | Includes hash miss, umask roundtrip, expanded ulimit query matrix, set-with-current-value paths, soft/hard interaction checks, and error-status matrix.
 | `jobs` / `fg` / `bg` | covered | `tests/diff/cases/man-ash-jobs.sh`, `tests/diff/cases/man-ash-set-monitor.sh` | Includes `jobs -p` and explicit non-interactive monitor-mode behavior.
 | `alias` / `unalias` / `command` / `builtin` | covered | `tests/diff/cases/man-ash-alias.sh` | Alias lookup and post-unalias behavior.
 | `cd` / `.` (`source`) | covered | `tests/diff/cases/man-ash-cd-source.sh` | Directory changes and script sourcing.
