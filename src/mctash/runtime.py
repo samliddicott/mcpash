@@ -3826,7 +3826,7 @@ class Runtime:
         return value
 
     def _pattern_from_word(self, text: str, for_case: bool = False) -> str:
-        backslash_marker = "\ue006"
+        backslash_marker = "\ue00d"
         raw = self._expand_assignment_word_protected(text)
         rb = r"\]" if for_case else "]"
         raw = (
@@ -3835,6 +3835,7 @@ class Runtime:
             .replace("\ue003", r"\[")
             .replace("\ue004", rb)
             .replace("\ue005", r"\\")
+            .replace("\ue006", "/")
             .replace("\ue007", r"\-")
             .replace("\ue008", r"\!")
         )
@@ -4954,27 +4955,19 @@ class Runtime:
 
     def _run_echo(self, args: List[str]) -> int:
         newline = True
-        interpret_escapes = False
         i = 0
         while i < len(args) and args[i].startswith("-") and args[i] != "-":
             opt = args[i][1:]
             if opt == "":
                 break
-            if all(ch in "nEe" for ch in opt):
+            if all(ch == "n" for ch in opt):
                 if "n" in opt:
                     newline = False
-                if "e" in opt:
-                    interpret_escapes = True
-                if "E" in opt:
-                    interpret_escapes = False
                 i += 1
                 continue
             break
         args = args[i:]
-        if interpret_escapes:
-            data = " ".join(self._decode_backslash_escapes(a) for a in args)
-        else:
-            data = " ".join(args)
+        data = " ".join(args)
         if newline:
             data += "\n"
         if self._force_broken_pipe and self._fd_redirect_depth == 0:
