@@ -465,6 +465,30 @@ run_case \
   $'s:0\n' \
   'thread-runtime: unshare disabled'
 
+run_case \
+  "process_subst_input_basic" \
+  'out=$(cat <(printf "ps-in")); echo "$out"' \
+  0 \
+  $'ps-in\n'
+
+run_case \
+  "process_subst_output_basic" \
+  'f="/tmp/mctash-psubst-$$.txt"; printf "hello-ps\n" | cat > >(cat > "$f"); cat "$f"; rm -f "$f"' \
+  0 \
+  $'hello-ps\n'
+
+run_case \
+  "process_subst_cwd_isolation" \
+  'orig="$PWD"; printf "x\n" | cat > >(cd /; cat >/dev/null); if [ "$PWD" = "$orig" ]; then echo same; else echo diff; fi' \
+  0 \
+  $'same\n'
+
+run_case \
+  "process_subst_fd_isolation" \
+  'pre=$( [ -e /proc/$$/fd/9 ] && echo yes || echo no ); printf "y\n" | cat > >(exec 9>/dev/null; cat >/dev/null); post=$( [ -e /proc/$$/fd/9 ] && echo yes || echo no ); echo "$pre:$post"' \
+  0 \
+  $'no:no\n'
+
 printf '[PASS] all targeted regressions\n'
 
 # Reserved-word contextualization checks.

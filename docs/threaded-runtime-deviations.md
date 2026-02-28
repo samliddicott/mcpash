@@ -52,6 +52,14 @@ Runtime diagnostics knobs:
 - `MCTASH_UNSHARE_MODE=off` disables Linux `unshare(CLONE_FS|CLONE_FILES)` in background worker threads.
 - `MCTASH_THREAD_DIAG=1` emits one-time fallback diagnostics when unshare is disabled/unavailable/fails.
 
+Process-substitution thread-edge regressions:
+
+- `tests/regressions/run.sh`:
+  - `process_subst_input_basic`
+  - `process_subst_output_basic`
+  - `process_subst_cwd_isolation`
+  - `process_subst_fd_isolation`
+
 ## Operational policy
 
 - Behavioral target remains ash/POSIX externally.
@@ -63,6 +71,6 @@ Runtime diagnostics knobs:
 
 ## Open work
 
-- Expand thread-sensitive coverage beyond background subshells to process-substitution and pipeline edge paths.
+- Expand thread-sensitive coverage to deeper nested combinations (background + pipeline + process substitution in one flow).
 - Add explicit failure-mode reporting when `unshare(CLONE_FS|CLONE_FILES)` is unavailable.
 - Add dedicated tests for nested background jobs touching cwd/fd simultaneously.

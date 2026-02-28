@@ -67,4 +67,4 @@ Reference summary source: `docs/posix-shall-trace.md`.
 |---|---|---|
 | Requirement-level trace completeness (all "shall" rows) | partial | Continue adding explicit case-id links for every remaining row in `docs/posix-shall-trace.md`.
 | Grammar production closure | partial | Closure-order artifacts are completed; remaining work is deeper word-level/operator combinatorics and diagnostic text parity.
-| Threaded-runtime parity checks | partial | Core cwd/fd/var isolation cases are covered (`man-ash-thread-cwd.sh`, `man-ash-thread-fd.sh`, `man-ash-thread-vars.sh`, `man-ash-thread-pipeline-cwd.sh`, `man-ash-thread-pipeline-fd.sh`) plus fallback-diag regression (`thread_unshare_fallback_diag`); expand to deeper nested and process-substitution edges.
+| Threaded-runtime parity checks | partial | Core cwd/fd/var isolation cases are covered (`man-ash-thread-cwd.sh`, `man-ash-thread-fd.sh`, `man-ash-thread-vars.sh`, `man-ash-thread-pipeline-cwd.sh`, `man-ash-thread-pipeline-fd.sh`) plus fallback-diag/process-subst regressions (`thread_unshare_fallback_diag`, `process_subst_*` in `tests/regressions/run.sh`); expand to deeper nested combined edges.
