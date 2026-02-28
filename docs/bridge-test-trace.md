@@ -1,8 +1,11 @@
 # Bridge Test Trace (Milestone-2)
 
-This table links bridge requirements to concrete regression cases in `tests/regressions/run.sh`.
+This table links bridge requirements to concrete cases in:
 
-| Area | Requirement slice | Regression cases |
+- `tests/bridge/run.sh` (primary bridge conformance suite)
+- `tests/regressions/run.sh` (cross-feature regressions that include bridge checks)
+
+| Area | Requirement slice | Conformance cases |
 |---|---|---|
 | Phase 1 | `py` statement/expr/call/capture/status | `py_statement_exec`, `py_eval_print`, `py_callable_dispatch`, `py_stdout_capture_var`, `py_return_capture_var`, `py_exception_status` |
 | Phase 1 | Structured exception vars (`-x`) | `py_structured_exception` |
@@ -18,8 +21,9 @@ This table links bridge requirements to concrete regression cases in `tests/regr
 | Phase 8 | `sh.stack` frame presence and ordering | `py_sh_stack_contains_function`, `py_sh_stack_innermost_is_python`, `py_sh_stack_contains_command_subst_frame` |
 | Phase 9 | interrupt path | `py_interrupt_status_130` |
 
-Related full-suite gates:
+Related gates:
 
 - BusyBox ash corpus via `src/tests/run_busybox_ash.sh`
 - Oil subset via `src/tests/run_oil_subset.sh`
 - Combined gate via `scripts/check_conformance.sh`
+- Bridge-only gate via `tests/bridge/run.sh`
