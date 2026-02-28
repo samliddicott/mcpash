@@ -32,10 +32,10 @@ Case link notation:
 
 | Requirement (normative intent) | Status | Evidence | Notes |
 |---|---|---|---|
-| Parameter expansion supports unset/null-sensitive operators (`-`, `:-`, `+`, `:+`, `=`, `:=`, `?`, `:?`) | Verified | `tests/busybox/ash_test/ash-vars/param_expand_default.tests`, `tests/busybox/ash_test/ash-vars/param_expand_assign.tests`, `tests/busybox/ash_test/ash-vars/param_expand_indicate_error.tests`, `tests/oil/oils-master/spec/var-op-test.test.sh` | Dynamic assignment and error branches are exercised. |
-| Prefix/suffix pattern removal (`#`, `##`, `%`, `%%`) behaves per shell pattern matching rules | Verified | `tests/busybox/ash_test/ash-vars/var-pattern-replacement-in-parameter-expansion-*.tests`, `tests/oil/oils-master/spec/var-op-strip.test.sh` | Includes shortest/longest and quoting-sensitive variants. |
+| Parameter expansion supports unset/null-sensitive operators (`-`, `:-`, `+`, `:+`, `=`, `:=`, `?`, `:?`) | Verified | `tests/busybox/ash_test/ash-vars/param_expand_default.tests`, `tests/busybox/ash_test/ash-vars/param_expand_assign.tests`, `tests/busybox/ash_test/ash-vars/param_expand_indicate_error.tests`, `tests/oil/oils-master/spec/var-op-test.test.sh`, `tests/diff/cases/man-ash-var-ops.sh` | Dynamic assignment and error branches are exercised. |
+| Prefix/suffix pattern removal (`#`, `##`, `%`, `%%`) behaves per shell pattern matching rules | Verified | `tests/busybox/ash_test/ash-vars/var-pattern-replacement-in-parameter-expansion-*.tests`, `tests/oil/oils-master/spec/var-op-strip.test.sh`, `tests/diff/cases/man-ash-var-ops.sh` | Includes shortest/longest and quoting-sensitive variants. |
 | `${#@}` and `${#*}` length follows joined positional expansion semantics | Verified | `tests/regressions/run.sh` (`param_len_special_at_star`) | Aligned with ash/dash behavior using IFS-joined positional text length. |
-| Command substitution result participates correctly in later expansion phases | Partial | `tests/busybox/ash_test/ash-psubst/tick*.tests`, `tests/oil/oils-master/spec/smoke.test.sh` (`command sub`) | Strong coverage, but exhaustive nested quoting matrices are still partial. |
+| Command substitution result participates correctly in later expansion phases | Partial | `tests/busybox/ash_test/ash-psubst/tick*.tests`, `tests/oil/oils-master/spec/smoke.test.sh` (`command sub`), `tests/diff/cases/man-ash-word-nesting.sh` | Strong coverage, but exhaustive nested quoting matrices are still partial. |
 | Field splitting uses `IFS` rules and preserves/elides fields appropriately | Verified | `tests/busybox/ash_test/ash-vars/var_wordsplit_ifs*.tests`, `tests/busybox/ash_test/ash-z_slow/many_ifs.tests`, `tests/oil/oils-master/spec/word-split.test.sh` | Includes hard edge cases for `read`/`IFS` interactions. |
 | Pathname expansion (globbing) occurs after splitting and follows pattern semantics | Partial | `tests/busybox/ash_test/ash-glob/glob*.tests`, `tests/busybox/ash_test/ash-vars/param_glob.tests` | Covered for ash corpus patterns; formal full-space proof remains open. |
 
@@ -59,7 +59,7 @@ Case link notation:
 
 | Requirement (normative intent) | Status | Evidence | Notes |
 |---|---|---|---|
-| Reserved words are recognized only in grammar-appropriate positions | Partial | `tests/busybox/ash_test/ash-parsing/groups_and_keywords1.tests`, `tests/busybox/ash_test/ash-misc/for_with_keywords.tests`, `tests/oil/oils-master/spec/shell-grammar.test.sh` | Strong functional evidence; still partial for exhaustive context matrix. |
+| Reserved words are recognized only in grammar-appropriate positions | Verified | `tests/busybox/ash_test/ash-parsing/groups_and_keywords1.tests`, `tests/busybox/ash_test/ash-misc/for_with_keywords.tests`, `tests/oil/oils-master/spec/shell-grammar.test.sh`, `tests/diff/cases/man-ash-grammar-reserved.sh`, `tests/regressions/run.sh` (`reserved_word_*`) | Context-sensitive reserved-word behavior is covered by corpus and local matrices. |
 | Compound-command keywords (`if`, `then`, `fi`, `case`, `esac`, loops) parse and execute in order | Verified | `tests/busybox/ash_test/ash-misc/if_false_exitcode.tests`, `tests/busybox/ash_test/ash-misc/case1.tests`, `tests/busybox/ash_test/ash-misc/while*.tests`, `tests/oil/oils-master/spec/if_.test.sh`, `tests/oil/oils-master/spec/case_.test.sh` | Execution semantics covered across multiple corpora. |
 
 ## 2.5 Parameters and Variables
@@ -140,7 +140,7 @@ Case link notation:
 | Requirement (normative intent) | Status | Evidence | Notes |
 |---|---|---|---|
 | Parser accepts valid command grammar forms for lists/pipelines/compound commands | Verified | `tests/busybox/ash_test/ash-parsing/*.tests`, `tests/oil/oils-master/spec/shell-grammar.test.sh` | Current parser pass set covers broad accepted grammar forms. |
-| Parser rejects invalid grammar with non-success status and diagnostics | Partial | `tests/busybox/ash_test/ash-parsing/nodone1.tests`, `tests/busybox/ash_test/ash-parsing/nodone2.tests`, `tests/oil/oils-master/spec/shell-grammar.test.sh` (`Invalid token`) | Rejection behavior is covered; message text exactness is implementation-specific in some cases. |
+| Parser rejects invalid grammar with non-success status and diagnostics | Covered | `tests/busybox/ash_test/ash-parsing/nodone1.tests`, `tests/busybox/ash_test/ash-parsing/nodone2.tests`, `tests/oil/oils-master/spec/shell-grammar.test.sh` (`Invalid token`), `tests/diff/cases/man-ash-grammar-negative.sh`, `tests/regressions/run.sh` (`parser_*`) | Rejection status behavior is covered across corpora and local negative matrices; exact text parity remains implementation-specific. |
 | Here-doc grammar attachment/order and multi-here-doc parsing follow shell grammar constraints | Verified | `tests/busybox/ash_test/ash-heredoc/heredoc*.tests`, `tests/oil/oils-master/spec/posix.test.sh` (`Multiple here docs on one line`) | Includes parser queueing/order-sensitive cases. |
 | Case grammar variants (optional trailing `;;`, pattern alternation, oneline forms) parse correctly | Verified | `tests/busybox/ash_test/ash-misc/case1.tests`, `tests/oil/oils-master/spec/shell-grammar.test.sh` (`Case without last dsemi`, `Case with 2 options`, oneline forms), `tests/oil/oils-master/spec/case_.test.sh` | Covers core POSIX case grammar forms in scope. |
 

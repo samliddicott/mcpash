@@ -1,6 +1,6 @@
 # Gap Board
 
-Date: 2026-02-27
+Date: 2026-02-28
 
 Purpose:
 
@@ -58,7 +58,7 @@ Reference summary source: `docs/posix-shall-trace.md`.
 | 2.7 Redirection | covered | `docs/posix-shall-trace.md` + `tests/diff/cases/man-ash-redir.sh`.
 | 2.8 Exit Status and Errors | covered | `docs/posix-shall-trace.md` + differential command-status cases.
 | 2.9 Shell Commands | partial | Differential builtin cases + BusyBox/Oil references, but not full production-by-production closure.
-| 2.10 Shell Grammar | partial | Parser acceptance/rejection covered in corpora; still tracking deeper production checklist.
+| 2.10 Shell Grammar | partial | `docs/posix-shall-trace.md`, `docs/grammar-production-checklist.md`, `tests/diff/cases/man-ash-prefix-suffix.sh`, `tests/diff/cases/man-ash-grammar-negative.sh`, `tests/diff/cases/man-ash-grammar-reserved.sh`.
 | 2.11 Signals/Traps | partial | `man-ash-trap` plus signal corpus; full matrix still open.
 
 ## Untested/Backlog Buckets
@@ -66,5 +66,5 @@ Reference summary source: `docs/posix-shall-trace.md`.
 | Bucket | Status | Next concrete step |
 |---|---|---|
 | Requirement-level trace completeness (all "shall" rows) | partial | Continue adding explicit case-id links for every remaining row in `docs/posix-shall-trace.md`.
-| Grammar production closure | partial | Extend `docs/grammar-production-checklist.md` from production-family mapping to finer negative/ambiguity matrices.
+| Grammar production closure | partial | Closure-order artifacts are completed; remaining work is deeper word-level/operator combinatorics and diagnostic text parity.
 | Threaded-runtime parity checks | untested | Add dedicated differential cases for thread-specific cwd/fd behavior from `docs/threaded-runtime-deviations.md`.
