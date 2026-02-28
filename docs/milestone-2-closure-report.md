@@ -1,6 +1,6 @@
 # Milestone-2 Closure Report
 
-Date: 2026-02-25
+Date: 2026-02-28
 
 ## Scope Closed
 
@@ -26,12 +26,19 @@ Executed in this repo:
 ## Key Milestone-2 Deliverables
 
 - `py` and `PYTHON ... END_PYTHON` bridge execution paths with structured exceptions.
+- `python:` pseudo-function path:
+  - resolves and invokes Python callables directly when callable,
+  - falls back to Python statement execution when target is not callable (`import`, `from`, etc.).
 - `sh` object mappings: `vars`, `env`, `fn`, `shared`, `stack`, and callback APIs (`sh()`, `run`, `popen`).
 - `from ... import ...` bridge wrappers.
 - tie support for ash-mode in-scope types (`scalar`, `integer`).
 - shared backend with cross-process visibility.
 - frame-based stack diagnostics with frame kinds and innermost-first ordering.
 - conformance quick/full targets and module-scoped BusyBox timeout handling.
+- machine-readable parity summary contract with schema validation:
+  - `make parity-summary`
+  - `make parity-summary-validate`
+  - schema: `docs/reports/parity-summary.schema.json`
 
 ## Deferred to Bash-Compat Milestone
 
@@ -45,3 +52,9 @@ Executed in this repo:
 2. Implement first-class array/hash runtime model behind that gate.
 3. Upgrade bridge/tie semantics to typed array/hash behavior.
 4. Tighten trap/source/subshell stack-frame completeness and optional frame IDs.
+
+## Evidence Snapshot (Latest Local)
+
+- `tests/bridge/run.sh`: pass (includes `python:` callable and fallback-exec coverage).
+- `tests/regressions/run.sh`: pass.
+- `PARITY_SKIP_BUSYBOX=1 make parity-summary-validate`: pass and schema-valid JSON emitted.
