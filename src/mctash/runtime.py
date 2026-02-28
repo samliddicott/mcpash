@@ -2013,6 +2013,9 @@ class Runtime:
                     if node is None:
                         break
                     self.current_line = parser_impl.last_line
+                    src_item = parser_impl.last_source_text()
+                    if src_item is not None:
+                        self.add_history_entry(src_item.rstrip("\n"))
                     if self.options.get("n", False):
                         status = 0
                         continue
@@ -2092,18 +2095,34 @@ class Runtime:
         i = 0
         while i < len(args) and args[i].startswith("-") and args[i] != "-":
             a = args[i]
-            if a == "-l":
-                list_mode = True
-            elif a == "-r":
-                reverse = True
-            elif a == "-n":
-                no_numbers = True
-            elif a == "-s":
-                list_mode = False
-            elif a == "-e":
-                # Editor workflow is deferred; keep accepted surface.
+            if a == "--":
                 i += 1
-            else:
+                break
+            if len(a) < 2:
+                break
+            j = 1
+            while j < len(a):
+                ch = a[j]
+                if ch == "l":
+                    list_mode = True
+                elif ch == "r":
+                    reverse = True
+                elif ch == "n":
+                    no_numbers = True
+                elif ch == "s":
+                    list_mode = False
+                elif ch == "e":
+                    # Editor workflow is deferred; keep accepted surface.
+                    if j + 1 < len(a):
+                        pass
+                    else:
+                        i += 1
+                    j = len(a)
+                    continue
+                else:
+                    break
+                j += 1
+            if j != len(a):
                 break
             i += 1
         rest = args[i:]

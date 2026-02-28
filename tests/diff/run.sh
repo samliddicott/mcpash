@@ -6,6 +6,8 @@ CASES_DIR="${ROOT}/tests/diff/cases"
 LOG_DIR="${ROOT}/tests/diff/logs"
 ASH_BIN="${ASH_BIN:-ash}"
 read -r -a ASH_CMD <<< "${ASH_BIN}"
+BASH_BIN="${BASH_BIN:-bash --posix}"
+read -r -a BASH_CMD <<< "${BASH_BIN}"
 MCTASH_CMD="${MCTASH_CMD:-PYTHONPATH=${ROOT}/src python3 -m mctash}"
 
 GENERATE_EXPECTED=0
@@ -100,10 +102,16 @@ for case in "${CASE_FILES[@]}"; do
   mctash_stderr="${LOG_DIR}/mctash/${name}.err"
   ash_status=0
   mctash_status=0
+  compare_name="ash"
+  compare_cmd=("${ASH_CMD[@]}")
+  if grep -q '^# DIFF_BASELINE: bash$' "${CASES_DIR}/${case}"; then
+    compare_name="bash"
+    compare_cmd=("${BASH_CMD[@]}")
+  fi
 
   if [[ ${ASH_ONLY} -eq 0 ]]; then
     ash_status=0
-    if ! "${ASH_CMD[@]}" "${CASES_DIR}/${case}" >"${ash_stdout}" 2>"${ash_stderr}"; then
+    if ! "${compare_cmd[@]}" "${CASES_DIR}/${case}" >"${ash_stdout}" 2>"${ash_stderr}"; then
       ash_status=$?
     fi
   fi
@@ -126,7 +134,7 @@ for case in "${CASE_FILES[@]}"; do
 
   if [[ ${MCTASH_ONLY} -eq 0 && ${ASH_ONLY} -eq 0 ]]; then
     if [[ ${ash_status} -ne ${mctash_status} ]]; then
-      echo "${name}: exit status mismatch ash=${ash_status} mctash=${mctash_status}" >&2
+      echo "${name}: exit status mismatch ${compare_name}=${ash_status} mctash=${mctash_status}" >&2
       RESULT=1
     fi
     if ! diff -u "${ash_stdout}" "${mctash_stdout}" >"${LOG_DIR}/diff/${name}.out"; then

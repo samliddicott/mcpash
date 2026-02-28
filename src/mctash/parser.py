@@ -89,6 +89,8 @@ class Parser:
         self.aliases: dict[str, str] = aliases if aliases is not None else {}
         self._saw_command: bool = False
         self._last_token: Optional[Token] = None
+        self.last_source_start: int | None = None
+        self.last_source_end: int | None = None
 
     def _peek(self) -> Optional[Token]:
         if not self.buffer:
@@ -220,6 +222,7 @@ class Parser:
                 self._advance()
                 continue
             break
+        start_tok = tok
         self.last_line = tok.line if tok is not None else None
         node, lst_node = self.parse_and_or()
         self.last_lst = lst_node
@@ -285,10 +288,21 @@ class Parser:
             self.last_lst = wrapped_lst
             self.last_lst_item = LstListItem(node=wrapped_lst, terminator=None)
             self._saw_command = True
+            self.last_source_start = start_tok.index if start_tok is not None else None
+            self.last_source_end = self.reader.i
             return ListItem(node=wrapped, background=False)
         self.last_lst_item = LstListItem(node=lst_node, terminator=terminator)
         self._saw_command = True
+        self.last_source_start = start_tok.index if start_tok is not None else None
+        self.last_source_end = self.reader.i
         return ListItem(node=node, background=background)
+
+    def last_source_text(self) -> str | None:
+        if self.last_source_start is None or self.last_source_end is None:
+            return None
+        if self.last_source_start < 0 or self.last_source_end < self.last_source_start:
+            return None
+        return self.reader.source[self.last_source_start : self.last_source_end]
 
     def parse_list(self) -> tuple[ListNode, LstListNode]:
         items: List[ListItem] = []
