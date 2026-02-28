@@ -2492,41 +2492,90 @@ class Runtime:
         return 0
 
     def _run_ulimit(self, args: List[str]) -> int:
-        # Baseline ash-mode support: no args, -a listing, and -n get/set.
-        if not args:
-            soft, _ = resource.getrlimit(resource.RLIMIT_FSIZE)
-            print("unlimited" if soft == resource.RLIM_INFINITY else str(soft))
-            return 0
-        if args[0] == "-a":
+        use_soft = False
+        use_hard = False
+        list_all = False
+        limit_key = resource.RLIMIT_FSIZE
+        i = 0
+
+        limit_map = {
+            "c": resource.RLIMIT_CORE,
+            "f": resource.RLIMIT_FSIZE,
+            "n": resource.RLIMIT_NOFILE,
+            "v": resource.RLIMIT_AS,
+        }
+
+        while i < len(args) and args[i].startswith("-") and args[i] != "-":
+            opt = args[i]
+            if opt == "--":
+                i += 1
+                break
+            for ch in opt[1:]:
+                if ch == "S":
+                    use_soft = True
+                    continue
+                if ch == "H":
+                    use_hard = True
+                    continue
+                if ch == "a":
+                    list_all = True
+                    continue
+                if ch in limit_map:
+                    limit_key = limit_map[ch]
+                    continue
+                return 2
+            i += 1
+
+        if not use_soft and not use_hard:
+            use_soft = True
+
+        def _fmt(val: int) -> str:
+            return "unlimited" if val == resource.RLIM_INFINITY else str(val)
+
+        def _cur_value(key: int) -> int:
+            soft, hard = resource.getrlimit(key)
+            return hard if use_hard and not use_soft else soft
+
+        if list_all:
             rows = [
                 ("file(blocks)", resource.RLIMIT_FSIZE),
+                ("coredump(blocks)", resource.RLIMIT_CORE),
                 ("nofiles", resource.RLIMIT_NOFILE),
-                ("cputime(sec)", resource.RLIMIT_CPU),
+                ("memory(kbytes)", resource.RLIMIT_AS),
             ]
             for label, key in rows:
-                soft, _ = resource.getrlimit(key)
-                val = "unlimited" if soft == resource.RLIM_INFINITY else str(soft)
-                print(f"{label:14} {val}")
+                print(f"{label:16} {_fmt(_cur_value(key))}")
             return 0
-        if args[0] == "-n":
-            if len(args) == 1:
-                soft, _ = resource.getrlimit(resource.RLIMIT_NOFILE)
-                print("unlimited" if soft == resource.RLIM_INFINITY else str(soft))
-                return 0
-            target = args[1]
-            if target == "unlimited":
-                new_soft = resource.RLIM_INFINITY
-            else:
-                try:
-                    new_soft = int(target, 10)
-                except ValueError:
-                    return 2
-            soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
-            if hard != resource.RLIM_INFINITY and new_soft > hard:
-                return 1
-            resource.setrlimit(resource.RLIMIT_NOFILE, (new_soft, hard))
+
+        rest = args[i:]
+        if not rest:
+            print(_fmt(_cur_value(limit_key)))
             return 0
-        return 2
+
+        target = rest[0]
+        if target == "unlimited":
+            new_lim = resource.RLIM_INFINITY
+        else:
+            try:
+                new_lim = int(target, 10)
+            except ValueError:
+                return 2
+
+        soft, hard = resource.getrlimit(limit_key)
+        new_soft, new_hard = soft, hard
+        if use_soft and use_hard:
+            new_soft, new_hard = new_lim, new_lim
+        elif use_hard:
+            new_hard = new_lim
+            if new_soft != resource.RLIM_INFINITY and new_hard != resource.RLIM_INFINITY and new_soft > new_hard:
+                new_soft = new_hard
+        else:
+            new_soft = new_lim
+        try:
+            resource.setrlimit(limit_key, (new_soft, new_hard))
+        except (OSError, ValueError):
+            return 1
+        return 0
 
     def _expand_aliases(self, argv: List[str]) -> List[str]:
         if not argv:
@@ -3880,6 +3929,14 @@ class Runtime:
         return 0
 
     def _run_set(self, args: List[str]) -> int:
+        def _set_option(opt: str, enabled: bool) -> int:
+            if opt == "m" and enabled and not os.isatty(0):
+                self._report_error("set: can't access tty; job control turned off", line=self.current_line, context=None)
+                self.options["m"] = False
+                return 0
+            self.options[opt] = enabled
+            return 0
+
         if not args:
             entries: dict[str, str] = {}
             for scope in self.local_stack:
@@ -3917,8 +3974,7 @@ class Runtime:
             mapped = self.SET_O_OPTION_MAP.get(name)
             if mapped is None:
                 return 1
-            self.options[mapped] = args[0] == "-o"
-            return 0
+            return _set_option(mapped, args[0] == "-o")
         if args[0].startswith("-") or args[0].startswith("+"):
             for token in args:
                 if token == "--":
@@ -3927,10 +3983,14 @@ class Runtime:
                     return 0
                 if token.startswith("-"):
                     for ch in token[1:]:
-                        self.options[ch] = True
+                        st = _set_option(ch, True)
+                        if st != 0:
+                            return st
                 elif token.startswith("+"):
                     for ch in token[1:]:
-                        self.options[ch] = False
+                        st = _set_option(ch, False)
+                        if st != 0:
+                            return st
             return 0
         self.set_positional_args(args)
         return 0
@@ -4871,7 +4931,7 @@ class Runtime:
                 return 2
             if a == "-t":
                 self._report_error("read: Illegal option -t")
-                continue
+                return 2
             self._report_error(f"read: unknown option {a}")
             return 2
         else:
