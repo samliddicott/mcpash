@@ -18,6 +18,12 @@ Interim strategy:
 
 1. Keep `fc` differential case guarded so full suite remains green.
 2. Add non-differential `mctash` self-tests for `fc` behavior where comparator evidence is unavailable.
+   - Implemented in `tests/regressions/run.sh`:
+     - `fc_list_last_two`
+     - `fc_list_reverse`
+     - `fc_substitute_and_reexec`
+     - `fc_editor_flag_acceptance`
+     - `fc_invalid_reference_status`
 3. If an ash build with `fc` is introduced, unguard and promote `fc` matrix to full differential parity.
 
 Exit criteria for removing blocker:

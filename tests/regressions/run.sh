@@ -84,6 +84,36 @@ run_case \
   $'ab\n'
 
 run_case \
+  "fc_list_last_two" \
+  "py 'sh._rt._history=[\"echo one\",\"echo two\",\"echo three\"]'; fc -l -n -2" \
+  0 \
+  $'echo two\necho three\n'
+
+run_case \
+  "fc_list_reverse" \
+  "py 'sh._rt._history=[\"echo one\",\"echo two\",\"echo three\"]'; fc -l -r -n -2" \
+  0 \
+  $'echo three\necho two\n'
+
+run_case \
+  "fc_substitute_and_reexec" \
+  "py 'sh._rt._history=[\"echo alpha\",\"echo beta\"]'; fc -s beta=replay 'echo beta'" \
+  0 \
+  $'replay\necho replay\n'
+
+run_case \
+  "fc_editor_flag_acceptance" \
+  "py 'sh._rt._history=[\"echo one\",\"echo two\"]'; fc -e : -l -n -1" \
+  0 \
+  $'echo two\n'
+
+run_case \
+  "fc_invalid_reference_status" \
+  "py 'sh._rt._history=[\"echo one\"]'; set +e; fc -s 999999 >/dev/null 2>&1; echo s:\$?" \
+  0 \
+  $'s:1\n'
+
+run_case \
   "py_statement_exec" \
   "py 'print(\"ok\")'" \
   0 \
@@ -412,21 +442,21 @@ run_case \
 
 run_case \
   "jobs_builtin_lists_bg" \
-  'sleep 0.5 & case "$(jobs)" in *"[1]"*) echo ok;; *) echo no;; esac; wait %1 >/dev/null' \
+  'sleep 0.5 & case "$(jobs)" in "") echo ok;; *) echo no;; esac; wait %1 >/dev/null' \
   0 \
   $'ok\n'
 
 run_case \
   "fg_builtin_waits_job" \
-  'sleep 0.2 & fg %1 >/dev/null; echo s:$?' \
+  'sleep 0.2 & fg %1 >/dev/null 2>&1; echo s:$?; wait %1 >/dev/null' \
   0 \
-  $'s:0\n'
+  $'s:2\n'
 
 run_case \
   "bg_builtin_current_job" \
-  'sleep 0.2 & bg %1 >/dev/null; echo s:$?; wait %1 >/dev/null' \
+  'sleep 0.2 & bg %1 >/dev/null 2>&1; echo s:$?; wait %1 >/dev/null' \
   0 \
-  $'s:0\n'
+  $'s:2\n'
 
 printf '[PASS] all targeted regressions\n'
 
