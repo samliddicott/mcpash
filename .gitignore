@@ -2,3 +2,6 @@ __pycache__/
 *.pyc
 tests/busybox/
 tests/oil/
+tests/diff/logs/
+docs/reports/parity-logs/
+docs/reports/parity-summary.json

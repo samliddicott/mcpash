@@ -3,11 +3,24 @@ BUSYBOX_MIN_OK ?= 357
 BUSYBOX_MAX_FAIL ?= 0
 OIL_MIN_PASS ?= 245
 OIL_MAX_FAIL ?= 0
+SUMMARY_FILE ?= docs/reports/parity-summary.json
 
-.PHONY: regressions conformance conformance-full conformance-quick
+.PHONY: regressions bridge-conformance diff-conformance busybox-conformance parity-summary conformance conformance-full conformance-quick
 
 regressions:
 	@./tests/regressions/run.sh
+
+bridge-conformance:
+	@./tests/bridge/run.sh
+
+diff-conformance:
+	@./tests/diff/run.sh
+
+busybox-conformance:
+	@RUN_TIMEOUT=$(RUN_TIMEOUT) RUN_MODULE_TIMEOUT=$(RUN_TIMEOUT) ./src/tests/run_busybox_ash.sh run
+
+parity-summary:
+	@RUN_TIMEOUT=$(RUN_TIMEOUT) RUN_MODULE_TIMEOUT=$(RUN_TIMEOUT) ./scripts/run_parity_summary.sh "$(SUMMARY_FILE)"
 
 conformance: conformance-full
 

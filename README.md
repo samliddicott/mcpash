@@ -10,6 +10,32 @@ Run targeted regression checks:
 make regressions
 ```
 
+Run bridge-only conformance:
+
+```sh
+make bridge-conformance
+```
+
+Run differential ash vs mctash cases:
+
+```sh
+make diff-conformance
+```
+
+Run full BusyBox ash corpus:
+
+```sh
+make busybox-conformance
+```
+
+Run a reproducible local parity gate and emit a machine-readable summary:
+
+```sh
+make parity-summary
+```
+
+Default summary output: `docs/reports/parity-summary.json`
+
 This runs focused checks for fragile semantics:
 
 - `read` + mixed `IFS` edge behavior
