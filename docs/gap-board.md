@@ -23,9 +23,9 @@ Status legend:
 | redirection surface | covered | `tests/diff/cases/man-ash-redir.sh` | `>`, `>>`, heredoc, fd duplication smoke paths.
 | `export` / `unset` / `readonly` | covered | `tests/diff/cases/man-ash-env.sh` | Readonly-protection path validated.
 | `read` | covered | `tests/diff/cases/man-ash-read.sh`, `tests/diff/cases/man-ash-read-options.sh` | IFS/raw/cooked/arg-count and option support matrix for this ash target.
-| `trap` | covered | `tests/diff/cases/man-ash-trap.sh`, `tests/diff/cases/man-ash-trap-matrix.sh` | EXIT/HUP plus list/clear, numeric-signal, and invalid-signal status paths.
+| `trap` | covered | `tests/diff/cases/man-ash-trap.sh`, `tests/diff/cases/man-ash-trap-matrix.sh`, `tests/diff/cases/man-ash-trap-signals.sh` | EXIT/HUP plus list/clear, numeric-signal, and common signal-name matrix paths.
 | `kill` / `wait` | covered | `tests/diff/cases/man-ash-kill-wait.sh` | Includes `kill -0` probe behavior.
-| `hash` / `times` / `ulimit` / `umask` | covered | `tests/diff/cases/man-ash-resource.sh`, `tests/diff/cases/man-ash-ulimit-flags.sh` | Includes hash miss, umask roundtrip, and expanded ulimit flag query matrix.
+| `hash` / `times` / `ulimit` / `umask` | covered | `tests/diff/cases/man-ash-resource.sh`, `tests/diff/cases/man-ash-ulimit-flags.sh`, `tests/diff/cases/man-ash-ulimit-set.sh` | Includes hash miss, umask roundtrip, expanded ulimit query matrix, and set-with-current-value paths.
 | `jobs` / `fg` / `bg` | covered | `tests/diff/cases/man-ash-jobs.sh`, `tests/diff/cases/man-ash-set-monitor.sh` | Includes `jobs -p` and explicit non-interactive monitor-mode behavior.
 | `alias` / `unalias` / `command` / `builtin` | covered | `tests/diff/cases/man-ash-alias.sh` | Alias lookup and post-unalias behavior.
 | `cd` / `.` (`source`) | covered | `tests/diff/cases/man-ash-cd-source.sh` | Directory changes and script sourcing.
@@ -43,8 +43,8 @@ Status legend:
 |---|---|---|
 | `read` option matrix across ash variants | partial | Covered for current ash target via `man-ash-read-options.sh`; cross-variant matrix remains open.
 | `fc` editor/history parity | partial | External-editor workflow (`fc -e`) and richer history-edit flows remain untested.
-| `ulimit` full flag set | partial | Expanded query matrix is covered (`-S/-H`, `-f/-n/-c/-v`); full per-resource set behavior remains open.
-| `trap` signal matrix | partial | Numeric/list/clear/invalid-signal paths now covered; full signal-by-signal matrix remains open.
+| `ulimit` full flag set | partial | Query and safe set paths are covered (`-S/-H`, `-f/-n/-c/-v`), but full per-resource set/error matrix remains open.
+| `trap` signal matrix | partial | Common signal-name coverage added; full signal-by-signal and nested-trap interaction matrix remains open.
 | `jobs` interactive monitor semantics | partial | Non-interactive semantics covered; interactive job control remains limited.
 
 ## POSIX Chapter 2 Areas
