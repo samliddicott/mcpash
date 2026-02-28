@@ -976,6 +976,7 @@ class Runtime:
             source_stack_snapshot = list(self.source_stack)
             script_name_snapshot = self.script_name
             current_line_snapshot = self.current_line
+            parent_fd_baseline = self._snapshot_open_fds()
 
             def _run_bg() -> None:
                 # On Linux, detach filesystem and fd-table sharing for the
@@ -1010,6 +1011,9 @@ class Runtime:
                     status = bg_rt._run_subshell(bg_body)
                     self._bg_status[job_id] = status
                 finally:
+                    # In shared-fd fallback modes (no CLONE_FILES unshare),
+                    # explicitly close fds that this background runtime opened.
+                    bg_rt._close_tracked_fds_not_in(parent_fd_baseline)
                     self._bg_pids.pop(job_id, None)
 
             thread = threading.Thread(target=_run_bg)
@@ -1078,6 +1082,34 @@ class Runtime:
                 return
             self._thread_diag_emitted.add(msg)
         print(f"mctash: thread-runtime: {msg}", file=sys.stderr)
+
+    def _snapshot_open_fds(self) -> set[int]:
+        out: set[int] = set()
+        proc_fd = "/proc/self/fd"
+        try:
+            for name in os.listdir(proc_fd):
+                if not name.isdigit():
+                    continue
+                out.add(int(name))
+            return out
+        except Exception:
+            # Fallback: tracked user/temp fds plus stdio.
+            out.update({0, 1, 2})
+            out.update(fd for fd in self._user_fds if isinstance(fd, int))
+            out.update(fd for fd in self._active_temp_fds if isinstance(fd, int))
+            return out
+
+    def _close_tracked_fds_not_in(self, baseline: set[int]) -> None:
+        leaked = set(self._user_fds) | set(self._active_temp_fds)
+        for fd in sorted(leaked):
+            if fd < 3 or fd in baseline:
+                continue
+            try:
+                os.close(fd)
+            except OSError:
+                pass
+        self._user_fds = {fd for fd in self._user_fds if fd in baseline}
+        self._active_temp_fds = {fd for fd in self._active_temp_fds if fd in baseline}
 
     def _exec_and_or(self, node: AndOr, track_status: bool = True) -> int:
         status = self._exec_pipeline(node.pipelines[0])
