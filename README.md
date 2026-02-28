@@ -36,6 +36,25 @@ make parity-summary
 
 Default summary output: `docs/reports/parity-summary.json`
 
+Create/update a local performance baseline:
+
+```sh
+make perf-baseline
+```
+
+Compare current performance against saved baseline:
+
+```sh
+make perf-compare
+```
+
+Useful overrides:
+
+```sh
+PERF_RUNS=9 PERF_INCLUDE_BUSYBOX=1 make perf-baseline
+PERF_MAX_REGRESSION=1.20 PERF_MIN_DELTA_MS=8 make perf-compare
+```
+
 This runs focused checks for fragile semantics:
 
 - `read` + mixed `IFS` edge behavior

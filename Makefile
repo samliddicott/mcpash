@@ -5,7 +5,7 @@ OIL_MIN_PASS ?= 245
 OIL_MAX_FAIL ?= 0
 SUMMARY_FILE ?= docs/reports/parity-summary.json
 
-.PHONY: regressions bridge-conformance diff-conformance busybox-conformance parity-summary conformance conformance-full conformance-quick
+.PHONY: regressions bridge-conformance diff-conformance busybox-conformance parity-summary perf-baseline perf-compare conformance conformance-full conformance-quick
 
 regressions:
 	@./tests/regressions/run.sh
@@ -21,6 +21,12 @@ busybox-conformance:
 
 parity-summary:
 	@RUN_TIMEOUT=$(RUN_TIMEOUT) RUN_MODULE_TIMEOUT=$(RUN_TIMEOUT) ./scripts/run_parity_summary.sh "$(SUMMARY_FILE)"
+
+perf-baseline:
+	@./scripts/benchmark_parity.sh docs/reports/perf-baseline.json
+
+perf-compare:
+	@./scripts/compare_perf_baseline.sh docs/reports/perf-baseline.json
 
 conformance: conformance-full
 

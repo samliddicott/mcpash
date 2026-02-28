@@ -1,0 +1,121 @@
+{
+  "git_commit": "e670b4fd5d1a78886483b05f3862c6ac718a73b0",
+  "host": "ubuntu-2204",
+  "include_busybox_spotcheck": false,
+  "platform": "Linux-5.10.60-qnap-x86_64-with-glibc2.35",
+  "python_version": "3.10.12",
+  "runs_per_workload": 3,
+  "timestamp_utc": "2026-02-28T22:26:46.101359Z",
+  "workloads": [
+    {
+      "argv": [
+        "python3",
+        "-m",
+        "mctash",
+        "-c",
+        ":"
+      ],
+      "max_ms": 357.37928794696927,
+      "mean_ms": 352.9261335109671,
+      "median_ms": 353.34751289337873,
+      "min_ms": 348.0515996925533,
+      "name": "cold_start",
+      "ok": true,
+      "p95_ms": 353.34751289337873,
+      "rc": 0,
+      "samples_ms": [
+        357.37928794696927,
+        353.34751289337873,
+        348.0515996925533
+      ]
+    },
+    {
+      "argv": [
+        "python3",
+        "-m",
+        "mctash",
+        "/tmp/mctash-perf-3tb1wcjd/small.sh"
+      ],
+      "max_ms": 371.99757527559996,
+      "mean_ms": 365.7350375627478,
+      "median_ms": 365.90208718553185,
+      "min_ms": 359.3054502271116,
+      "name": "small_script",
+      "ok": true,
+      "p95_ms": 365.90208718553185,
+      "rc": 0,
+      "samples_ms": [
+        359.3054502271116,
+        365.90208718553185,
+        371.99757527559996
+      ]
+    },
+    {
+      "argv": [
+        "python3",
+        "-m",
+        "mctash",
+        "/tmp/mctash-perf-3tb1wcjd/pipe.sh"
+      ],
+      "max_ms": 1836.5255501121283,
+      "mean_ms": 1702.053612563759,
+      "median_ms": 1637.3006249777973,
+      "min_ms": 1632.3346626013517,
+      "name": "pipeline_heavy",
+      "ok": true,
+      "p95_ms": 1637.3006249777973,
+      "rc": 0,
+      "samples_ms": [
+        1632.3346626013517,
+        1836.5255501121283,
+        1637.3006249777973
+      ]
+    },
+    {
+      "argv": [
+        "python3",
+        "-m",
+        "mctash",
+        "/tmp/mctash-perf-3tb1wcjd/bridge.sh"
+      ],
+      "max_ms": 366.4513002149761,
+      "mean_ms": 362.23720014095306,
+      "median_ms": 360.3703249245882,
+      "min_ms": 359.8899752832949,
+      "name": "bridge_heavy",
+      "ok": true,
+      "p95_ms": 360.3703249245882,
+      "rc": 0,
+      "samples_ms": [
+        366.4513002149761,
+        360.3703249245882,
+        359.8899752832949
+      ]
+    },
+    {
+      "argv": [
+        "bash",
+        "/home/sam/Projects/pybash/tests/diff/run.sh",
+        "--case",
+        "man-ash-set",
+        "--case",
+        "man-ash-var-ops",
+        "--case",
+        "man-ash-redir"
+      ],
+      "max_ms": 2180.3901251405478,
+      "mean_ms": 2002.2449580331643,
+      "median_ms": 1940.7617370598018,
+      "min_ms": 1885.5830118991435,
+      "name": "diff_subset",
+      "ok": true,
+      "p95_ms": 1940.7617370598018,
+      "rc": 0,
+      "samples_ms": [
+        2180.3901251405478,
+        1885.5830118991435,
+        1940.7617370598018
+      ]
+    }
+  ]
+}
