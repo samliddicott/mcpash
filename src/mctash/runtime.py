@@ -1747,7 +1747,9 @@ class Runtime:
             force_quote = [False] * len(argv)
         for i, arg in enumerate(argv):
             items.append(self._trace_quote(arg, force=force_quote[i] if i < len(force_quote) else False))
-        print("+ " + " ".join(items), file=sys.stderr)
+        ps4 = self._get_var("PS4")
+        prefix = ps4 if ps4 != "" else "+ "
+        print(prefix + " ".join(items), file=sys.stderr)
 
     def _trace_quote(self, s: str, force: bool = False) -> str:
         if s == "":
@@ -2016,6 +2018,9 @@ class Runtime:
                     src_item = parser_impl.last_source_text()
                     if src_item is not None:
                         self.add_history_entry(src_item.rstrip("\n"))
+                        if self.options.get("v", False):
+                            line = src_item if src_item.endswith("\n") else src_item + "\n"
+                            sys.stderr.write(line)
                     if self.options.get("n", False):
                         status = 0
                         continue

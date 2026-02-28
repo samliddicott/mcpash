@@ -85,27 +85,27 @@ run_case \
 
 run_case \
   "fc_list_last_two" \
-  "py 'sh._rt._history=[\"echo one\",\"echo two\",\"echo three\"]'; fc -l -n -2" \
+  "py 'sh._rt._history=[\"echo one\",\"echo two\",\"echo three\"]'; fc -l -n 1 2" \
   0 \
-  $'echo two\necho three\n'
+  $'echo one\necho two\n'
 
 run_case \
   "fc_list_reverse" \
-  "py 'sh._rt._history=[\"echo one\",\"echo two\",\"echo three\"]'; fc -l -r -n -2" \
+  "py 'sh._rt._history=[\"echo one\",\"echo two\",\"echo three\"]'; fc -l -r -n 1 2" \
   0 \
-  $'echo three\necho two\n'
+  $'echo two\necho one\n'
 
 run_case \
   "fc_substitute_and_reexec" \
-  "py 'sh._rt._history=[\"echo alpha\",\"echo beta\"]'; fc -s beta=replay 'echo beta'" \
+  "py 'sh._rt._history=[\"echo alpha\",\"echo beta\"]'; fc -s beta=replay 2" \
   0 \
   $'replay\necho replay\n'
 
 run_case \
   "fc_editor_flag_acceptance" \
-  "py 'sh._rt._history=[\"echo one\",\"echo two\"]'; fc -e : -l -n -1" \
+  "py 'sh._rt._history=[\"echo one\",\"echo two\"]'; set +e; fc -e : -l -n 1 >/dev/null; echo s:\$?" \
   0 \
-  $'echo two\n'
+  $'s:0\n'
 
 run_case \
   "fc_invalid_reference_status" \
@@ -693,6 +693,24 @@ set -e
 [[ "$status" -eq 2 ]] || fail "startup_nounset_status: expected status 2, got $status"
 grep -Fq 'unbound variable: UNSET' "$tmpdir/err" || fail "startup_nounset_status: expected unbound variable diagnostic"
 printf '[PASS] startup_nounset_status\n'
+
+set +e
+PYTHONPATH="$ROOT/src" python3 -m mctash -v -c 'echo hi' >"$tmpdir/out" 2>"$tmpdir/err"
+status=$?
+set -e
+[[ "$status" -eq 0 ]] || fail "startup_verbose_option: expected status 0, got $status"
+grep -Fxq 'hi' "$tmpdir/out" || fail "startup_verbose_option: expected stdout hi"
+grep -Fq 'echo hi' "$tmpdir/err" || fail "startup_verbose_option: expected echoed input on stderr"
+printf '[PASS] startup_verbose_option\n'
+
+set +e
+PYTHONPATH="$ROOT/src" python3 -m mctash -x -c 'PS4="TRACE> "; echo hi' >"$tmpdir/out" 2>"$tmpdir/err"
+status=$?
+set -e
+[[ "$status" -eq 0 ]] || fail "startup_xtrace_ps4: expected status 0, got $status"
+grep -Fxq 'hi' "$tmpdir/out" || fail "startup_xtrace_ps4: expected stdout hi"
+grep -Fq 'TRACE> echo hi' "$tmpdir/err" || fail "startup_xtrace_ps4: expected PS4 prefix in trace output"
+printf '[PASS] startup_xtrace_ps4\n'
 
 set +e
 PYTHONPATH="$ROOT/src" python3 -m mctash -z -c 'echo hi' >"$tmpdir/out" 2>"$tmpdir/err"

@@ -53,6 +53,9 @@ def main(argv: List[str] | None = None) -> int:
                 src_item = parser_impl.last_source_text()
                 if src_item is not None:
                     rt.add_history_entry(src_item.rstrip("\n"))
+                    if rt.options.get("v", False):
+                        line = src_item if src_item.endswith("\n") else src_item + "\n"
+                        sys.stderr.write(line)
                 if rt.options.get("n", False):
                     rt.last_status = 0
                     rt._trap_status_hint = 0
@@ -147,6 +150,9 @@ def main(argv: List[str] | None = None) -> int:
             src_item = parser_impl.last_source_text()
             if src_item is not None:
                 rt.add_history_entry(src_item.rstrip("\n"))
+                if rt.options.get("v", False):
+                    line = src_item if src_item.endswith("\n") else src_item + "\n"
+                    sys.stderr.write(line)
             if rt.options.get("n", False):
                 rt.last_status = 0
                 rt._trap_status_hint = 0

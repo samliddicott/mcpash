@@ -22,8 +22,8 @@ Scope note:
 | `-f` | noglob | Implemented | Startup behavior active (pathname expansion disabled). |
 | `-n` | noexec | Implemented | Startup behavior active (parse-only). |
 | `-u` | nounset | Implemented | Startup behavior active; unset parameter error exits with status 2. |
-| `-v` | verbose | Partial | Parsed and exposed in options; full ash-verbose output parity not claimed. |
-| `-x` | xtrace | Partial | Parsed and used; formatting parity is implementation-specific. |
+| `-v` | verbose | Implemented (basic parity) | Startup behavior echoes input lines to stderr before execution. |
+| `-x` | xtrace | Implemented (basic parity) | Startup behavior traces simple commands; `PS4` prefix is honored. |
 | `-I` | ignoreeof | Partial | Interactive REPL path honors ignore-EOF loop on TTY; full dash UX parity not claimed. |
 | `-i` | interactive | Implemented (partial parity) | Forces interactive REPL mode; full editor/history/job-control parity still pending. |
 | `-m` | monitor | Partial | Auto-set for interactive shells; full job-control semantics are pending. |
@@ -43,8 +43,8 @@ Scope note:
 | `noglob` | Implemented | Maps to `-f`. |
 | `noexec` | Implemented | Maps to `-n`. |
 | `nounset` | Implemented | Maps to `-u`. |
-| `verbose` | Partial | Maps to `-v`. |
-| `xtrace` | Partial | Maps to `-x`. |
+| `verbose` | Implemented (basic parity) | Maps to `-v`; echoes shell input to stderr. |
+| `xtrace` | Implemented (basic parity) | Maps to `-x`; simple command tracing with `PS4` prefix support. |
 | `noclobber` | Implemented | Maps to `-C`. |
 | `vi` | Partial | Maps to `-V`; readline-backed mode request when available. |
 | `emacs` | Partial | Maps to `-E`; readline-backed mode request when available. |
@@ -72,3 +72,5 @@ Scope note:
   - `set -o` / `set +o` listing
   - `nolog` / `debug` toggling and reporting
   - startup semantics for `-u`, `-f`, and `-C`
+  - startup `-v` input echoing
+  - startup `-x` with `PS4` prefix
