@@ -495,6 +495,19 @@ run_case \
   0 \
   $'no:no:same:combo\n'
 
+run_case \
+  "thread_multi_job_concurrency_isolation" \
+  'orig="$PWD"; p1="/tmp/mctash-conc-a-$$.txt"; p2="/tmp/mctash-conc-b-$$.txt"; pre=$( [ -e /proc/$$/fd/9 ] && echo yes || echo no ); ( cd /; exec 9>/dev/null; printf "A\n" | cat > >(cat > "$p1") ) & j1=$!; ( cd /tmp; exec 9>/dev/null; printf "B\n" | cat > >(cat > "$p2") ) & j2=$!; wait "$j1"; wait "$j2"; post=$( [ -e /proc/$$/fd/9 ] && echo yes || echo no ); after="$PWD"; [ "$after" = "$orig" ] && c=same || c=diff; data=$(cat "$p1" "$p2" | sort | tr -d "\n"); rm -f "$p1" "$p2"; echo "$pre:$post:$c:$data"' \
+  0 \
+  $'no:no:same:AB\n'
+
+run_case \
+  "thread_unshare_forced_fail_diag" \
+  'export MCTASH_UNSHARE_MODE=fail MCTASH_THREAD_DIAG=1; ( : ) & wait %1; echo s:$?' \
+  0 \
+  $'s:0\n' \
+  'thread-runtime: unshare forced-fail'
+
 printf '[PASS] all targeted regressions\n'
 
 # Reserved-word contextualization checks.

@@ -1041,6 +1041,9 @@ class Runtime:
         if mode == "off":
             self._emit_thread_diag_once("unshare disabled (MCTASH_UNSHARE_MODE=off)")
             return
+        if mode == "fail":
+            self._emit_thread_diag_once("unshare forced-fail (MCTASH_UNSHARE_MODE=fail)")
+            return
         try:
             libc = ctypes.CDLL(None, use_errno=True)
             unshare = libc.unshare

@@ -50,6 +50,7 @@ This project intentionally uses a threaded execution model in places where tradi
 Runtime diagnostics knobs:
 
 - `MCTASH_UNSHARE_MODE=off` disables Linux `unshare(CLONE_FS|CLONE_FILES)` in background worker threads.
+- `MCTASH_UNSHARE_MODE=fail` forces the fallback diagnostic path (test hook).
 - `MCTASH_THREAD_DIAG=1` emits one-time fallback diagnostics when unshare is disabled/unavailable/fails.
 
 Process-substitution thread-edge regressions:
@@ -60,6 +61,8 @@ Process-substitution thread-edge regressions:
   - `process_subst_cwd_isolation`
   - `process_subst_fd_isolation`
   - `thread_combined_bg_pipeline_process_subst`
+  - `thread_multi_job_concurrency_isolation`
+  - `thread_unshare_forced_fail_diag`
 
 ## Operational policy
 
@@ -72,6 +75,6 @@ Process-substitution thread-edge regressions:
 
 ## Open work
 
-- Expand thread-sensitive coverage to additional multi-job combined flows (multiple concurrent background pipelines + process substitution).
+- Expand thread-sensitive coverage to higher-load multi-job combinations (more concurrent background pipelines + process substitution).
 - Add explicit failure-mode reporting when `unshare(CLONE_FS|CLONE_FILES)` is unavailable.
 - Add dedicated tests for nested background jobs touching cwd/fd simultaneously.
