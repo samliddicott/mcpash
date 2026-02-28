@@ -515,6 +515,7 @@ class Runtime:
         "trap",
         "let",
         "py",
+        "python:",
         "from",
         "shared",
     }
@@ -580,6 +581,7 @@ class Runtime:
         "let",
         "getopts",
         "py",
+        "python:",
         "from",
         "shared",
     }
@@ -1976,6 +1978,8 @@ class Runtime:
         if name == "getopts":
             return self._run_getopts(argv[1:])
         if name == "py":
+            return self._run_py(argv[1:])
+        if name == "python:":
             return self._run_py(argv[1:])
         if name == "from":
             return self._run_from_import(argv[1:])

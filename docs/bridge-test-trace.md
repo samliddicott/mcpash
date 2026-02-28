@@ -8,6 +8,7 @@ This table links bridge requirements to concrete cases in:
 | Area | Requirement slice | Conformance cases |
 |---|---|---|
 | Phase 1 | `py` statement/expr/call/capture/status | `py_statement_exec`, `py_eval_print`, `py_callable_dispatch`, `py_stdout_capture_var`, `py_return_capture_var`, `py_exception_status` |
+| Phase 1/2 | `python:` pseudo-function dispatch (callable + fallback exec) | `python_colon_callable_dispatch`, `python_colon_non_callable_fallback_exec` |
 | Phase 1 | Structured exception vars (`-x`) | `py_structured_exception` |
 | Phase 2 | `PYTHON ... END_PYTHON` block parse | `python_block_basic`, `python_block_missing_terminator` |
 | Phase 2 | Dedent / no-dedent | `python_block_dedent_default`, `python_block_no_dedent` |
