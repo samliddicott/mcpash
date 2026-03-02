@@ -651,6 +651,24 @@ run_case \
   $'<a b>\n'
 
 run_case \
+  "asdl_exec_shassignment_escaped_quote_semantics" \
+  "x=\\'B; echo \"\${x#\\'}\"" \
+  0 \
+  $'B\n'
+
+run_case \
+  "asdl_exec_shassignment_arith_word_semantics" \
+  'x=$((1+2*3)); echo "<$x>"' \
+  0 \
+  $'<7>\n'
+
+run_case \
+  "asdl_exec_shassignment_var_concat_semantics" \
+  'a=foo; x=${a}bar; echo "<$x>"' \
+  0 \
+  $'<foobar>\n'
+
+run_case \
   "asdl_exec_shassignment_cmdsub_status" \
   'x=$(exit 7); echo s:$?' \
   0 \
