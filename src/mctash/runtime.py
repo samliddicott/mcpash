@@ -1171,10 +1171,8 @@ class Runtime:
         if t == "command.ShFunction":
             name = str(node.get("name") or "")
             body = node.get("body") or {"type": "command.CommandList", "children": []}
-            # Keep both registrations during migration: ASDL-native execution
-            # path and legacy function-table observability.
+            # Canonical function storage for parsed shell code.
             self.functions_asdl[name] = body
-            self.functions[name] = self._asdl_to_ast_list(body)
             return 0
         if t == "command.ForEach":
             names = node.get("iter_names") or [""]
@@ -1230,11 +1228,54 @@ class Runtime:
             argv = [keyword]
             arg = node.get("arg_word")
             if arg is not None:
-                argv.append(self._expand_asdl_word_scalar(arg))
+                argv.append(self._expand_asdl_word_scalar(arg, split_glob=False))
             return self._run_builtin(keyword, argv)
         if t == "command.ShAssignment":
-            # Reuse mature assignment semantics with explicit command type.
-            return self._exec_command(self._asdl_to_ast_command(node))
+            local_env = dict(self.env)
+            saved_env = self.env
+            assigned_names: set[str] = set()
+            redirects = [self._asdl_to_ast_redirect(r) for r in (node.get("redirects") or [])]
+            try:
+                self.env = local_env
+                for pair in (node.get("pairs") or []):
+                    name = str(pair.get("name", ""))
+                    op = str(pair.get("op", "="))
+                    rhs = pair.get("rhs") or {}
+                    word = rhs.get("word") if isinstance(rhs, dict) else {}
+                    if name in self.readonly_vars:
+                        print(self._format_error(f"{name}: is read only", line=self.current_line), file=sys.stderr)
+                        raise SystemExit(2)
+                    value = self._expand_asdl_word_scalar(word if isinstance(word, dict) else {}, split_glob=False)
+                    assigned_names.add(name)
+                    if name in self._py_ties:
+                        if op == "+=":
+                            self._assign_shell_var(name, self._get_var(name) + value)
+                        else:
+                            self._assign_shell_var(name, value)
+                        local_env[name] = self._get_var(name)
+                        continue
+                    if op == "+=":
+                        local_env[name] = local_env.get(name, "") + value
+                    else:
+                        local_env[name] = value
+                if redirects:
+                    with self._redirected_fds(redirects):
+                        pass
+            except RuntimeError as e:
+                print(str(e), file=sys.stderr)
+                return 1
+            finally:
+                self.env = saved_env
+            for n in assigned_names:
+                self._typed_vars.pop(n, None)
+            self.env.update(local_env)
+            for tied_name in self._py_ties:
+                self.env[tied_name] = self._get_var(tied_name)
+            if self._cmd_sub_used:
+                status = self._cmd_sub_status
+                self._cmd_sub_used = False
+                return status
+            return 0
         raise RuntimeError(f"unsupported ASDL command node {t}")
 
     def _exec_asdl_command_list(self, children: list[dict[str, Any]]) -> int:
