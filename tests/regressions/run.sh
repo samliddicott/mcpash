@@ -645,7 +645,7 @@ run_case \
   $'m\n'
 
 run_case \
-  "asdl_exec_shassignment_native_word" \
+  "asdl_exec_shassignment_word_semantics" \
   'x="a b"; y=$x; echo "<$y>"' \
   0 \
   $'<a b>\n'

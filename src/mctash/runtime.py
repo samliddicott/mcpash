@@ -1182,7 +1182,7 @@ class Runtime:
             if explicit_in:
                 items: list[str] = []
                 for w in (iterable.get("words") or []):
-                    items.extend(self._expand_asdl_word_fields(w))
+                    items.extend(self._expand_argv([Word(self._asdl_word_to_text(w))]))
             else:
                 items = list(self.positional)
             body = self._asdl_do_group_children(node.get("body") or {})
@@ -1208,15 +1208,12 @@ class Runtime:
         if t == "command.Case":
             to_match = node.get("to_match") or {}
             value_word = to_match.get("word") if isinstance(to_match, dict) else {}
-            value = self._expand_asdl_word_scalar(value_word or {}, split_glob=False)
+            value = self._expand_assignment_word(self._asdl_word_to_text(value_word or {}))
             for arm in (node.get("arms") or []):
                 pat = arm.get("pattern") or {}
                 matched = False
                 for pw in (pat.get("words") or []):
-                    pattern = self._pattern_from_word(
-                        self._expand_asdl_word_scalar(pw, split_glob=False),
-                        for_case=True,
-                    )
+                    pattern = self._pattern_from_word(self._asdl_word_to_text(pw), for_case=True)
                     if fnmatch.fnmatchcase(value, pattern):
                         matched = True
                         break
@@ -1231,51 +1228,9 @@ class Runtime:
                 argv.append(self._expand_asdl_word_scalar(arg, split_glob=False))
             return self._run_builtin(keyword, argv)
         if t == "command.ShAssignment":
-            local_env = dict(self.env)
-            saved_env = self.env
-            assigned_names: set[str] = set()
-            redirects = [self._asdl_to_ast_redirect(r) for r in (node.get("redirects") or [])]
-            try:
-                self.env = local_env
-                for pair in (node.get("pairs") or []):
-                    name = str(pair.get("name", ""))
-                    op = str(pair.get("op", "="))
-                    rhs = pair.get("rhs") or {}
-                    word = rhs.get("word") if isinstance(rhs, dict) else {}
-                    if name in self.readonly_vars:
-                        print(self._format_error(f"{name}: is read only", line=self.current_line), file=sys.stderr)
-                        raise SystemExit(2)
-                    value = self._expand_asdl_word_scalar(word if isinstance(word, dict) else {}, split_glob=False)
-                    assigned_names.add(name)
-                    if name in self._py_ties:
-                        if op == "+=":
-                            self._assign_shell_var(name, self._get_var(name) + value)
-                        else:
-                            self._assign_shell_var(name, value)
-                        local_env[name] = self._get_var(name)
-                        continue
-                    if op == "+=":
-                        local_env[name] = local_env.get(name, "") + value
-                    else:
-                        local_env[name] = value
-                if redirects:
-                    with self._redirected_fds(redirects):
-                        pass
-            except RuntimeError as e:
-                print(str(e), file=sys.stderr)
-                return 1
-            finally:
-                self.env = saved_env
-            for n in assigned_names:
-                self._typed_vars.pop(n, None)
-            self.env.update(local_env)
-            for tied_name in self._py_ties:
-                self.env[tied_name] = self._get_var(tied_name)
-            if self._cmd_sub_used:
-                status = self._cmd_sub_status
-                self._cmd_sub_used = False
-                return status
-            return 0
+            # Reuse mature assignment semantics until native ASDL assignment
+            # execution reaches full BusyBox parity.
+            return self._exec_command(self._asdl_to_ast_command(node))
         raise RuntimeError(f"unsupported ASDL command node {t}")
 
     def _exec_asdl_command_list(self, children: list[dict[str, Any]]) -> int:
