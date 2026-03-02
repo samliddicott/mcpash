@@ -106,6 +106,22 @@ Benefit:
 
 - major reduction of translation layers in the hot execution path, with tighter semantics control and clearer future migration to fully native OSH nodes.
 
+### 2026-03-02: Native ASDL for/case word-execution and unified function lookup (`1bf6081`, `34d848a`, `5f12724`)
+
+ASDL `ForEach` and `Case` execution moved further toward native behavior by evaluating words through ASDL word-part expansion helpers instead of routing those paths through internal AST conversion. Function lookup/visibility checks were unified across the ASDL and legacy function tables, and targeted regressions were added for the new ASDL word execution paths.
+
+Intent:
+
+- continue reducing reliance on compatibility conversions in command execution.
+- make ASDL word semantics active in real control-flow surfaces, not just mapping artifacts.
+- stabilize migration by keeping function behavior consistent while both tables exist.
+
+Benefit:
+
+- tighter ASDL-driven runtime behavior for loop/case word semantics.
+- fewer hidden divergences between ASDL and legacy execution paths.
+- better safety net through explicit ASDL-word regression coverage.
+
 ## How ASDL Is Used Now
 
 ### Parse contract
@@ -128,6 +144,8 @@ Recent migration detail (2026-03-02):
 - command-node dispatch is now explicit in ASDL executor code (no generic fallback branch in `_exec_asdl_command()`).
 - function definitions are registered in both legacy and ASDL-native function tables to support migration-safe execution.
 - controlflow command arguments on the ASDL path are covered by dedicated regressions in `tests/regressions/run.sh`.
+- ASDL-native word expansion now drives `for` and `case` execution paths.
+- function presence/listing checks use unified lookup across both function tables.
 
 Primary call sites:
 
