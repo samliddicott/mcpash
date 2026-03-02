@@ -122,6 +122,22 @@ Benefit:
 - fewer hidden divergences between ASDL and legacy execution paths.
 - better safety net through explicit ASDL-word regression coverage.
 
+### 2026-03-02: Native command-node execution expansion with parity-safe pipeline fallback (`328df7b`, `7b11358`)
+
+ASDL execution moved further into runtime command dispatch for `command.Simple`, `command.Subshell`, `command.Sentence` background handling, and `command.ShAssignment`. During this step, multi-command pipelines were intentionally kept on the mature compatibility path to preserve ash/BusyBox semantics while the native pipeline stage model is hardened. Braced parameter argument words also moved from text round-trip to native ASDL word expansion.
+
+Intent:
+
+- advance direct ASDL execution where behavior is stable and test-backed.
+- keep pipeline semantics parity-safe while avoiding regressions in environment and redirection behavior.
+- reduce text-reparse dependencies incrementally in word expansion.
+
+Benefit:
+
+- larger command-surface area now runs directly on ASDL nodes.
+- preserved conformance stability for known-sensitive pipeline semantics.
+- concrete progress toward native word-part execution with lower conversion overhead.
+
 ## How ASDL Is Used Now
 
 ### Parse contract
@@ -144,7 +160,7 @@ Recent migration detail (2026-03-02):
 - command-node dispatch is now explicit in ASDL executor code (no generic fallback branch in `_exec_asdl_command()`).
 - function definitions are registered in both legacy and ASDL-native function tables to support migration-safe execution.
 - controlflow command arguments on the ASDL path are covered by dedicated regressions in `tests/regressions/run.sh`.
-- ASDL-native word expansion now drives `for` and `case` execution paths.
+- ASDL-native word expansion is active in selected paths, with additional loop/case normalization still in progress.
 - function presence/listing checks use unified lookup across both function tables.
 
 Primary call sites:

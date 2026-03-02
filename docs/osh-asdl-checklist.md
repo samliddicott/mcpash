@@ -15,8 +15,8 @@ Adopted canonical files:
 
 1. Parse source -> LST (`src/mctash/parser.py`)
 2. LST -> OSH-shaped ASDL mapping (`src/mctash/asdl_map.py`, strict mode)
-3. OSH-shaped ASDL -> runtime AST adapter (`src/mctash/osh_adapter.py`)
-4. Execute via existing interpreter (`src/mctash/runtime.py`)
+3. Execute command lists directly from OSH-shaped ASDL in runtime (`src/mctash/runtime.py`)
+4. Use legacy AST compatibility only where explicit fallback remains (`src/mctash/runtime.py`)
 
 This makes OSH-shaped ASDL the mandatory intermediate representation in execution paths.
 
@@ -46,6 +46,6 @@ This makes OSH-shaped ASDL the mandatory intermediate representation in executio
 ## Remaining gaps to full native OSH adoption
 
 - Replace dict-based mapping with generated typed nodes from OSH ASDL.
-- Remove adapter back to legacy runtime AST; execute OSH nodes directly.
+- Remove remaining runtime AST compatibility fallbacks (notably multi-command pipeline path).
 - Complete missing word_part and redirection variants from OSH syntax.
 - Expand grammar coverage until strict mapping never encounters unsupported variants for target corpus.
