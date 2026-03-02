@@ -2259,8 +2259,13 @@ class Runtime:
             )
             return self._normalize_asdl_expanded_values(val), quoted_context
         if t == "word_part.CommandSub":
+            child = node.get("child")
+            syntax = str(node.get("syntax") or "dollar")
+            backtick = syntax == "backtick"
+            if isinstance(child, dict) and child.get("type") == "command.CommandList":
+                return [self._expand_command_subst_asdl(child, backtick=backtick)], quoted_context
             src = str(node.get("child_source") or "")
-            return [self._expand_command_subst_text(src, quoted_context)], quoted_context
+            return [self._expand_command_subst_text(src, backtick=backtick)], quoted_context
         if t == "word_part.ArithSub":
             expr = str(node.get("expr_source") or node.get("code") or "")
             return [self._expand_arith(expr)], quoted_context
@@ -4879,6 +4884,14 @@ class Runtime:
         self._cmd_sub_status = status
         return output.rstrip("\n")
 
+    def _expand_command_subst_asdl(self, child: dict[str, Any], backtick: bool = False) -> str:
+        output, status, hard_error = self._capture_eval_asdl(child, line_bias=(-1 if backtick else 0))
+        if hard_error and status != 0:
+            raise CommandSubstFailure(status)
+        self._cmd_sub_used = True
+        self._cmd_sub_status = status
+        return output.rstrip("\n")
+
     def _expand_arith(self, expr: str, context: str | None = None) -> str:
         joined = expr
         try:
@@ -6922,6 +6935,55 @@ class Runtime:
         data = tmp.read()
         tmp.close()
         return data.decode("utf-8", errors="ignore"), status, self._last_eval_hard_error
+
+    def _capture_eval_asdl(
+        self,
+        child: dict[str, Any],
+        line_bias: int = 0,
+        frame_kind: str = "command_subst",
+    ) -> tuple[str, int, bool]:
+        tmp = tempfile.TemporaryFile()
+        try:
+            sys.stdout.flush()
+        except Exception:
+            pass
+        saved_stdout = os.dup(1)
+        os.dup2(tmp.fileno(), 1)
+        py_stdout = os.fdopen(os.dup(1), "w", encoding="utf-8", errors="surrogateescape", buffering=1)
+        saved_py_stdout = sys.stdout
+        sys.stdout = py_stdout
+        saved_line = self.current_line
+        saved_offset = self._line_offset
+        base = (self.current_line or 1) + line_bias
+        self._line_offset = saved_offset + (base - 1)
+        hard_error = False
+        try:
+            with self._push_frame(kind=frame_kind):
+                status = self._exec_asdl_command_list(child.get("children") or [])
+        except SystemExit as e:
+            status = int(e.code) if e.code is not None else 0
+        except RuntimeError as e:
+            print(str(e), file=sys.stderr)
+            status = 1
+            hard_error = True
+        finally:
+            try:
+                sys.stdout.flush()
+            except Exception:
+                pass
+            sys.stdout = saved_py_stdout
+            try:
+                py_stdout.close()
+            except Exception:
+                pass
+            self.current_line = saved_line
+            self._line_offset = saved_offset
+            os.dup2(saved_stdout, 1)
+            os.close(saved_stdout)
+        tmp.seek(0)
+        data = tmp.read()
+        tmp.close()
+        return data.decode("utf-8", errors="ignore"), status, hard_error
 
     def _normalize_parse_error(self, msg: str) -> tuple[str, int | None]:
         if msg.startswith("expected then at "):
