@@ -620,6 +620,18 @@ run_case \
   0 \
   $'w:2\nu:4\n'
 
+run_case \
+  "asdl_exec_controlflow_break_arg" \
+  'for i in 1 2 3; do break 1; echo never; done; echo ok' \
+  0 \
+  $'ok\n'
+
+run_case \
+  "asdl_exec_controlflow_return_arg" \
+  'f(){ return 7; }; f; echo s:$?' \
+  0 \
+  $'s:7\n'
+
 printf '[PASS] asdl executor-path regressions\n'
 
 # Diagnostic formatting checks.
