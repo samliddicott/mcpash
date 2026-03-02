@@ -9,7 +9,7 @@ from typing import Dict, List, Tuple
 
 from .parser import ParseError, Parser
 from .asdl_map import AsdlMappingError, lst_list_item_to_asdl, lst_script_to_asdl
-from .osh_adapter import OshAdapterError, asdl_item_to_list_item
+from .osh_adapter import OshAdapterError
 from .runtime import BreakLoop, ContinueLoop, Runtime, RuntimeError
 
 VALID_STARTUP_OPTION_LETTERS = set("aCefnuvxIimqVEbpsl")
@@ -63,7 +63,7 @@ def main(argv: List[str] | None = None) -> int:
                 if parser_impl.last_lst_item is None:
                     raise ParseError("internal parse error: missing LST list item")
                 asdl_item = lst_list_item_to_asdl(parser_impl.last_lst_item, strict=True)
-                rt.last_status = rt._exec_list_item(asdl_item_to_list_item(asdl_item))
+                rt.last_status = rt._exec_asdl_list_item(asdl_item)
                 if rt.last_status != 0:
                     rt.last_nonzero_status = rt.last_status
                 rt._trap_status_hint = rt.last_status
@@ -160,7 +160,7 @@ def main(argv: List[str] | None = None) -> int:
             if parser_impl.last_lst_item is None:
                 raise ParseError("internal parse error: missing LST list item")
             asdl_item = lst_list_item_to_asdl(parser_impl.last_lst_item, strict=True)
-            rt.last_status = rt._exec_list_item(asdl_item_to_list_item(asdl_item))
+            rt.last_status = rt._exec_asdl_list_item(asdl_item)
             if rt.last_status != 0:
                 rt.last_nonzero_status = rt.last_status
             rt._trap_status_hint = rt.last_status

@@ -2071,7 +2071,7 @@ class Runtime:
                     if parser_impl.last_lst_item is None:
                         raise ParseError("internal parse error: missing LST list item")
                     asdl_item = lst_list_item_to_asdl(parser_impl.last_lst_item, strict=True)
-                    status = self._exec_list_item(asdl_item_to_list_item(asdl_item))
+                    status = self._exec_asdl_list_item(asdl_item)
                     self.last_status = status
                     if status != 0:
                         self.last_nonzero_status = status
@@ -5532,7 +5532,7 @@ class Runtime:
                 if parser_impl.last_lst_item is None:
                     raise ParseError("internal parse error: missing LST list item")
                 asdl_item = lst_list_item_to_asdl(parser_impl.last_lst_item, strict=True)
-                status = self._exec_list_item(asdl_item_to_list_item(asdl_item))
+                status = self._exec_asdl_list_item(asdl_item)
                 self.last_status = status
                 if status != 0:
                     self.last_nonzero_status = status
