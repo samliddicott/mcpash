@@ -1728,8 +1728,32 @@ class Runtime:
         return 0
 
     def _expand_asdl_simple_argv(self, node: dict[str, Any]) -> list[str]:
-        words = [Word(self._asdl_word_to_text(w)) for w in (node.get("words") or [])]
-        return self._expand_argv(words)
+        words = node.get("words") or []
+        if words and all(self._asdl_word_can_expand_argv_natively_safe(w) for w in words):
+            out: list[str] = []
+            for w in words:
+                out.extend(self._expand_asdl_word_fields(w, split_glob=True))
+            return out
+        legacy_words = [Word(self._asdl_word_to_text(w)) for w in words]
+        return self._expand_argv(legacy_words)
+
+    def _asdl_word_can_expand_argv_natively_safe(self, word: dict[str, Any]) -> bool:
+        if not isinstance(word, dict) or word.get("type") != "word.Compound":
+            return False
+        parts = word.get("parts") or []
+        if not parts:
+            return True
+        for p in parts:
+            if not isinstance(p, dict) or p.get("type") != "word_part.Literal":
+                return False
+            lit = str(p.get("tval", ""))
+            # Keep any expansion-like or quote/escape-sensitive text on the
+            # legacy argv path for parity.
+            if any(ch in lit for ch in ["$", "`", "\\", "'", '"']):
+                return False
+            if "<(" in lit or ">(" in lit:
+                return False
+        return True
 
     def _exec_asdl_simple_command(self, node: dict[str, Any]) -> int:
         line = self._asdl_command_line(node)
