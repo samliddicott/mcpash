@@ -2244,6 +2244,8 @@ class Runtime:
                 if "\\" in lit or "'" in lit or '"' in lit:
                     return False
                 continue
+            if t == "word_part.SingleQuoted":
+                continue
             if t == "word_part.ArithSub":
                 # Arithmetic substitution is scalar in assignment context and
                 # does not require field splitting/pathname expansion.
