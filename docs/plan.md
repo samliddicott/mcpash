@@ -167,6 +167,10 @@ Current progress (2026-03-02):
 3. Double-quoted backslash/parameter parity for global argv-word native path: `pending` (legacy path retained to preserve ash/POSIX behavior)
 4. Structured command substitution execution: `partial` (uses `word_part.CommandSub.child` when available; text fallback retained)
 
+Step-2 note:
+1. A guarded argv-native attempt (literal-only words) was evaluated and rolled back after ash-vars regressions.
+2. Current conclusion: global argv-native rollout needs stronger word-part fidelity guarantees before reattempt.
+
 ## Conformance Snapshot
 - Current conformance status matrix: `docs/conformance-matrix.md`
 - POSIX requirement-to-test trace table: `docs/posix-trace-table.md`
