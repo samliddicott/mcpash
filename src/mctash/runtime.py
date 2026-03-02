@@ -1125,7 +1125,7 @@ class Runtime:
                 self.env = cmd_env
                 for assign in (cmd.get("more_env") or []):
                     name = str(assign.get("name") or "")
-                    value = self._expand_assignment_word(self._asdl_rhs_word_to_text(assign.get("val") or {}))
+                    value = self._expand_asdl_rhs_assignment(assign.get("val") or {})
                     cmd_env[name] = value
             finally:
                 self.env = saved_env
@@ -1306,7 +1306,7 @@ class Runtime:
                     op = str(pair.get("op", "="))
                     rhs = pair.get("rhs") or {}
                     try:
-                        value = self._expand_assignment_word(self._asdl_rhs_word_to_text(rhs))
+                        value = self._expand_asdl_rhs_assignment(rhs)
                     except CommandSubstFailure as e:
                         return e.code
                     except ArithExpansionFailure as e:
@@ -1620,7 +1620,7 @@ class Runtime:
                                 cmd_env[k] = v
                     for assign in (cmd.get("more_env") or []):
                         name = str(assign.get("name") or "")
-                        value = self._expand_assignment_word(self._asdl_rhs_word_to_text(assign.get("val") or {}))
+                        value = self._expand_asdl_rhs_assignment(assign.get("val") or {})
                         cmd_env[name] = value
                     redirects = [self._asdl_to_redirect(r) for r in (cmd.get("redirects") or [])]
                     job_id = self._next_job_id
@@ -1760,7 +1760,7 @@ class Runtime:
                 self._apply_persistent_redirects(redirects)
                 for assign in assign_pairs:
                     try:
-                        value = self._expand_assignment_word(self._asdl_rhs_word_to_text(assign.get("val") or {}))
+                        value = self._expand_asdl_rhs_assignment(assign.get("val") or {})
                     except CommandSubstFailure as e:
                         return e.code
                     except ArithExpansionFailure as e:
@@ -1795,7 +1795,7 @@ class Runtime:
             self.env = local_env
             for assign in assign_pairs:
                 try:
-                    value = self._expand_assignment_word(self._asdl_rhs_word_to_text(assign.get("val") or {}))
+                    value = self._expand_asdl_rhs_assignment(assign.get("val") or {})
                 except CommandSubstFailure as e:
                     return e.code
                 except ArithExpansionFailure as e:
@@ -2122,6 +2122,13 @@ class Runtime:
             return ""
         if node.get("type") == "rhs_word.Compound":
             return self._asdl_word_to_text(node.get("word") or {})
+        return ""
+
+    def _expand_asdl_rhs_assignment(self, node: dict[str, Any] | None) -> str:
+        if not node:
+            return ""
+        if node.get("type") == "rhs_word.Compound":
+            return self._expand_assignment_word(self._asdl_word_to_text(node.get("word") or {}))
         return ""
 
     def _expand_asdl_word_scalar(self, node: dict[str, Any], split_glob: bool = True) -> str:
