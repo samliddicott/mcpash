@@ -1171,6 +1171,7 @@ class Runtime:
             return self._exec_asdl_simple_command(node)
         if t == "command.Redirect":
             child = node.get("child") or {}
+            self._validate_asdl_redirect_words(node.get("redirects") or [])
             redirects = [self._asdl_to_redirect(r) for r in (node.get("redirects") or [])]
             with self._redirected_fds(redirects):
                 return self._exec_asdl_command(child)
@@ -1247,6 +1248,8 @@ class Runtime:
             iterable = node.get("iterable") or {}
             explicit_in = bool(node.get("explicit_in", False))
             if explicit_in:
+                for w in (iterable.get("words") or []):
+                    self._validate_asdl_word_bad_subst(w)
                 items: list[str] = []
                 for w in (iterable.get("words") or []):
                     items.extend(self._expand_argv([Word(self._asdl_word_to_text(w))]))
@@ -1275,11 +1278,14 @@ class Runtime:
         if t == "command.Case":
             to_match = node.get("to_match") or {}
             value_word = to_match.get("word") if isinstance(to_match, dict) else {}
+            if isinstance(value_word, dict):
+                self._validate_asdl_word_bad_subst(value_word)
             value = self._expand_assignment_word(self._asdl_word_to_text(value_word or {}))
             for arm in (node.get("arms") or []):
                 pat = arm.get("pattern") or {}
                 matched = False
                 for pw in (pat.get("words") or []):
+                    self._validate_asdl_word_bad_subst(pw)
                     pattern = self._pattern_from_word(self._asdl_word_to_text(pw), for_case=True)
                     if fnmatch.fnmatchcase(value, pattern):
                         matched = True
@@ -1292,9 +1298,13 @@ class Runtime:
             argv = [keyword]
             arg = node.get("arg_word")
             if arg is not None:
+                self._validate_asdl_word_bad_subst(arg)
                 argv.append(self._expand_asdl_word_scalar(arg, split_glob=False))
             return self._run_builtin(keyword, argv)
         if t == "command.ShAssignment":
+            for pair in (node.get("pairs") or []):
+                self._validate_asdl_rhs_bad_subst(pair.get("rhs"))
+            self._validate_asdl_redirect_words(node.get("redirects") or [])
             local_env = dict(self.env)
             saved_env = self.env
             assigned_names: set[str] = set()
@@ -1761,6 +1771,7 @@ class Runtime:
             self.current_line = line
         redirects = [self._asdl_to_redirect(r) for r in (node.get("redirects") or [])]
         try:
+            self._validate_asdl_simple_like_words(node)
             argv = self._expand_asdl_simple_argv(node)
         except RuntimeError as e:
             msg = str(e)
@@ -2216,6 +2227,62 @@ class Runtime:
             if "\\" in lit or "'" in lit or '"' in lit:
                 return False
         return True
+
+    def _validate_asdl_simple_like_words(self, node: dict[str, Any]) -> None:
+        for w in (node.get("words") or []):
+            self._validate_asdl_word_bad_subst(w)
+        for assign in (node.get("more_env") or []):
+            self._validate_asdl_rhs_bad_subst(assign.get("val"))
+        self._validate_asdl_redirect_words(node.get("redirects") or [])
+
+    def _validate_asdl_rhs_bad_subst(self, rhs: Any) -> None:
+        if not isinstance(rhs, dict):
+            return
+        if rhs.get("type") != "rhs_word.Compound":
+            return
+        self._validate_asdl_word_bad_subst(rhs.get("word"))
+
+    def _validate_asdl_redirect_words(self, redirects: Any) -> None:
+        if not isinstance(redirects, list):
+            return
+        for r in redirects:
+            if not isinstance(r, dict):
+                continue
+            arg = r.get("arg")
+            if not isinstance(arg, dict):
+                continue
+            arg_t = arg.get("type")
+            if arg_t == "redir_param.Path":
+                self._validate_asdl_word_bad_subst(arg.get("word"))
+                continue
+            if arg_t == "redir_param.HereDoc":
+                begin = arg.get("here_begin")
+                if isinstance(begin, dict):
+                    self._validate_asdl_word_bad_subst(begin)
+
+    def _validate_asdl_word_bad_subst(self, word: Any) -> None:
+        if not isinstance(word, dict) or word.get("type") != "word.Compound":
+            return
+        line = None
+        pos = word.get("pos")
+        if isinstance(pos, dict):
+            maybe_line = pos.get("line")
+            if isinstance(maybe_line, int):
+                line = maybe_line
+
+        def _raise_bad_subst() -> None:
+            raise RuntimeError(self._format_error("syntax error: bad substitution", line=line or self.current_line))
+
+        for part in (word.get("parts") or []):
+            if not isinstance(part, dict):
+                continue
+            if part.get("type") == "word_part.BracedVarSub" and part.get("op") == "__invalid__":
+                _raise_bad_subst()
+        # Catch malformed forms still represented as literal-only word parts.
+        text = self._asdl_word_to_text(word)
+        for parsed in parse_word_parts(text):
+            if parsed.kind == "BRACED" and parsed.op == "__invalid__":
+                _raise_bad_subst()
 
     def _expand_asdl_word_scalar(self, node: dict[str, Any], split_glob: bool = True) -> str:
         fields = self._expand_asdl_word_fields(node, split_glob=split_glob)
