@@ -43,6 +43,31 @@ This makes OSH-shaped ASDL the mandatory intermediate representation in executio
 - Strict mapper raises on fallback `command.NoOp`.
 - This prevents silently executing parser shapes that are not represented in OSH mapping.
 
+## Guarded Native Expansion Coverage (Current)
+
+Native (guarded) paths with parity evidence:
+
+- `argv`:
+  - literal-only words
+  - single-quoted parts
+  - safe scalar `$name` subset
+  - safe scalar `${name...}` subset
+- `case`:
+  - safe scalar value/pattern words (`Literal`, `SingleQuoted`, `SimpleVarSub`, constrained `BracedVarSub`)
+- `assignment rhs`:
+  - literal/single-quoted parts
+  - arithmetic and command substitution
+  - safe scalar braced-operator subset
+- `redirection target`:
+  - guarded native scalar path using ASDL `target_word` metadata
+  - fallback preserved for unsafe forms
+
+Guarded fallback remains required for:
+
+- `argv` words that can trigger nuanced IFS splitting/globbing/quote-removal differences
+- command/arithmetic/process-substitution forms in contexts where parity has not yet been proven
+- complex braced operators and mutation forms where ash behavior still needs side-by-side evidence
+
 ## Remaining gaps to full native OSH adoption
 
 - Replace dict-based mapping with generated typed nodes from OSH ASDL.

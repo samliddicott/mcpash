@@ -26,10 +26,14 @@ Primary input:
 | S3 | `redir_param.HereWord` decision | Planned | N/A | Likely out of ash scope (`<<<`), but should be explicitly documented as deferred/out-of-scope. |
 | S4 | arithmetic-expression variant mapping (`arith_expr.*`) | In Progress | `tests/regressions/run.sh` (`asdl_arith_expr_mapping`), `tests/busybox/ash_test/ash-arith/*.tests` | ASDL dump now emits structured nodes for core variants (`Word`, `VarSub`, `Unary`, `Binary`, `BinaryAssign`); remaining exotic forms still pending. |
 | S5 | boolean-expression variants (`bool_expr.*`) | Planned | `tests/busybox/ash_test/ash-quoting/*`, parsing tests | Depends on whether `[[ ... ]]` and extended tests remain in milestone scope. |
+| S6 | guarded native `case` value/pattern expansion subset | Done | `tests/regressions/run.sh` (`asdl_exec_case_native_word_expansion`), BusyBox `ash-quoting`, `ash-parsing` | Includes safe literal/single-quoted/simple-var/braced-var subset with legacy fallback for risky forms. |
+| S7 | guarded native redirect target expansion subset | Done | `tests/regressions/run.sh` (`bad_subst_redir_target_errors`), BusyBox `ash-vars`, `ash-psubst` | Redirect ASDL now carries `target_word`; process-subst and error parity preserved by fallback gates. |
+| S8 | guarded native `argv` simple/braced var scalar subset | Done | `tests/regressions/run.sh` (`asdl_argv_simple_var_*`, `asdl_argv_braced_*`), BusyBox `ash-vars`, `ash-quoting` | Runtime safety gates avoid IFS/glob-sensitive and empty/unset drifts. |
+| S9 | guarded native assignment rhs single-quoted widening | Done | `tests/regressions/run.sh` assignment rows, BusyBox `ash-vars` | Safe literal checker now accepts single-quoted parts in guarded rhs subset. |
 
 ## Next Slice
 
-- Continue S4 with:
-  1. extend mapping coverage for ternary/logical/shift operators
-  2. add targeted `ash-arith`/Oil arithmetic evidence rows per added operator
-  3. update coverage report only for variants with regression evidence
+- Next ASDL-native work queue:
+  1. double-quoted `argv` subset under strict parity guards
+  2. broader `case` braced-operator subset with explicit evidence rows
+  3. map remaining runtime `RuntimeError` catch points through unified status helper
