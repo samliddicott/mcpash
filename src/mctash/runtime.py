@@ -1048,9 +1048,7 @@ class Runtime:
             if not isinstance(child, dict):
                 raise RuntimeError("invalid ASDL sentence node")
             if term == "&":
-                # Keep existing background/process model behavior while the
-                # command executor migration is in progress.
-                return self._exec_list_item(self._asdl_to_ast_list_item(item))
+                return self._exec_asdl_background(child)
             return self._exec_asdl_list_item(child)
         if t != "command.AndOr":
             raise RuntimeError(f"invalid ASDL list item: {t}")
@@ -1090,8 +1088,8 @@ class Runtime:
         elif len(commands) == 1:
             status = self._exec_asdl_command(commands[0])
         else:
-            # Reuse existing mature pipeline behavior by converting command
-            # leaves to internal command nodes for now.
+            # Keep mature pipeline semantics while command-node migration
+            # proceeds (notably subshell-like environment behavior per stage).
             ast_commands = [self._asdl_to_ast_command(c) for c in commands]
             status = self._exec_pipeline(Pipeline(commands=ast_commands, negate=False))
         if negate:
@@ -1101,10 +1099,10 @@ class Runtime:
     def _exec_asdl_command(self, node: dict[str, Any]) -> int:
         t = node.get("type")
         if t == "command.Simple":
-            return self._exec_command(self._asdl_to_ast_command(node))
+            return self._exec_asdl_simple_command(node)
         if t == "command.Redirect":
             child = node.get("child") or {}
-            redirects = [self._asdl_to_ast_redirect(r) for r in (node.get("redirects") or [])]
+            redirects = [self._asdl_to_redirect(r) for r in (node.get("redirects") or [])]
             with self._redirected_fds(redirects):
                 return self._exec_asdl_command(child)
         if t == "command.BraceGroup":
@@ -1167,7 +1165,7 @@ class Runtime:
             finally:
                 self._loop_depth -= 1
         if t == "command.Subshell":
-            return self._run_subshell(self._asdl_to_ast_list(node.get("child") or {}))
+            return self._run_subshell_asdl(node.get("child") or {})
         if t == "command.ShFunction":
             name = str(node.get("name") or "")
             body = node.get("body") or {"type": "command.CommandList", "children": []}
@@ -1228,10 +1226,566 @@ class Runtime:
                 argv.append(self._expand_asdl_word_scalar(arg, split_glob=False))
             return self._run_builtin(keyword, argv)
         if t == "command.ShAssignment":
-            # Reuse mature assignment semantics until native ASDL assignment
-            # execution reaches full BusyBox parity.
-            return self._exec_command(self._asdl_to_ast_command(node))
+            local_env = dict(self.env)
+            saved_env = self.env
+            assigned_names: set[str] = set()
+            redirects = [self._asdl_to_redirect(r) for r in (node.get("redirects") or [])]
+            try:
+                self.env = local_env
+                for pair in (node.get("pairs") or []):
+                    name = str(pair.get("name", ""))
+                    op = str(pair.get("op", "="))
+                    rhs = pair.get("rhs") or {}
+                    value = self._expand_assignment_word(self._asdl_rhs_word_to_text(rhs))
+                    assigned_names.add(name)
+                    if name in self.readonly_vars:
+                        print(self._format_error(f"{name}: is read only", line=self.current_line), file=sys.stderr)
+                        raise SystemExit(2)
+                    if name in self._py_ties:
+                        if op == "+=":
+                            self._assign_shell_var(name, self._get_var(name) + value)
+                        else:
+                            self._assign_shell_var(name, value)
+                        local_env[name] = self._get_var(name)
+                        continue
+                    if op == "+=":
+                        local_env[name] = local_env.get(name, "") + value
+                    else:
+                        local_env[name] = value
+                if redirects:
+                    with self._redirected_fds(redirects):
+                        pass
+            except RuntimeError as e:
+                print(str(e), file=sys.stderr)
+                return 1
+            finally:
+                self.env = saved_env
+            for n in assigned_names:
+                self._typed_vars.pop(n, None)
+            self.env.update(local_env)
+            for tied_name in self._py_ties:
+                self.env[tied_name] = self._get_var(tied_name)
+            if self._cmd_sub_used:
+                status = self._cmd_sub_status
+                self._cmd_sub_used = False
+                return status
+            return 0
         raise RuntimeError(f"unsupported ASDL command node {t}")
+
+    def _exec_asdl_pipeline_inprocess(self, node: dict[str, Any]) -> int:
+        commands = node.get("children") or []
+        data: bytes | None = None
+        data_latency: float | None = None
+        if isinstance(sys.stdin, io.StringIO):
+            seed = sys.stdin.read()
+            data = seed.encode("utf-8", errors="surrogateescape")
+            if self._pipeline_input_latency is not None:
+                data_latency = self._pipeline_input_latency
+        statuses: list[int] = []
+        status = 0
+        for i, cmd in enumerate(commands):
+            last = i == len(commands) - 1
+            simple_cmd = self._asdl_pipeline_simple_command(cmd)
+            if last:
+                if simple_cmd is not None:
+                    argv = self._expand_argv(simple_cmd.argv)
+                    argv = self._expand_aliases(argv)
+                    saved_latency = self._pipeline_input_latency
+                    self._pipeline_input_latency = data_latency
+                    status, data, data_latency = self._exec_simple_capture(simple_cmd, argv, data, capture=False)
+                    self._pipeline_input_latency = saved_latency
+                else:
+                    saved_stdin = sys.stdin
+                    saved_latency = self._pipeline_input_latency
+                    try:
+                        if data is not None:
+                            sys.stdin = io.StringIO(data.decode("utf-8", errors="ignore"))
+                        self._pipeline_input_latency = data_latency
+                        try:
+                            status = self._exec_asdl_command(cmd)
+                        except SystemExit as e:
+                            status = int(e.code) if e.code is not None else 0
+                        except ReturnFromFunction as e:
+                            status = e.code
+                        except (BreakLoop, ContinueLoop):
+                            status = 1
+                    finally:
+                        sys.stdin = saved_stdin
+                        self._pipeline_input_latency = saved_latency
+                statuses.append(status)
+                data = None
+                data_latency = None
+                continue
+            sink_is_no_reader = False
+            if i + 1 < len(commands):
+                sink_is_no_reader = self._asdl_pipeline_sink_is_no_reader(commands[i + 1])
+            if simple_cmd is not None:
+                argv = self._expand_argv(simple_cmd.argv)
+                argv = self._expand_aliases(argv)
+                saved_latency = self._pipeline_input_latency
+                self._pipeline_input_latency = data_latency
+                status, data, data_latency = self._exec_simple_capture(
+                    simple_cmd, argv, data, capture=True
+                )
+                self._pipeline_input_latency = saved_latency
+            else:
+                status, data, data_latency = self._capture_asdl_command_output(
+                    cmd, data=data, force_epipe=sink_is_no_reader
+                )
+            statuses.append(status)
+        return self._pipeline_result(statuses if statuses else [status])
+
+    def _capture_asdl_command_output(
+        self, cmd: dict[str, Any], data: bytes | None = None, force_epipe: bool = False
+    ) -> tuple[int, bytes, float]:
+        start = time.monotonic()
+        tmp = tempfile.TemporaryFile()
+        try:
+            sys.stdout.flush()
+        except Exception:
+            pass
+        saved_stdout = os.dup(1)
+        saved_stdin = sys.stdin
+        os.dup2(tmp.fileno(), 1)
+        py_stdout = os.fdopen(os.dup(1), "w", encoding="utf-8", errors="surrogateescape", buffering=1)
+        saved_py_stdout = sys.stdout
+        sys.stdout = py_stdout
+        saved_epipe = self._force_broken_pipe
+        self._force_broken_pipe = force_epipe
+        try:
+            try:
+                if data is not None:
+                    sys.stdin = io.StringIO(data.decode("utf-8", errors="ignore"))
+                status = self._exec_asdl_command(cmd)
+            except SystemExit as e:
+                status = int(e.code) if e.code is not None else 0
+        finally:
+            try:
+                sys.stdout.flush()
+            except Exception:
+                pass
+            sys.stdout = saved_py_stdout
+            try:
+                py_stdout.close()
+            except Exception:
+                pass
+            sys.stdin = saved_stdin
+            self._force_broken_pipe = saved_epipe
+            os.dup2(saved_stdout, 1)
+            os.close(saved_stdout)
+        tmp.seek(0)
+        out = tmp.read()
+        tmp.close()
+        return status, out, time.monotonic() - start
+
+    def _asdl_pipeline_sink_is_no_reader(self, cmd: dict[str, Any]) -> bool:
+        if not isinstance(cmd, dict) or cmd.get("type") != "command.Simple":
+            return False
+        try:
+            argv = self._expand_asdl_simple_argv(cmd)
+            argv = self._expand_aliases(argv)
+        except Exception:
+            return False
+        return argv == ["true"]
+
+    def _asdl_pipeline_simple_command(self, node: dict[str, Any]) -> SimpleCommand | None:
+        if not isinstance(node, dict) or node.get("type") != "command.Simple":
+            return None
+        return SimpleCommand(
+            argv=[Word(self._asdl_word_to_text(w)) for w in (node.get("words") or [])],
+            assignments=[
+                Assignment(
+                    name=env_pair.get("name", ""),
+                    value=self._asdl_rhs_word_to_text(env_pair.get("val")),
+                    op="=",
+                )
+                for env_pair in (node.get("more_env") or [])
+            ],
+            redirects=[self._asdl_to_redirect(r) for r in (node.get("redirects") or [])],
+            line=self._asdl_command_line(node),
+        )
+
+    def _run_subshell_asdl(self, body: dict[str, Any]) -> int:
+        self._set_subshell_depth(self._get_subshell_depth() + 1)
+        saved_env = dict(self.env)
+        self.env = dict(self.env)
+        saved_local = [dict(s) for s in self.local_stack]
+        saved_positional = list(self.positional)
+        saved_cwd = os.getcwd()
+        saved_traps = dict(self.traps)
+        self.traps = {
+            k: v
+            for k, v in self.traps.items()
+            if k != "EXIT" and not (k in {"TERM", "WINCH"} and v != "")
+        }
+        try:
+            with self._push_frame(kind="subshell"):
+                try:
+                    status = self._exec_asdl_command_list(body.get("children") or [])
+                except SystemExit as e:
+                    status = int(e.code) if e.code is not None else 0
+                except (BreakLoop, ContinueLoop):
+                    status = 1
+                except ReturnFromFunction:
+                    status = 1
+                except RuntimeError as e:
+                    print(str(e), file=sys.stderr)
+                    status = 1
+            if status < 0:
+                sig_num = -status
+                sig_name = None
+                try:
+                    sig_name = signal.Signals(sig_num).name.replace("SIG", "")
+                except Exception:
+                    sig_name = None
+                if sig_name:
+                    action = self.traps.get(sig_name)
+                    if action:
+                        self._run_trap_action(action, 128 + sig_num)
+                        status = 0
+            if status != 0:
+                self.last_nonzero_status = status
+            self._trap_status_hint = status
+            return self._run_exit_trap(status)
+        finally:
+            self._set_subshell_depth(self._get_subshell_depth() - 1)
+            self.env = saved_env
+            self.local_stack = saved_local
+            self.positional = saved_positional
+            self.traps = saved_traps
+            try:
+                os.chdir(saved_cwd)
+            except OSError:
+                pass
+
+    def _exec_asdl_background(self, child: dict[str, Any]) -> int:
+        try:
+            cmd = child.get("children", [{}])[0].get("children", [{}])[0]
+            if (
+                isinstance(cmd, dict)
+                and child.get("type") == "command.AndOr"
+                and len(child.get("children") or []) == 1
+                and len(child.get("ops") or []) == 0
+                and cmd.get("type") == "command.Simple"
+            ):
+                argv = self._expand_asdl_simple_argv(cmd)
+                argv = self._expand_aliases(argv)
+                if argv and argv[0] not in self.BUILTINS and not self._has_function(argv[0]):
+                    cmd_env = dict(self.env)
+                    for scope in self.local_stack:
+                        for k, v in scope.items():
+                            if k in self.env:
+                                cmd_env[k] = v
+                    for assign in (cmd.get("more_env") or []):
+                        name = str(assign.get("name") or "")
+                        value = self._expand_assignment_word(self._asdl_rhs_word_to_text(assign.get("val") or {}))
+                        cmd_env[name] = value
+                    redirects = [self._asdl_to_redirect(r) for r in (cmd.get("redirects") or [])]
+                    job_id = self._next_job_id
+                    self._next_job_id += 1
+                    child_env = dict(cmd_env)
+                    path0 = argv[0]
+                    if os.path.isfile(path0):
+                        try:
+                            with open(path0, "rb") as f:
+                                head = f.read(2)
+                            if head == b"#!":
+                                child_env["MCTASH_COMM_NAME"] = os.path.basename(path0)
+                        except OSError:
+                            pass
+                    with self._redirected_fds(redirects):
+                        proc = subprocess.Popen(
+                            argv,
+                            env=child_env,
+                            start_new_session=True,
+                            preexec_fn=self._preexec_reset_signals,
+                        )
+
+                    def _watch_proc() -> None:
+                        try:
+                            self._bg_status[job_id] = proc.wait()
+                        finally:
+                            self._bg_pids.pop(job_id, None)
+
+                    th = threading.Thread(target=_watch_proc, daemon=True)
+                    self._bg_jobs[job_id] = th
+                    self._bg_pids[job_id] = proc.pid
+                    self._bg_pid_to_job[proc.pid] = job_id
+                    self._bg_started_at[job_id] = time.monotonic()
+                    self._last_bg_job = job_id
+                    self._last_bg_pid = proc.pid
+                    th.start()
+                    return 0
+        except Exception:
+            pass
+
+        job_id = self._next_job_id
+        self._next_job_id += 1
+        env_snapshot = dict(self.env)
+        local_snapshot = [dict(s) for s in self.local_stack]
+        positional_snapshot = list(self.positional)
+        functions_snapshot = dict(self.functions)
+        functions_asdl_snapshot = dict(self.functions_asdl)
+        aliases_snapshot = dict(self.aliases)
+        traps_snapshot = dict(self.traps)
+        options_snapshot = dict(self.options)
+        readonly_snapshot = set(self.readonly_vars)
+        source_stack_snapshot = list(self.source_stack)
+        script_name_snapshot = self.script_name
+        current_line_snapshot = self.current_line
+        parent_fd_baseline = self._snapshot_open_fds()
+
+        def _run_bg() -> None:
+            self._try_unshare_thread_state()
+            bg_rt = Runtime()
+            bg_rt.env = dict(env_snapshot)
+            bg_rt.local_stack = [dict(s) for s in local_snapshot]
+            bg_rt.positional = list(positional_snapshot)
+            bg_rt.functions = dict(functions_snapshot)
+            bg_rt.functions_asdl = dict(functions_asdl_snapshot)
+            bg_rt.aliases = dict(aliases_snapshot)
+            bg_rt.traps = dict(traps_snapshot)
+            bg_rt.options = dict(options_snapshot)
+            bg_rt.readonly_vars = set(readonly_snapshot)
+            bg_rt.source_stack = list(source_stack_snapshot)
+            bg_rt.script_name = script_name_snapshot
+            bg_rt.current_line = current_line_snapshot
+            bg_rt._bg_jobs = self._bg_jobs
+            bg_rt._bg_status = self._bg_status
+            bg_rt._bg_pids = self._bg_pids
+            bg_rt._bg_pid_to_job = self._bg_pid_to_job
+            bg_rt._bg_started_at = self._bg_started_at
+            bg_rt._last_bg_job = self._last_bg_job
+            bg_rt._last_bg_pid = self._last_bg_pid
+            bg_rt._shared_store_path = self._shared_store_path
+            bg_rt._shared_store = self._shared_store
+            bg_rt._thread_ctx.job_id = job_id
+            try:
+                status = bg_rt._run_subshell_asdl(
+                    {"type": "command.CommandList", "children": [{"type": "command.Sentence", "child": child}]}
+                )
+                self._bg_status[job_id] = status
+            finally:
+                bg_rt._close_tracked_fds_not_in(parent_fd_baseline)
+                self._bg_pids.pop(job_id, None)
+
+        thread = threading.Thread(target=_run_bg, daemon=True)
+        self._bg_jobs[job_id] = thread
+        self._bg_started_at[job_id] = time.monotonic()
+        self._last_bg_job = job_id
+        thread.start()
+        deadline = time.monotonic() + 0.1
+        while time.monotonic() < deadline:
+            pid = self._bg_pids.get(job_id)
+            if pid is not None:
+                self._last_bg_pid = pid
+                break
+            if not thread.is_alive():
+                break
+            time.sleep(0.001)
+        return 0
+
+    def _expand_asdl_simple_argv(self, node: dict[str, Any]) -> list[str]:
+        words = [Word(self._asdl_word_to_text(w)) for w in (node.get("words") or [])]
+        return self._expand_argv(words)
+
+    def _exec_asdl_simple_command(self, node: dict[str, Any]) -> int:
+        line = self._asdl_command_line(node)
+        if line is not None:
+            self.current_line = line
+        redirects = [self._asdl_to_redirect(r) for r in (node.get("redirects") or [])]
+        try:
+            argv = self._expand_asdl_simple_argv(node)
+        except RuntimeError as e:
+            msg = str(e)
+            print(msg, file=sys.stderr)
+            if "bad substitution" in msg or "unbound variable:" in msg:
+                raise SystemExit(2)
+            raise SystemExit(1)
+        except CommandSubstFailure as e:
+            return e.code
+        except ArithExpansionFailure as e:
+            raise SystemExit(e.code)
+        argv = self._expand_aliases(argv)
+        assign_pairs = node.get("more_env") or []
+
+        if argv and argv[0] == "exec" and len(argv) <= 1 and redirects:
+            local_env = dict(self.env)
+            saved_env = self.env
+            assigned_names: set[str] = set()
+            try:
+                self.env = local_env
+                self._apply_persistent_redirects(redirects)
+                for assign in assign_pairs:
+                    try:
+                        value = self._expand_assignment_word(self._asdl_rhs_word_to_text(assign.get("val") or {}))
+                    except CommandSubstFailure as e:
+                        return e.code
+                    except ArithExpansionFailure as e:
+                        raise SystemExit(e.code)
+                    name = str(assign.get("name") or "")
+                    assigned_names.add(name)
+                    if name in self.readonly_vars:
+                        print(self._format_error(f"{name}: is read only", line=self.current_line), file=sys.stderr)
+                        raise SystemExit(2)
+                    if name in self._py_ties:
+                        self._assign_shell_var(name, value)
+                        local_env[name] = self._get_var(name)
+                        continue
+                    local_env[name] = value
+                for n in assigned_names:
+                    self._typed_vars.pop(n, None)
+                saved_env.clear()
+                saved_env.update(self.env)
+                return 0
+            finally:
+                self.env = saved_env
+
+        local_env = dict(self.env)
+        saved_env = self.env
+        assigned_names: set[str] = set()
+        try:
+            self.env = local_env
+            for assign in assign_pairs:
+                try:
+                    value = self._expand_assignment_word(self._asdl_rhs_word_to_text(assign.get("val") or {}))
+                except CommandSubstFailure as e:
+                    return e.code
+                except ArithExpansionFailure as e:
+                    raise SystemExit(e.code)
+                name = str(assign.get("name") or "")
+                assigned_names.add(name)
+                if name in self.readonly_vars:
+                    print(self._format_error(f"{name}: is read only", line=self.current_line), file=sys.stderr)
+                    raise SystemExit(2)
+                if name in self._py_ties:
+                    self._assign_shell_var(name, value)
+                    local_env[name] = self._get_var(name)
+                    continue
+                local_env[name] = value
+                self.env = local_env
+        finally:
+            self.env = saved_env
+
+        if self.options.get("x", False):
+            trace_cmd = self._asdl_pipeline_simple_command(node)
+            if trace_cmd is not None:
+                self._trace_simple(trace_cmd, argv, local_env)
+
+        if not argv and redirects:
+            try:
+                with self._redirected_fds(redirects):
+                    pass
+            except RuntimeError as e:
+                print(str(e), file=sys.stderr)
+                return 1
+            for n in assigned_names:
+                self._typed_vars.pop(n, None)
+            self.env.update(local_env)
+            for tied_name in self._py_ties:
+                self.env[tied_name] = self._get_var(tied_name)
+            if self._cmd_sub_used:
+                status = self._cmd_sub_status
+                self._cmd_sub_used = False
+                return status
+            return 0
+        if not argv:
+            return 0
+
+        name = argv[0]
+        assign_names = {str(a.get("name") or "") for a in assign_pairs}
+        if self._has_function(name):
+            saved_env = dict(self.env)
+            try:
+                self.env = local_env
+                try:
+                    with self._redirected_fds(redirects):
+                        status = self._run_function(name, argv[1:])
+                except RuntimeError as e:
+                    print(str(e), file=sys.stderr)
+                    return 1
+            finally:
+                result_env = dict(self.env)
+                merged = dict(saved_env)
+                for k, v in result_env.items():
+                    if k not in assign_names:
+                        merged[k] = v
+                for k in list(merged.keys()):
+                    if k not in result_env and k not in assign_names:
+                        merged.pop(k, None)
+                for k in assign_names:
+                    if k in saved_env:
+                        merged[k] = saved_env[k]
+                    else:
+                        merged.pop(k, None)
+                self.env = merged
+            return status
+        if name in self.BUILTINS:
+            is_special = name in self.SPECIAL_BUILTINS
+            if is_special:
+                self.env = local_env
+                try:
+                    with self._redirected_fds(redirects):
+                        return self._run_builtin(name, argv)
+                except RuntimeError as e:
+                    print(str(e), file=sys.stderr)
+                    return 1
+            saved_env = self.env
+            try:
+                self.env = local_env
+                try:
+                    with self._redirected_fds(redirects):
+                        status = self._run_builtin(name, argv)
+                except RuntimeError as e:
+                    print(str(e), file=sys.stderr)
+                    return 1
+                if name in self.ENV_MUTATING_BUILTINS:
+                    result_env = dict(self.env)
+                    merged = dict(saved_env)
+                    for k, v in result_env.items():
+                        if k not in assign_names:
+                            merged[k] = v
+                    for k in list(merged.keys()):
+                        if k not in result_env and k not in assign_names:
+                            merged.pop(k, None)
+                    for k in assign_names:
+                        if k in saved_env:
+                            merged[k] = saved_env[k]
+                        else:
+                            merged.pop(k, None)
+                    saved_env.clear()
+                    saved_env.update(merged)
+                return status
+            finally:
+                self.env = saved_env
+        if name in self._py_callables:
+            saved_env = self.env
+            try:
+                self.env = local_env
+                try:
+                    with self._redirected_fds(redirects):
+                        result = self._invoke_py_callable(self._py_callables[name], argv[1:])
+                except RuntimeError as e:
+                    print(str(e), file=sys.stderr)
+                    return 1
+            except Exception as e:
+                print(f"{name}: {type(e).__name__}: {e}", file=sys.stderr)
+                return 1
+            finally:
+                self.env = saved_env
+            if result is not None:
+                print(self._py_to_shell(result))
+            return 0
+        try:
+            exec_env = dict(local_env)
+            for scope in self.local_stack:
+                for k, v in scope.items():
+                    if k in self.env:
+                        exec_env[k] = v
+            return self._run_external(argv, exec_env, redirects)
+        except RuntimeError as e:
+            print(str(e), file=sys.stderr)
+            return 1
 
     def _exec_asdl_command_list(self, children: list[dict[str, Any]]) -> int:
         status = 0
@@ -1380,7 +1934,7 @@ class Runtime:
     def _asdl_to_ast_action_list(self, action: list[dict[str, Any]]) -> ListNode:
         return ListNode(items=[self._asdl_to_ast_list_item(child) for child in action])
 
-    def _asdl_to_ast_redirect(self, node: dict[str, Any]) -> Redirect:
+    def _asdl_to_redirect(self, node: dict[str, Any]) -> Redirect:
         op_raw = node.get("op")
         op = self._asdl_token_text(op_raw)
         strip_tabs = op == "<<-"
@@ -1404,6 +1958,10 @@ class Runtime:
             )
         target_word = arg.get("word") or {}
         return Redirect(op=op or ">", target=self._asdl_word_to_text(target_word), fd=fd)
+
+    def _asdl_to_ast_redirect(self, node: dict[str, Any]) -> Redirect:
+        # Compatibility alias used by legacy AST-conversion helpers.
+        return self._asdl_to_redirect(node)
 
     def _asdl_do_group_children(self, node: dict[str, Any]) -> list[dict[str, Any]]:
         t = node.get("type")
