@@ -2031,7 +2031,11 @@ class Runtime:
             return self._normalize_asdl_expanded_values(val), quoted_context
         if t == "word_part.BracedVarSub":
             arg_node = node.get("arg")
-            arg_text = self._asdl_word_to_text(arg_node) if isinstance(arg_node, dict) else None
+            arg_text = (
+                self._expand_asdl_word_scalar(arg_node, split_glob=False)
+                if isinstance(arg_node, dict)
+                else None
+            )
             val = self._expand_braced_param(
                 str(node.get("name", "")),
                 node.get("op"),
