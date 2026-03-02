@@ -595,6 +595,7 @@ class Runtime:
             pass
         self.positional: List[str] = []
         self.functions: Dict[str, ListNode] = {}
+        self.functions_asdl: Dict[str, Dict[str, Any]] = {}
         self.aliases: Dict[str, str] = {}
         self.local_stack: List[Dict[str, str]] = []
         self.script_name: str = ""
@@ -970,6 +971,7 @@ class Runtime:
             local_snapshot = [dict(s) for s in self.local_stack]
             positional_snapshot = list(self.positional)
             functions_snapshot = dict(self.functions)
+            functions_asdl_snapshot = dict(self.functions_asdl)
             aliases_snapshot = dict(self.aliases)
             traps_snapshot = dict(self.traps)
             options_snapshot = dict(self.options)
@@ -989,6 +991,7 @@ class Runtime:
                 bg_rt.local_stack = [dict(s) for s in local_snapshot]
                 bg_rt.positional = list(positional_snapshot)
                 bg_rt.functions = dict(functions_snapshot)
+                bg_rt.functions_asdl = dict(functions_asdl_snapshot)
                 bg_rt.aliases = dict(aliases_snapshot)
                 bg_rt.traps = dict(traps_snapshot)
                 bg_rt.options = dict(options_snapshot)
@@ -1097,6 +1100,13 @@ class Runtime:
 
     def _exec_asdl_command(self, node: dict[str, Any]) -> int:
         t = node.get("type")
+        if t == "command.Simple":
+            return self._exec_command(self._asdl_to_ast_command(node))
+        if t == "command.Redirect":
+            child = node.get("child") or {}
+            redirects = [self._asdl_to_ast_redirect(r) for r in (node.get("redirects") or [])]
+            with self._redirected_fds(redirects):
+                return self._exec_asdl_command(child)
         if t == "command.BraceGroup":
             children = node.get("children") or []
             return self._exec_asdl_command_list(children)
@@ -1156,7 +1166,31 @@ class Runtime:
                 return last
             finally:
                 self._loop_depth -= 1
-        return self._exec_command(self._asdl_to_ast_command(node))
+        if t == "command.Subshell":
+            return self._run_subshell(self._asdl_to_ast_list(node.get("child") or {}))
+        if t == "command.ShFunction":
+            name = str(node.get("name") or "")
+            body = node.get("body") or {"type": "command.CommandList", "children": []}
+            # Keep both registrations during migration: ASDL-native execution
+            # path and legacy function-table observability.
+            self.functions_asdl[name] = body
+            self.functions[name] = self._asdl_to_ast_list(body)
+            return 0
+        if t == "command.ForEach":
+            return self._exec_command(self._asdl_to_ast_command(node))
+        if t == "command.Case":
+            return self._exec_command(self._asdl_to_ast_command(node))
+        if t == "command.ControlFlow":
+            keyword = self._asdl_token_text(node.get("keyword"))
+            argv = [keyword]
+            arg = node.get("arg_word")
+            if arg is not None:
+                argv.append(self._expand_asdl_word_scalar(arg))
+            return self._run_builtin(keyword, argv)
+        if t == "command.ShAssignment":
+            # Reuse mature assignment semantics with explicit command type.
+            return self._exec_command(self._asdl_to_ast_command(node))
+        raise RuntimeError(f"unsupported ASDL command node {t}")
 
     def _exec_asdl_command_list(self, children: list[dict[str, Any]]) -> int:
         status = 0
@@ -1330,12 +1364,96 @@ class Runtime:
         target_word = arg.get("word") or {}
         return Redirect(op=op or ">", target=self._asdl_word_to_text(target_word), fd=fd)
 
+    def _asdl_do_group_children(self, node: dict[str, Any]) -> list[dict[str, Any]]:
+        t = node.get("type")
+        if t == "command.DoGroup":
+            return node.get("children") or []
+        if t == "command.CommandList":
+            return node.get("children") or []
+        return []
+
     def _asdl_rhs_word_to_text(self, node: dict[str, Any] | None) -> str:
         if not node:
             return ""
         if node.get("type") == "rhs_word.Compound":
             return self._asdl_word_to_text(node.get("word") or {})
         return ""
+
+    def _expand_asdl_word_scalar(self, node: dict[str, Any]) -> str:
+        fields = self._expand_asdl_word_fields(node)
+        return fields[0] if fields else ""
+
+    def _expand_asdl_word_fields(self, node: dict[str, Any]) -> list[str]:
+        if not isinstance(node, dict) or node.get("type") != "word.Compound":
+            return []
+        parts = node.get("parts") or []
+        pieces: list[str] = [""]
+        any_quoted = False
+        for part in parts:
+            vals, quoted = self._expand_asdl_word_part_values(part, quoted_context=False)
+            any_quoted = any_quoted or quoted
+            if not vals:
+                vals = [""]
+            next_pieces: list[str] = []
+            for prefix in pieces:
+                for v in vals:
+                    next_pieces.append(prefix + v)
+            pieces = next_pieces
+        if any_quoted:
+            return pieces
+        out: list[str] = []
+        for frag in pieces:
+            split = self._split_ifs(frag)
+            for field in split:
+                out.extend(self._glob_field(field))
+        return [f for f in out if f != ""]
+
+    def _expand_asdl_word_part_values(self, node: dict[str, Any], quoted_context: bool) -> tuple[list[str], bool]:
+        t = node.get("type")
+        if t == "word_part.Literal":
+            return [str(node.get("tval", ""))], quoted_context
+        if t == "word_part.SingleQuoted":
+            return [str(node.get("sval", ""))], True
+        if t == "word_part.DoubleQuoted":
+            parts = node.get("parts") or []
+            pieces: list[str] = [""]
+            for p in parts:
+                vals, _ = self._expand_asdl_word_part_values(p, quoted_context=True)
+                if not vals:
+                    vals = [""]
+                next_pieces: list[str] = []
+                for prefix in pieces:
+                    for v in vals:
+                        next_pieces.append(prefix + v)
+                pieces = next_pieces
+            return pieces, True
+        if t == "word_part.SimpleVarSub":
+            val = self._expand_param(str(node.get("name", "")), quoted_context)
+            return self._normalize_asdl_expanded_values(val), quoted_context
+        if t == "word_part.BracedVarSub":
+            arg_node = node.get("arg")
+            arg_text = self._asdl_word_to_text(arg_node) if isinstance(arg_node, dict) else None
+            val = self._expand_braced_param(
+                str(node.get("name", "")),
+                node.get("op"),
+                arg_text,
+                quoted_context,
+            )
+            return self._normalize_asdl_expanded_values(val), quoted_context
+        if t == "word_part.CommandSub":
+            src = str(node.get("child_source") or "")
+            return [self._expand_command_subst_text(src, quoted_context)], quoted_context
+        if t == "word_part.ArithSub":
+            expr = str(node.get("expr_source") or node.get("code") or "")
+            return [self._expand_arith(expr)], quoted_context
+        return [""], quoted_context
+
+    def _normalize_asdl_expanded_values(self, value: Any) -> list[str]:
+        if isinstance(value, PresplitFields):
+            return [str(v) for v in value.fields]
+        if isinstance(value, list):
+            return [str(v) for v in value]
+        return ["" if value is None else str(value)]
 
     def _asdl_word_to_text(self, node: dict[str, Any]) -> str:
         if not isinstance(node, dict) or node.get("type") != "word.Compound":
@@ -2455,7 +2573,8 @@ class Runtime:
 
     def _run_function(self, name: str, args: List[str]) -> int:
         body = self.functions.get(name)
-        if body is None:
+        body_asdl = self.functions_asdl.get(name)
+        if body is None and body_asdl is None:
             return 127
         saved_positional = list(self.positional)
         self.set_positional_args(args)
@@ -2464,7 +2583,10 @@ class Runtime:
         status = 0
         try:
             with self._push_frame(kind="function", funcname=name):
-                status = self._exec_list(body)
+                if body_asdl is not None:
+                    status = self._exec_asdl_command_list(body_asdl.get("children") or [])
+                elif body is not None:
+                    status = self._exec_list(body)
         except ReturnFromFunction as e:
             status = e.code
         finally:
@@ -4589,6 +4711,7 @@ class Runtime:
                 continue
             if not mode_vars:
                 self.functions.pop(name, None)
+                self.functions_asdl.pop(name, None)
                 continue
             self._typed_vars.pop(name, None)
             removed_local = False
