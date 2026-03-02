@@ -1971,8 +1971,9 @@ class Runtime:
                     with self._redirected_fds(redirects):
                         pass
                 except RuntimeError as e:
-                    print(str(e), file=sys.stderr)
-                    return 1
+                    msg = str(e)
+                    print(msg, file=sys.stderr)
+                    return self._runtime_error_status(msg)
             for n in assigned_names:
                 self._typed_vars.pop(n, None)
             self.env.update(local_env)
@@ -1994,8 +1995,9 @@ class Runtime:
                     with self._redirected_fds(redirects):
                         status = self._run_function(name, argv[1:])
                 except RuntimeError as e:
-                    print(str(e), file=sys.stderr)
-                    return 1
+                    msg = str(e)
+                    print(msg, file=sys.stderr)
+                    return self._runtime_error_status(msg)
             finally:
                 result_env = dict(self.env)
                 merged = dict(saved_env)
@@ -2020,8 +2022,9 @@ class Runtime:
                     with self._redirected_fds(redirects):
                         return self._run_builtin(name, argv)
                 except RuntimeError as e:
-                    print(str(e), file=sys.stderr)
-                    return 1
+                    msg = str(e)
+                    print(msg, file=sys.stderr)
+                    return self._runtime_error_status(msg)
             saved_env = self.env
             try:
                 self.env = local_env
@@ -2029,8 +2032,9 @@ class Runtime:
                     with self._redirected_fds(redirects):
                         status = self._run_builtin(name, argv)
                 except RuntimeError as e:
-                    print(str(e), file=sys.stderr)
-                    return 1
+                    msg = str(e)
+                    print(msg, file=sys.stderr)
+                    return self._runtime_error_status(msg)
                 if name in self.ENV_MUTATING_BUILTINS:
                     result_env = dict(self.env)
                     merged = dict(saved_env)
@@ -2058,8 +2062,9 @@ class Runtime:
                     with self._redirected_fds(redirects):
                         result = self._invoke_py_callable(self._py_callables[name], argv[1:])
                 except RuntimeError as e:
-                    print(str(e), file=sys.stderr)
-                    return 1
+                    msg = str(e)
+                    print(msg, file=sys.stderr)
+                    return self._runtime_error_status(msg)
             except Exception as e:
                 print(f"{name}: {type(e).__name__}: {e}", file=sys.stderr)
                 return 1
@@ -2076,8 +2081,9 @@ class Runtime:
                         exec_env[k] = v
             return self._run_external(argv, exec_env, redirects)
         except RuntimeError as e:
-            print(str(e), file=sys.stderr)
-            return 1
+            msg = str(e)
+            print(msg, file=sys.stderr)
+            return self._runtime_error_status(msg)
 
     def _exec_asdl_command_list(self, children: list[dict[str, Any]]) -> int:
         status = 0
