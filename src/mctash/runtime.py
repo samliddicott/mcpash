@@ -1088,13 +1088,82 @@ class Runtime:
         elif len(commands) == 1:
             status = self._exec_asdl_command(commands[0])
         else:
-            # Keep mature pipeline semantics while command-node migration
-            # proceeds (notably subshell-like environment behavior per stage).
-            ast_commands = [self._asdl_to_ast_command(c) for c in commands]
-            status = self._exec_pipeline(Pipeline(commands=ast_commands, negate=False))
+            if self._asdl_pipeline_can_run_external(commands):
+                status = self._exec_asdl_pipeline_external(commands)
+            else:
+                status = self._exec_asdl_pipeline_inprocess(node)
         if negate:
             return 0 if status != 0 else 1
         return status
+
+    def _asdl_pipeline_can_run_external(self, commands: list[dict[str, Any]]) -> bool:
+        if isinstance(sys.stdin, io.StringIO):
+            return False
+        for cmd in commands:
+            if not isinstance(cmd, dict) or cmd.get("type") != "command.Simple":
+                return False
+            argv = self._expand_asdl_simple_argv(cmd)
+            if not argv:
+                return False
+            name = argv[0]
+            if name in self.BUILTINS or self._has_function(name):
+                return False
+        return True
+
+    def _exec_asdl_pipeline_external(self, commands: list[dict[str, Any]]) -> int:
+        procs: list[subprocess.Popen] = []
+        prev = None
+        statuses: list[int] = []
+        for i, cmd in enumerate(commands):
+            cmd_env = dict(self.env)
+            for scope in self.local_stack:
+                for k, v in scope.items():
+                    if k in self.env:
+                        cmd_env[k] = v
+            saved_env = self.env
+            try:
+                self.env = cmd_env
+                for assign in (cmd.get("more_env") or []):
+                    name = str(assign.get("name") or "")
+                    value = self._expand_assignment_word(self._asdl_rhs_word_to_text(assign.get("val") or {}))
+                    cmd_env[name] = value
+            finally:
+                self.env = saved_env
+            argv = self._expand_asdl_simple_argv(cmd)
+            stdin = prev.stdout if prev is not None else None
+            stdout = subprocess.PIPE if i < len(commands) - 1 else None
+            redirects = [self._asdl_to_redirect(r) for r in (cmd.get("redirects") or [])]
+            stdin, stdout, stderr, to_close = self._apply_redirects(redirects, stdin, stdout, None)
+            try:
+                proc = subprocess.Popen(
+                    argv,
+                    stdin=stdin,
+                    stdout=stdout,
+                    stderr=stderr,
+                    env=cmd_env,
+                    preexec_fn=self._preexec_reset_signals,
+                )
+            except FileNotFoundError:
+                print(f"{argv[0]}: not found", file=sys.stderr)
+                return 127
+            except OSError as e:
+                print(f"{argv[0]}: {e.strerror}", file=sys.stderr)
+                return 126
+            finally:
+                for f in to_close:
+                    try:
+                        f.close()
+                    except Exception:
+                        pass
+            procs.append(proc)
+            if prev is not None and prev.stdout is not None:
+                prev.stdout.close()
+            prev = proc
+        status = procs[-1].wait()
+        statuses.append(status)
+        for p in procs[:-1]:
+            statuses.insert(0, p.wait())
+        return self._pipeline_result(statuses)
 
     def _exec_asdl_command(self, node: dict[str, Any]) -> int:
         t = node.get("type")
@@ -1317,7 +1386,7 @@ class Runtime:
                             sys.stdin = io.StringIO(data.decode("utf-8", errors="ignore"))
                         self._pipeline_input_latency = data_latency
                         try:
-                            status = self._exec_asdl_command(cmd)
+                            status = self._exec_asdl_pipeline_stage_subshell(cmd)
                         except SystemExit as e:
                             status = int(e.code) if e.code is not None else 0
                         except ReturnFromFunction as e:
@@ -1371,7 +1440,7 @@ class Runtime:
             try:
                 if data is not None:
                     sys.stdin = io.StringIO(data.decode("utf-8", errors="ignore"))
-                status = self._exec_asdl_command(cmd)
+                status = self._exec_asdl_pipeline_stage_subshell(cmd)
             except SystemExit as e:
                 status = int(e.code) if e.code is not None else 0
         finally:
@@ -1393,15 +1462,68 @@ class Runtime:
         tmp.close()
         return status, out, time.monotonic() - start
 
+    def _exec_asdl_pipeline_stage_subshell(self, cmd: dict[str, Any]) -> int:
+        return self._run_subshell_asdl(
+            {
+                "type": "command.CommandList",
+                "children": [
+                    {
+                        "type": "command.AndOr",
+                        "children": [
+                            {
+                                "type": "command.Pipeline",
+                                "children": [cmd],
+                                "ops": [],
+                                "op_pos": [],
+                                "negated": False,
+                            }
+                        ],
+                        "ops": [],
+                    }
+                ],
+            }
+        )
+
     def _asdl_pipeline_sink_is_no_reader(self, cmd: dict[str, Any]) -> bool:
-        if not isinstance(cmd, dict) or cmd.get("type") != "command.Simple":
+        if not isinstance(cmd, dict):
             return False
-        try:
-            argv = self._expand_asdl_simple_argv(cmd)
-            argv = self._expand_aliases(argv)
-        except Exception:
-            return False
-        return argv == ["true"]
+        t = cmd.get("type")
+        if t == "command.Simple":
+            try:
+                argv = self._expand_asdl_simple_argv(cmd)
+                argv = self._expand_aliases(argv)
+            except Exception:
+                return False
+            return argv == ["true"]
+        if t == "command.BraceGroup":
+            children = cmd.get("children") or []
+            if len(children) != 1:
+                return False
+            item = children[0] if isinstance(children[0], dict) else {}
+            andor = item
+            if andor.get("type") == "command.Sentence":
+                andor = andor.get("child") if isinstance(andor.get("child"), dict) else {}
+            if andor.get("type") != "command.AndOr":
+                return False
+            pipes = andor.get("children") or []
+            if len(pipes) != 1:
+                return False
+            pipe = pipes[0] if isinstance(pipes[0], dict) else {}
+            if pipe.get("type") != "command.Pipeline":
+                return False
+            cmds = pipe.get("children") or []
+            if len(cmds) != 1:
+                return False
+            inner = cmds[0] if isinstance(cmds[0], dict) else {}
+            if inner.get("type") != "command.Simple":
+                return False
+            try:
+                argv = self._expand_asdl_simple_argv(inner)
+                argv = self._expand_aliases(argv)
+            except Exception:
+                return False
+            return argv == ["true"]
+        return False
 
     def _asdl_pipeline_simple_command(self, node: dict[str, Any]) -> SimpleCommand | None:
         if not isinstance(node, dict) or node.get("type") != "command.Simple":
@@ -2467,6 +2589,12 @@ class Runtime:
         name = argv[0]
         input_text = data.decode("utf-8", errors="ignore") if data is not None else None
         cmd_env = dict(self.env)
+        # Function-local variables should shadow exported globals for
+        # external commands in pipeline capture paths.
+        for scope in self.local_stack:
+            for k, v in scope.items():
+                if k in self.env:
+                    cmd_env[k] = v
         if cmd.assignments:
             saved_env = self.env
             try:
