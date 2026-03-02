@@ -2168,7 +2168,7 @@ class Runtime:
                 # assignment semantics for now.
                 name = str(p.get("name", ""))
                 op = p.get("op")
-                if self._is_valid_name(name) and (op is None or op == ""):
+                if self._is_valid_name(name) and (op is None or op == "" or op == "__len__"):
                     continue
                 return False
             # Any non-literal part stays on legacy assignment expansion for now.
