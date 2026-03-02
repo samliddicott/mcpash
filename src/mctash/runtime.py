@@ -1236,7 +1236,12 @@ class Runtime:
                     name = str(pair.get("name", ""))
                     op = str(pair.get("op", "="))
                     rhs = pair.get("rhs") or {}
-                    value = self._expand_assignment_word(self._asdl_rhs_word_to_text(rhs))
+                    try:
+                        value = self._expand_assignment_word(self._asdl_rhs_word_to_text(rhs))
+                    except CommandSubstFailure as e:
+                        return e.code
+                    except ArithExpansionFailure as e:
+                        raise SystemExit(e.code)
                     assigned_names.add(name)
                     if name in self.readonly_vars:
                         print(self._format_error(f"{name}: is read only", line=self.current_line), file=sys.stderr)
