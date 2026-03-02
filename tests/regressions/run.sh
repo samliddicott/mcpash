@@ -644,6 +644,18 @@ run_case \
   0 \
   $'m\n'
 
+run_case \
+  "asdl_exec_shassignment_native_word" \
+  'x="a b"; y=$x; echo "<$y>"' \
+  0 \
+  $'<a b>\n'
+
+run_case \
+  "asdl_exec_shassignment_cmdsub_status" \
+  'x=$(exit 7); echo s:$?' \
+  0 \
+  $'s:7\n'
+
 printf '[PASS] asdl executor-path regressions\n'
 
 # Diagnostic formatting checks.
