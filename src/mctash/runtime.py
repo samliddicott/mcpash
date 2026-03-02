@@ -1288,13 +1288,20 @@ class Runtime:
             value_word = to_match.get("word") if isinstance(to_match, dict) else {}
             if isinstance(value_word, dict):
                 self._validate_asdl_word_bad_subst(value_word)
-            value = self._expand_assignment_word(self._asdl_word_to_text(value_word or {}))
+            if self._asdl_word_can_expand_case_natively_safe(value_word or {}):
+                value = self._expand_asdl_word_scalar(value_word or {}, split_glob=False)
+            else:
+                value = self._expand_assignment_word(self._asdl_word_to_text(value_word or {}))
             for arm in (node.get("arms") or []):
                 pat = arm.get("pattern") or {}
                 matched = False
                 for pw in (pat.get("words") or []):
                     self._validate_asdl_word_bad_subst(pw)
-                    pattern = self._pattern_from_word(self._asdl_word_to_text(pw), for_case=True)
+                    if self._asdl_word_can_expand_case_natively_safe(pw):
+                        pattern_text = self._expand_asdl_word_scalar(pw, split_glob=False)
+                    else:
+                        pattern_text = self._asdl_word_to_text(pw)
+                    pattern = self._pattern_from_word(pattern_text, for_case=True)
                     if fnmatch.fnmatchcase(value, pattern):
                         matched = True
                         break
@@ -1773,6 +1780,38 @@ class Runtime:
                 return False
             if "<(" in lit or ">(" in lit:
                 return False
+        return True
+
+    def _asdl_word_can_expand_case_natively_safe(self, word: dict[str, Any]) -> bool:
+        if not isinstance(word, dict) or word.get("type") != "word.Compound":
+            return False
+        parts = word.get("parts") or []
+        if not parts:
+            return True
+        for p in parts:
+            if not isinstance(p, dict):
+                return False
+            t = p.get("type")
+            if t == "word_part.Literal":
+                lit = str(p.get("tval", ""))
+                # Keep quoting/escaping-sensitive literals on legacy path.
+                if any(ch in lit for ch in ["\\", "'", '"', "`"]):
+                    return False
+                continue
+            if t == "word_part.SimpleVarSub":
+                name = str(p.get("name", ""))
+                if self._is_valid_name(name):
+                    continue
+                return False
+            if t == "word_part.BracedVarSub":
+                name = str(p.get("name", ""))
+                op = p.get("op")
+                if op in {"__invalid__", ":substr", "/"}:
+                    return False
+                if self._is_valid_name(name):
+                    continue
+                return False
+            return False
         return True
 
     def _exec_asdl_simple_command(self, node: dict[str, Any]) -> int:
