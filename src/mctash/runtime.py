@@ -1177,9 +1177,54 @@ class Runtime:
             self.functions[name] = self._asdl_to_ast_list(body)
             return 0
         if t == "command.ForEach":
-            return self._exec_command(self._asdl_to_ast_command(node))
+            names = node.get("iter_names") or [""]
+            var_name = str(names[0] if names else "")
+            iterable = node.get("iterable") or {}
+            explicit_in = bool(node.get("explicit_in", False))
+            if explicit_in:
+                items: list[str] = []
+                for w in (iterable.get("words") or []):
+                    items.extend(self._expand_asdl_word_fields(w))
+            else:
+                items = list(self.positional)
+            body = self._asdl_do_group_children(node.get("body") or {})
+            status = 0
+            self._loop_depth += 1
+            try:
+                for item in items:
+                    self.env[var_name] = item
+                    try:
+                        status = self._exec_asdl_command_list(body)
+                        self._run_pending_traps()
+                    except ContinueLoop as e:
+                        if e.count > 1:
+                            raise ContinueLoop(e.count - 1)
+                        continue
+                    except BreakLoop as e:
+                        if e.count > 1:
+                            raise BreakLoop(e.count - 1)
+                        break
+                return status
+            finally:
+                self._loop_depth -= 1
         if t == "command.Case":
-            return self._exec_command(self._asdl_to_ast_command(node))
+            to_match = node.get("to_match") or {}
+            value_word = to_match.get("word") if isinstance(to_match, dict) else {}
+            value = self._expand_asdl_word_scalar(value_word or {}, split_glob=False)
+            for arm in (node.get("arms") or []):
+                pat = arm.get("pattern") or {}
+                matched = False
+                for pw in (pat.get("words") or []):
+                    pattern = self._pattern_from_word(
+                        self._expand_asdl_word_scalar(pw, split_glob=False),
+                        for_case=True,
+                    )
+                    if fnmatch.fnmatchcase(value, pattern):
+                        matched = True
+                        break
+                if matched:
+                    return self._exec_asdl_command_list(arm.get("action") or [])
+            return 0
         if t == "command.ControlFlow":
             keyword = self._asdl_token_text(node.get("keyword"))
             argv = [keyword]
@@ -1364,6 +1409,14 @@ class Runtime:
         target_word = arg.get("word") or {}
         return Redirect(op=op or ">", target=self._asdl_word_to_text(target_word), fd=fd)
 
+    def _asdl_do_group_children(self, node: dict[str, Any]) -> list[dict[str, Any]]:
+        t = node.get("type")
+        if t == "command.DoGroup":
+            return node.get("children") or []
+        if t == "command.CommandList":
+            return node.get("children") or []
+        return []
+
     def _asdl_rhs_word_to_text(self, node: dict[str, Any] | None) -> str:
         if not node:
             return ""
@@ -1371,11 +1424,11 @@ class Runtime:
             return self._asdl_word_to_text(node.get("word") or {})
         return ""
 
-    def _expand_asdl_word_scalar(self, node: dict[str, Any]) -> str:
-        fields = self._expand_asdl_word_fields(node)
+    def _expand_asdl_word_scalar(self, node: dict[str, Any], split_glob: bool = True) -> str:
+        fields = self._expand_asdl_word_fields(node, split_glob=split_glob)
         return fields[0] if fields else ""
 
-    def _expand_asdl_word_fields(self, node: dict[str, Any]) -> list[str]:
+    def _expand_asdl_word_fields(self, node: dict[str, Any], split_glob: bool = True) -> list[str]:
         if not isinstance(node, dict) or node.get("type") != "word.Compound":
             return []
         parts = node.get("parts") or []
@@ -1391,7 +1444,7 @@ class Runtime:
                 for v in vals:
                     next_pieces.append(prefix + v)
             pieces = next_pieces
-        if any_quoted:
+        if any_quoted or not split_glob:
             return pieces
         out: list[str] = []
         for frag in pieces:
@@ -2586,6 +2639,7 @@ class Runtime:
             self.local_stack.pop()
             self.set_positional_args(saved_positional)
         return status
+
 
     def add_history_entry(self, line: str) -> None:
         text = line.strip("\n")
