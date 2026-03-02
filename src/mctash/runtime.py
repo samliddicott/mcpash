@@ -1038,6 +1038,14 @@ class Runtime:
             return 0
         return self._exec_and_or(item.node)
 
+    def _exec_asdl_list_item(self, item: dict[str, Any]) -> int:
+        """Execute one ASDL-shaped list item.
+
+        Initial scaffold path keeps behavioral parity by adapting to the
+        existing internal AST executor while we migrate execution surfaces.
+        """
+        return self._exec_list_item(asdl_item_to_list_item(item))
+
     def _try_unshare_thread_state(self) -> None:
         if not sys.platform.startswith("linux"):
             return
