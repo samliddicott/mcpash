@@ -750,6 +750,20 @@ run_case \
   $'\n' \
   'bad substitution'
 
+run_case \
+  "bad_subst_for_in_errors" \
+  'for i in ${+}; do echo x; done; echo never' \
+  2 \
+  $'\n' \
+  'bad substitution'
+
+run_case \
+  "bad_subst_case_pattern_errors" \
+  'x=a; case "$x" in ${+}) echo x;; esac; echo never' \
+  2 \
+  $'\n' \
+  'bad substitution'
+
 printf '[PASS] bad-substitution guardrails\n'
 
 # Diagnostic formatting checks.

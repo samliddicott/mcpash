@@ -79,8 +79,9 @@ def main(argv: List[str] | None = None) -> int:
                 print(f"parse error: {text}", file=sys.stderr)
             return 2
         except RuntimeError as e:
-            print(str(e), file=sys.stderr)
-            return 1
+            msg = str(e)
+            print(msg, file=sys.stderr)
+            return rt._runtime_error_status(msg)
         except (BreakLoop, ContinueLoop):
             return 1
         except SystemExit as e:
@@ -183,8 +184,9 @@ def main(argv: List[str] | None = None) -> int:
         print(f"asdl error: {e}", file=sys.stderr)
         return 2
     except RuntimeError as e:
-        print(str(e), file=sys.stderr)
-        return 1
+        msg = str(e)
+        print(msg, file=sys.stderr)
+        return rt._runtime_error_status(msg)
     except (BreakLoop, ContinueLoop):
         return 1
     except SystemExit as e:

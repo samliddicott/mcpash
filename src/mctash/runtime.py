@@ -819,6 +819,11 @@ class Runtime:
     def _report_error(self, msg: str, line: int | None = None, context: str | None = None) -> None:
         print(self._format_error(msg, line=line, context=context), file=sys.stderr)
 
+    def _runtime_error_status(self, msg: str) -> int:
+        if "bad substitution" in msg or "unbound variable:" in msg:
+            return 2
+        return 1
+
     def _run_pending_traps(self) -> None:
         if self._get_subshell_depth() > 0:
             return
@@ -1353,8 +1358,9 @@ class Runtime:
                     with self._redirected_fds(redirects):
                         pass
             except RuntimeError as e:
-                print(str(e), file=sys.stderr)
-                return 1
+                msg = str(e)
+                print(msg, file=sys.stderr)
+                return self._runtime_error_status(msg)
             finally:
                 self.env = saved_env
             for n in assigned_names:
@@ -1579,8 +1585,9 @@ class Runtime:
                 except ReturnFromFunction:
                     status = 1
                 except RuntimeError as e:
-                    print(str(e), file=sys.stderr)
-                    status = 1
+                    msg = str(e)
+                    print(msg, file=sys.stderr)
+                    status = self._runtime_error_status(msg)
             if status < 0:
                 sig_num = -status
                 sig_name = None
@@ -6984,8 +6991,9 @@ class Runtime:
             status = 2
             self._last_eval_hard_error = True
         except RuntimeError as e:
-            print(str(e), file=sys.stderr)
-            status = 1
+            msg = str(e)
+            print(msg, file=sys.stderr)
+            status = self._runtime_error_status(msg)
         return status
 
     def _capture_eval(
@@ -7057,8 +7065,9 @@ class Runtime:
         except SystemExit as e:
             status = int(e.code) if e.code is not None else 0
         except RuntimeError as e:
-            print(str(e), file=sys.stderr)
-            status = 1
+            msg = str(e)
+            print(msg, file=sys.stderr)
+            status = self._runtime_error_status(msg)
             hard_error = True
         finally:
             try:
