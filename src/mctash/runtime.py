@@ -1364,14 +1364,6 @@ class Runtime:
         target_word = arg.get("word") or {}
         return Redirect(op=op or ">", target=self._asdl_word_to_text(target_word), fd=fd)
 
-    def _asdl_do_group_children(self, node: dict[str, Any]) -> list[dict[str, Any]]:
-        t = node.get("type")
-        if t == "command.DoGroup":
-            return node.get("children") or []
-        if t == "command.CommandList":
-            return node.get("children") or []
-        return []
-
     def _asdl_rhs_word_to_text(self, node: dict[str, Any] | None) -> str:
         if not node:
             return ""

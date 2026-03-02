@@ -123,6 +123,12 @@ Runtime executes ASDL list items directly via:
 - `Runtime._exec_asdl_pipeline()`
 - `Runtime._exec_asdl_command()`
 
+Recent migration detail (2026-03-02):
+
+- command-node dispatch is now explicit in ASDL executor code (no generic fallback branch in `_exec_asdl_command()`).
+- function definitions are registered in both legacy and ASDL-native function tables to support migration-safe execution.
+- controlflow command arguments on the ASDL path are covered by dedicated regressions in `tests/regressions/run.sh`.
+
 Primary call sites:
 
 - `src/mctash/main.py`
