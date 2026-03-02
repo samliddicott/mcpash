@@ -2128,8 +2128,33 @@ class Runtime:
         if not node:
             return ""
         if node.get("type") == "rhs_word.Compound":
-            return self._expand_assignment_word(self._asdl_word_to_text(node.get("word") or {}))
+            word = node.get("word") or {}
+            if self._asdl_rhs_assignment_can_expand_natively(word):
+                return self._expand_asdl_word_scalar(word, split_glob=False)
+            return self._expand_assignment_word(self._asdl_word_to_text(word))
         return ""
+
+    def _asdl_rhs_assignment_can_expand_natively(self, word: dict[str, Any]) -> bool:
+        if not isinstance(word, dict) or word.get("type") != "word.Compound":
+            return False
+        parts = word.get("parts") or []
+        if not parts:
+            return True
+        for p in parts:
+            if not isinstance(p, dict):
+                return False
+            t = p.get("type")
+            if t == "word_part.Literal":
+                lit = str(p.get("tval", ""))
+                # Assignment words have delicate quote-removal behavior around
+                # backslashes/quotes. Keep legacy path for those forms until
+                # fully modeled in native ASDL expansion.
+                if "\\" in lit or "'" in lit or '"' in lit:
+                    return False
+                continue
+            # Any non-literal part stays on legacy assignment expansion for now.
+            return False
+        return True
 
     def _expand_asdl_word_scalar(self, node: dict[str, Any], split_glob: bool = True) -> str:
         fields = self._expand_asdl_word_fields(node, split_glob=split_glob)

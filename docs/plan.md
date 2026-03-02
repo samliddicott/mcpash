@@ -130,6 +130,32 @@ Local conformance gate (no external CI required):
 - Parsed-vs-effective option parity gap for interactive/job-control options:
   - `-i`, `-I`, `-m`, `-b`, `-V`, `-E`
 
+## Word Expansion Parity (POSIX-First, Ash-Checked)
+Goal: remove remaining ASDL-word execution divergences without regressing ash parity.
+
+Classification for every divergence:
+- `POSIX required`: behavior mandated by POSIX (`shall` language)
+- `POSIX unspecified`: implementation choice permitted by POSIX
+- `ash extension`: behavior outside POSIX but required for ash compatibility target
+
+Tracking fields per divergence row:
+- case id and failing test(s)
+- current `mctash` behavior
+- target behavior
+- authority source (`POSIX spec`, `POSIX rationale`, `man ash`, ash test evidence)
+- implementation path (`native ASDL` vs temporary fallback)
+- closure evidence (regression test + BusyBox module rerun)
+
+Implementation order:
+1. Assignment-word quote-removal parity (`name=value` contexts)
+2. Double-quoted backslash/parameter parity
+3. Structured command-substitution expansion in ASDL execution (remove text round-trips incrementally)
+
+Validation gates for each step:
+1. `tests/regressions/run.sh` must pass
+2. BusyBox modules must pass: `ash-quoting`, `ash-vars`, `ash-parsing`
+3. No memory-cap override during debug runs (`MCTASH_MAX_VMEM_KB` policy remains in force)
+
 ## Conformance Snapshot
 - Current conformance status matrix: `docs/conformance-matrix.md`
 - POSIX requirement-to-test trace table: `docs/posix-trace-table.md`

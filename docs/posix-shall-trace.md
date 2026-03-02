@@ -40,6 +40,13 @@ Case link notation:
 | Field splitting uses `IFS` rules and preserves/elides fields appropriately | Verified | `tests/busybox/ash_test/ash-vars/var_wordsplit_ifs*.tests`, `tests/busybox/ash_test/ash-z_slow/many_ifs.tests`, `tests/oil/oils-master/spec/word-split.test.sh` | Includes hard edge cases for `read`/`IFS` interactions. |
 | Pathname expansion (globbing) occurs after splitting and follows pattern semantics | Partial | `tests/busybox/ash_test/ash-glob/glob*.tests`, `tests/busybox/ash_test/ash-vars/param_glob.tests` | Covered for ash corpus patterns; formal full-space proof remains open. |
 
+### Word-Expansion Divergence Register (ASDL Runtime)
+
+| Case | POSIX classification | Current behavior | Target behavior | Authority | Evidence |
+|---|---|---|---|---|---|
+| Assignment-word quote removal in RHS (`name=value`) | POSIX required | Hybrid path: native ASDL only for safe subset; quote/backslash-sensitive forms use legacy expansion path | Full native ASDL assignment expansion with POSIX quote-removal parity | POSIX XCU Chapter 2 (`2.2`/`2.6`), `man ash` | `tests/busybox/ash_test/ash-quoting/squote_in_varexp3.tests`, `tests/busybox/ash_test/ash-vars/param_expand_assign.tests` |
+| Backslash handling in double-quoted expansion-heavy words | POSIX required | Native ASDL argv expansion not yet enabled globally due parity regressions; legacy path retained | Enable native ASDL argv expansion after context-accurate quote/backslash handling is complete | POSIX XCU Chapter 2 (`2.2`/`2.6`), rationale C.2 | `tests/busybox/ash_test/ash-quoting/bkslash_case1.tests`, `tests/regressions/run.sh` (`monitor_mode_interactive_pty`) |
+
 ## 2.2 Quoting
 
 | Requirement (normative intent) | Status | Evidence | Notes |
