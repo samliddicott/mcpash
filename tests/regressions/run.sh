@@ -700,6 +700,33 @@ run_case \
 
 printf '[PASS] asdl executor-path regressions\n'
 
+# Quoted argv behavior guardrails for upcoming ASDL argv-native work.
+run_case \
+  "asdl_argv_dquote_prevent_param_expansion" \
+  'x=7; echo "m:\$x"' \
+  0 \
+  $'m:$x\n'
+
+run_case \
+  "asdl_argv_dquote_allow_param_expansion" \
+  'x=7; echo "m:$x"' \
+  0 \
+  $'m:7\n'
+
+run_case \
+  "asdl_argv_dquote_escape_quote_char" \
+  'echo "a\"b"' \
+  0 \
+  $'a"b\n'
+
+run_case \
+  "asdl_argv_dquote_keep_backslash_nonmeta" \
+  'echo "a\qb"' \
+  0 \
+  $'a\qb\n'
+
+printf '[PASS] quoted argv guardrails\n'
+
 # Diagnostic formatting checks.
 set +e
 PYTHONPATH="$ROOT/src" python3 -m mctash -c 'function then { echo x; }; then' >"$tmpdir/out" 2>"$tmpdir/err"
