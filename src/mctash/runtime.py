@@ -1767,6 +1767,11 @@ class Runtime:
     def _asdl_word_can_expand_argv_natively_safe(self, word: dict[str, Any]) -> bool:
         if not isinstance(word, dict) or word.get("type") != "word.Compound":
             return False
+        # Process substitution must stay on legacy argv path; native field
+        # expansion currently doesn't perform _process_substitute().
+        raw = self._asdl_word_to_text(word)
+        if "<(" in raw or ">(" in raw:
+            return False
         parts = word.get("parts") or []
         if not parts:
             return True

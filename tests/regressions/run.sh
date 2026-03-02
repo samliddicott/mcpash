@@ -726,6 +726,18 @@ run_case \
   $'a\qb\n'
 
 run_case \
+  "asdl_argv_dquote_var_preserve_spaces" \
+  'x="a b"; set -- "m:$x"; echo "$#|$1"' \
+  0 \
+  $'1|m:a b\n'
+
+run_case \
+  "asdl_argv_dquote_braced_default_preserve_spaces" \
+  'unset x; set -- "x=${x:-a b}"; echo "$#|$1"' \
+  0 \
+  $'1|x=a b\n'
+
+run_case \
   "asdl_argv_simple_var_split_semantics" \
   'x="a b"; set -- $x; echo "$#|$1|$2"' \
   0 \
