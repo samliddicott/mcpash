@@ -915,7 +915,7 @@ class Runtime:
                     sc = node.pipelines[0].commands[0]
                     argv = self._expand_argv(sc.argv)
                     argv = self._expand_aliases(argv)
-                    if argv and argv[0] not in self.BUILTINS and argv[0] not in self.functions:
+                    if argv and argv[0] not in self.BUILTINS and not self._has_function(argv[0]):
                         cmd_env = dict(self.env)
                         for scope in self.local_stack:
                             for k, v in scope.items():
@@ -1750,7 +1750,7 @@ class Runtime:
         if not argv:
             return False
         name = argv[0]
-        return name in self.BUILTINS or name in self.functions
+        return name in self.BUILTINS or self._has_function(name)
 
     def _exec_pipeline_inprocess(self, node: Pipeline) -> int:
         data: bytes | None = None
@@ -1897,13 +1897,13 @@ class Runtime:
                         cmd_env[assign.name] = value
             finally:
                 self.env = saved_env
-        if name in self.functions or name in self.BUILTINS:
+        if self._has_function(name) or name in self.BUILTINS:
             saved_env = self.env
             self.env = cmd_env
             if capture and self._stdout_redirected_away(cmd.redirects):
                 with self._redirected_fds(cmd.redirects):
                     try:
-                        if name in self.functions:
+                        if self._has_function(name):
                             status = self._run_function(name, argv[1:])
                         else:
                             status = self._run_builtin(name, argv)
@@ -1945,7 +1945,7 @@ class Runtime:
                     sys.stdout = saved_stdout
                 try:
                     with self._redirected_fds(cmd.redirects):
-                        if name in self.functions:
+                        if self._has_function(name):
                             status = self._run_function(name, argv[1:])
                         else:
                             status = self._run_builtin(name, argv)
@@ -2200,7 +2200,7 @@ class Runtime:
                 return 0
             name = argv[0]
             assign_names = {a.name for a in node.assignments}
-            if name in self.functions:
+            if self._has_function(name):
                 saved_env = dict(self.env)
                 try:
                     self.env = local_env
@@ -2472,7 +2472,7 @@ class Runtime:
             if cmd[0] in self.BUILTINS:
                 status = self._run_builtin(cmd[0], cmd)
                 raise SystemExit(status)
-            if cmd[0] in self.functions:
+            if self._has_function(cmd[0]):
                 status = self._run_function(cmd[0], cmd[1:])
                 raise SystemExit(status)
             status = self._run_external(cmd, dict(self.env), [], context="exec")
@@ -2639,6 +2639,12 @@ class Runtime:
             self.local_stack.pop()
             self.set_positional_args(saved_positional)
         return status
+
+    def _has_function(self, name: str) -> bool:
+        return name in self.functions_asdl or name in self.functions
+
+    def _function_names(self) -> list[str]:
+        return sorted(set(self.functions.keys()) | set(self.functions_asdl.keys()))
 
 
     def add_history_entry(self, line: str) -> None:
@@ -4578,10 +4584,10 @@ class Runtime:
         if args and args[0] == "-F":
             if len(args) > 1:
                 for name in args[1:]:
-                    if name in self.functions:
+                    if self._has_function(name):
                         print(name)
                 return 0
-            for name in sorted(self.functions.keys()):
+            for name in self._function_names():
                 print(name)
             return 0
         return 0
@@ -5420,7 +5426,7 @@ class Runtime:
             self._set_var_attrs(name, **flags)
 
     def _call_shell_function_from_python(self, name: str, args: List[str]) -> str:
-        if name not in self.functions:
+        if not self._has_function(name):
             raise KeyError(name)
         status, out, _ = self._capture_command_output(
             SimpleCommand(argv=[Word(name)] + [Word(a) for a in args], assignments=[], redirects=[], line=self.current_line),
@@ -5866,7 +5872,7 @@ class Runtime:
                         print(path)
                         return 0
                     return 1
-                if name in self.functions:
+                if self._has_function(name):
                     print(name)
                     return 0
                 if name in self.BUILTINS:
@@ -5887,7 +5893,7 @@ class Runtime:
                 return self._run_builtin(cmd[0], cmd)
             except SystemExit as e:
                 return int(e.code) if e.code is not None else 0
-        if cmd[0] in self.functions:
+        if self._has_function(cmd[0]):
             return self._run_function(cmd[0], cmd[1:])
         env = dict(self.env)
         if search_default_path:
@@ -5934,7 +5940,7 @@ class Runtime:
         for name in args:
             if name in self.aliases:
                 print(f"{name} is an alias for {self.aliases[name]}", flush=True)
-            elif name in self.functions:
+            elif self._has_function(name):
                 print(f"{name} is a function", flush=True)
             elif name in self.BUILTINS:
                 print(f"{name} is a shell builtin", flush=True)
