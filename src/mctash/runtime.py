@@ -1771,7 +1771,11 @@ class Runtime:
         if not parts:
             return True
         for p in parts:
-            if not isinstance(p, dict) or p.get("type") != "word_part.Literal":
+            if not isinstance(p, dict):
+                return False
+            if p.get("type") == "word_part.SingleQuoted":
+                continue
+            if p.get("type") != "word_part.Literal":
                 return False
             lit = str(p.get("tval", ""))
             # Keep any expansion-like or quote/escape-sensitive text on the
