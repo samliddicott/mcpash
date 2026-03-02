@@ -725,6 +725,30 @@ run_case \
   0 \
   $'a\qb\n'
 
+run_case \
+  "asdl_argv_simple_var_split_semantics" \
+  'x="a b"; set -- $x; echo "$#|$1|$2"' \
+  0 \
+  $'2|a|b\n'
+
+run_case \
+  "asdl_argv_simple_var_scalar_semantics" \
+  'x=abc; echo "<$x>"' \
+  0 \
+  $'<abc>\n'
+
+run_case \
+  "asdl_argv_braced_var_scalar_semantics" \
+  'x=abc; echo "<${x}>"' \
+  0 \
+  $'<abc>\n'
+
+run_case \
+  "asdl_argv_braced_default_single_quoted_semantics" \
+  'unset x; set -- ${x-'"'"'a b'"'"'}; echo "$#|$1|$2"' \
+  0 \
+  $'1|a b|\n'
+
 printf '[PASS] quoted argv guardrails\n'
 
 # Malformed parameter-expansion guardrails:
