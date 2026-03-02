@@ -52,7 +52,6 @@ from .expand import PresplitFields, expand_word, parse_word_parts, _extract_bala
 from .lexer import LexContext, TokenReader
 from .parser import ParseError, Parser
 from .asdl_map import AsdlMappingError, lst_list_item_to_asdl
-from .osh_adapter import OshAdapterError, asdl_item_to_list_item
 
 try:
     import fcntl
@@ -2433,7 +2432,7 @@ class Runtime:
                         raise SystemExit(status)
         except ReturnFromFunction as e:
             status = e.code
-        except (AsdlMappingError, OshAdapterError):
+        except AsdlMappingError:
             status = 2
         finally:
             if saved_positional is not None:
@@ -5908,7 +5907,7 @@ class Runtime:
                 print(f"parse error: {text}", file=sys.stderr)
             status = 2
             self._last_eval_hard_error = True
-        except (AsdlMappingError, OshAdapterError) as e:
+        except AsdlMappingError as e:
             print(f"asdl error: {e}", file=sys.stderr)
             status = 2
             self._last_eval_hard_error = True

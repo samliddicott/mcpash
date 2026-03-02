@@ -9,7 +9,6 @@ from typing import Dict, List, Tuple
 
 from .parser import ParseError, Parser
 from .asdl_map import AsdlMappingError, lst_list_item_to_asdl, lst_script_to_asdl
-from .osh_adapter import OshAdapterError
 from .runtime import BreakLoop, ContinueLoop, Runtime, RuntimeError
 
 VALID_STARTUP_OPTION_LETTERS = set("aCefnuvxIimqVEbpsl")
@@ -180,7 +179,7 @@ def main(argv: List[str] | None = None) -> int:
         else:
             print(f"parse error: {text}", file=sys.stderr)
         return 2
-    except (AsdlMappingError, OshAdapterError) as e:
+    except AsdlMappingError as e:
         print(f"asdl error: {e}", file=sys.stderr)
         return 2
     except RuntimeError as e:
