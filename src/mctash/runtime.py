@@ -1125,8 +1125,19 @@ class Runtime:
             try:
                 last = 0
                 while True:
-                    with self._suppress_errexit():
-                        cond_status = self._exec_asdl_command_list((cond_node.get("children") or []))
+                    try:
+                        with self._suppress_errexit():
+                            cond_status = self._exec_asdl_command_list((cond_node.get("children") or []))
+                    except ContinueLoop as e:
+                        if e.count > 1:
+                            raise ContinueLoop(e.count - 1)
+                        self._run_pending_traps()
+                        continue
+                    except BreakLoop as e:
+                        if e.count > 1:
+                            raise BreakLoop(e.count - 1)
+                        last = 0
+                        break
                     should_run = cond_status != 0 if until else cond_status == 0
                     if not should_run:
                         break

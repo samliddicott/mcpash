@@ -601,6 +601,27 @@ run_case \
 
 printf '[PASS] parser rejection regressions\n'
 
+# ASDL executor-path checks (command dispatch runs directly on ASDL nodes).
+run_case \
+  "asdl_exec_brace_group" \
+  '{ x=ok; echo "$x"; }' \
+  0 \
+  $'ok\n'
+
+run_case \
+  "asdl_exec_if_arms" \
+  'if false; then echo a; elif true; then echo b; else echo c; fi' \
+  0 \
+  $'b\n'
+
+run_case \
+  "asdl_exec_while_until" \
+  'i=0; while [ "$i" -lt 2 ]; do i=$((i+1)); done; echo w:$i; until [ "$i" -eq 4 ]; do i=$((i+1)); done; echo u:$i' \
+  0 \
+  $'w:2\nu:4\n'
+
+printf '[PASS] asdl executor-path regressions\n'
+
 # Diagnostic formatting checks.
 set +e
 PYTHONPATH="$ROOT/src" python3 -m mctash -c 'function then { echo x; }; then' >"$tmpdir/out" 2>"$tmpdir/err"
