@@ -727,6 +727,31 @@ run_case \
 
 printf '[PASS] quoted argv guardrails\n'
 
+# Malformed parameter-expansion guardrails:
+# preserve error behavior (status/flow), not exact diagnostic wording.
+run_case \
+  "bad_subst_plus_form_errors" \
+  'echo ${+}; echo never' \
+  2 \
+  $'\n' \
+  'bad substitution'
+
+run_case \
+  "bad_subst_colon_form_errors" \
+  'echo ${:1}; echo never' \
+  2 \
+  $'\n' \
+  'bad substitution'
+
+run_case \
+  "bad_subst_amp_form_errors" \
+  'echo ${&}; echo never' \
+  2 \
+  $'\n' \
+  'bad substitution'
+
+printf '[PASS] bad-substitution guardrails\n'
+
 # Diagnostic formatting checks.
 set +e
 PYTHONPATH="$ROOT/src" python3 -m mctash -c 'function then { echo x; }; then' >"$tmpdir/out" 2>"$tmpdir/err"
