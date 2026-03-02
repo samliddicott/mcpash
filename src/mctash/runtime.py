@@ -1780,6 +1780,10 @@ class Runtime:
                 if self._asdl_simple_var_safe_for_native_argv(name):
                     continue
                 return False
+            if p.get("type") == "word_part.BracedVarSub":
+                if self._asdl_braced_var_safe_for_native_argv(p):
+                    continue
+                return False
             if p.get("type") != "word_part.Literal":
                 return False
             lit = str(p.get("tval", ""))
@@ -1805,6 +1809,36 @@ class Runtime:
         if any(ch in ifs for ch in value):
             return False
         if any(ch in value for ch in ["*", "?", "["]):
+            return False
+        return True
+
+    def _asdl_braced_var_safe_for_native_argv(self, part: dict[str, Any]) -> bool:
+        name = str(part.get("name", ""))
+        if not self._is_valid_name(name):
+            return False
+        op = part.get("op")
+        if op in {"=", ":=", "#", "##", "%", "%%", ":substr", "/", "__invalid__"}:
+            return False
+        if op not in {None, "", "__len__", "-", ":-", "+", ":+", "?", ":?"}:
+            return False
+        arg_text: str | None = None
+        arg = part.get("arg")
+        if op in {"-", ":-", "+", ":+", "?", ":?"}:
+            if not self._asdl_word_is_safe_literal(arg):
+                return False
+            arg_text = self._asdl_word_to_text(arg)
+        value = self._expand_braced_param(name, op, arg_text, False)
+        if isinstance(value, list):
+            return False
+        text = str(value)
+        if text == "":
+            return False
+        ifs, ifs_set = self._get_var_with_state("IFS")
+        if not ifs_set:
+            ifs = " \t\n"
+        if any(ch in ifs for ch in text):
+            return False
+        if any(ch in text for ch in ["*", "?", "["]):
             return False
         return True
 
