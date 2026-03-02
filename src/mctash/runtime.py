@@ -191,18 +191,9 @@ class _PyVarsMapping(MutableMapping[str, object]):
 
     def __setitem__(self, key: str, value: object) -> None:
         if isinstance(value, (list, tuple)):
-            seq = list(value)
-            self._rt._assign_shell_var(key, " ".join(self._rt._py_to_shell(v) for v in seq))
-            self._rt._typed_vars[key] = seq
-            return
+            raise TypeError("sh.vars list/tuple mapping is deferred in ash mode")
         if isinstance(value, dict):
-            d = {str(k): v for k, v in value.items()}
-            self._rt._assign_shell_var(
-                key,
-                " ".join(f"{k}={self._rt._py_to_shell(v)}" for k, v in d.items()),
-            )
-            self._rt._typed_vars[key] = d
-            return
+            raise TypeError("sh.vars dict mapping is deferred in ash mode")
         self._rt._typed_vars.pop(key, None)
         self._rt._assign_shell_var(key, self._rt._py_to_shell(value))
 
@@ -449,7 +440,9 @@ class _PyBridge:
         if setter is not None and not callable(setter):
             raise TypeError("setter must be callable when provided")
         tie_type = type or "scalar"
-        if tie_type not in {"scalar", "integer", "array", "assoc"}:
+        if tie_type in {"array", "assoc"}:
+            raise ValueError(f"{tie_type} tie type is deferred in ash mode")
+        if tie_type not in {"scalar", "integer"}:
             raise ValueError(f"unsupported tie type: {tie_type}")
         self._rt._py_ties[name] = (getter, setter, tie_type)
 

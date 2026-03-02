@@ -352,22 +352,30 @@ run_case \
   $'ok\n'
 
 run_case \
-  "py_sh_vars_list_roundtrip" \
-  'py '"'"'sh.vars["LST"]=["a","b"]; print(len(sh.vars["LST"])); print(sh.vars["LST"][1])'"'"'' \
-  0 \
-  $'2\nb\n'
+  "py_sh_vars_list_rejected_in_ash_mode" \
+  'py '"'"'sh.vars["LST"]=["a","b"]'"'"'' \
+  1 \
+  $'\n' \
+  'TypeError: sh.vars list/tuple mapping is deferred in ash mode'
 
 run_case \
-  "py_sh_vars_dict_roundtrip" \
-  'py '"'"'sh.vars["MAP"]={"k":"v"}; print(sh.vars["MAP"]["k"])'"'"'' \
-  0 \
-  $'v\n'
+  "py_sh_vars_dict_rejected_in_ash_mode" \
+  'py '"'"'sh.vars["MAP"]={"k":"v"}'"'"'' \
+  1 \
+  $'\n' \
+  'TypeError: sh.vars dict mapping is deferred in ash mode'
 
 run_case \
-  "py_sh_vars_typed_cleared_on_shell_write" \
-  'py '"'"'sh.vars["LST"]=["a","b"]'"'"'; LST=z; py -e '"'"'type(sh.vars["LST"]).__name__'"'"'' \
+  "py_tie_array_rejected_in_ash_mode" \
+  'py -x '"'"'sh.tie("TA", lambda: ["x"], type="array")'"'"'; echo "$PYTHON_EXCEPTION|$PYTHON_EXCEPTION_MSG"' \
   0 \
-  $'str\n'
+  $'ValueError|array tie type is deferred in ash mode\n'
+
+run_case \
+  "py_tie_assoc_rejected_in_ash_mode" \
+  'py -x '"'"'sh.tie("TM", lambda: {"k":"v"}, type="assoc")'"'"'; echo "$PYTHON_EXCEPTION|$PYTHON_EXCEPTION_MSG"' \
+  0 \
+  $'ValueError|assoc tie type is deferred in ash mode\n'
 
 run_case \
   "param_len_special_at_star" \
