@@ -3515,9 +3515,9 @@ class Runtime:
         if name == "getopts":
             return self._run_getopts(argv[1:])
         if name == "py":
-            return self._run_py(argv[1:])
+            return self._run_py(argv[1:], entry_name="py")
         if name == "python:":
-            return self._run_py(argv[1:])
+            return self._run_py(argv[1:], entry_name="python:")
         if name == "from":
             return self._run_from_import(argv[1:])
         if name == "shared":
@@ -6030,7 +6030,7 @@ class Runtime:
             print(f"ash: write error: {e.strerror}", file=sys.stderr)
             return 1
 
-    def _run_py(self, args: List[str]) -> int:
+    def _run_py(self, args: List[str], entry_name: str = "py") -> int:
         eval_mode = False
         structured_exc = False
         no_dedent = False
@@ -6061,9 +6061,9 @@ class Runtime:
             if a == "-v":
                 if i + 1 >= len(args):
                     self._report_error(
-                        "usage: py [-e] [-x] [--no-dedent] [-v VAR] [-r VAR] [CODE]",
+                        f"usage: {entry_name} [-e] [-x] [--no-dedent] [-v VAR] [-r VAR] [CODE]",
                         line=self.current_line,
-                        context="py",
+                        context=entry_name,
                     )
                     return 2
                 stdout_var = args[i + 1]
@@ -6072,9 +6072,9 @@ class Runtime:
             if a == "-t":
                 if i + 1 >= len(args):
                     self._report_error(
-                        "usage: py [-e] [-x] [--no-dedent] [-v VAR] [-r VAR] [-t VAR] [-u VAR] [CODE]",
+                        f"usage: {entry_name} [-e] [-x] [--no-dedent] [-v VAR] [-r VAR] [-t VAR] [-u VAR] [CODE]",
                         line=self.current_line,
-                        context="py",
+                        context=entry_name,
                     )
                     return 2
                 tie_vars.append(args[i + 1])
@@ -6083,9 +6083,9 @@ class Runtime:
             if a == "-u":
                 if i + 1 >= len(args):
                     self._report_error(
-                        "usage: py [-e] [-x] [--no-dedent] [-v VAR] [-r VAR] [-t VAR] [-u VAR] [CODE]",
+                        f"usage: {entry_name} [-e] [-x] [--no-dedent] [-v VAR] [-r VAR] [-t VAR] [-u VAR] [CODE]",
                         line=self.current_line,
-                        context="py",
+                        context=entry_name,
                     )
                     return 2
                 untie_vars.append(args[i + 1])
@@ -6094,15 +6094,15 @@ class Runtime:
             if a == "-r":
                 if i + 1 >= len(args):
                     self._report_error(
-                        "usage: py [-e] [-x] [--no-dedent] [-v VAR] [-r VAR] [-t VAR] [-u VAR] [CODE]",
+                        f"usage: {entry_name} [-e] [-x] [--no-dedent] [-v VAR] [-r VAR] [-t VAR] [-u VAR] [CODE]",
                         line=self.current_line,
-                        context="py",
+                        context=entry_name,
                     )
                     return 2
                 return_var = args[i + 1]
                 i += 2
                 continue
-            self._report_error(f"illegal option {a}", line=self.current_line, context="py")
+            self._report_error(f"illegal option {a}", line=self.current_line, context=entry_name)
             return 2
         payload = args[i:]
         if structured_exc:
@@ -6137,9 +6137,9 @@ class Runtime:
             with self._push_frame(kind="python", funcname="py"):
                 if py_stdout is not None:
                     with redirect_stdout(py_stdout):
-                        py_result = self._run_py_payload(payload, code, eval_mode, source_from_stdin)
+                        py_result = self._run_py_payload(payload, code, eval_mode, source_from_stdin, entry_name)
                 else:
-                    py_result = self._run_py_payload(payload, code, eval_mode, source_from_stdin)
+                    py_result = self._run_py_payload(payload, code, eval_mode, source_from_stdin, entry_name)
         except KeyboardInterrupt:
             return 130
         except Exception as e:
@@ -6150,7 +6150,7 @@ class Runtime:
                 self._assign_shell_var("PYTHON_EXCEPTION_TB", "\n".join(tb_lines))
                 self._assign_shell_var("PYTHON_EXCEPTION_LANG", "python")
             else:
-                print(f"py: {type(e).__name__}: {e}", file=sys.stderr)
+                print(f"{entry_name}: {type(e).__name__}: {e}", file=sys.stderr)
             return 1
 
         if stdout_var is not None and py_stdout is not None:
@@ -6264,7 +6264,14 @@ class Runtime:
             return mod
         return importlib.import_module(ref)
 
-    def _run_py_payload(self, payload: List[str], code: str, eval_mode: bool, source_from_stdin: bool) -> object:
+    def _run_py_payload(
+        self,
+        payload: List[str],
+        code: str,
+        eval_mode: bool,
+        source_from_stdin: bool,
+        entry_name: str,
+    ) -> object:
         if eval_mode:
             return eval(code, self._py_globals, self._py_globals)
         if source_from_stdin:
@@ -6277,6 +6284,15 @@ class Runtime:
         py_callable = self._py_callables.get(payload[0])
         if py_callable is not None:
             return self._invoke_py_callable(py_callable, payload[1:])
+        if entry_name == "python:" and payload:
+            try:
+                exec(code, self._py_globals, self._py_globals)
+            except Exception as e:
+                target = payload[0]
+                raise RuntimeError(
+                    f"{target}: not callable, and python-statement fallback failed ({type(e).__name__}: {e})"
+                ) from e
+            return None
         exec(code, self._py_globals, self._py_globals)
         return None
 
