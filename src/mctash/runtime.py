@@ -1252,6 +1252,9 @@ class Runtime:
                     self._validate_asdl_word_bad_subst(w)
                 items: list[str] = []
                 for w in (iterable.get("words") or []):
+                    if self._asdl_word_can_expand_argv_natively_safe(w):
+                        items.extend(self._expand_asdl_word_fields(w, split_glob=True))
+                        continue
                     items.extend(self._expand_argv([Word(self._asdl_word_to_text(w))]))
             else:
                 items = list(self.positional)
