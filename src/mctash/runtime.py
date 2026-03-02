@@ -2160,7 +2160,15 @@ class Runtime:
                 # Restrict to named vars (avoid special params like $@/$*/$1
                 # here until native assignment expansion models those exactly).
                 name = str(p.get("name", ""))
-                if name and (name[0].isalpha() or name[0] == "_") and all(c.isalnum() or c == "_" for c in name[1:]):
+                if self._is_valid_name(name):
+                    continue
+                return False
+            if t == "word_part.BracedVarSub":
+                # Safe subset: ${name} only; operator-bearing forms keep legacy
+                # assignment semantics for now.
+                name = str(p.get("name", ""))
+                op = p.get("op")
+                if self._is_valid_name(name) and (op is None or op == ""):
                     continue
                 return False
             # Any non-literal part stays on legacy assignment expansion for now.
