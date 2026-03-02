@@ -645,6 +645,12 @@ run_case \
   $'m\n'
 
 run_case \
+  "asdl_exec_case_quoted_pattern_literal_semantics" \
+  'v=fooz; p="foo*"; case "$v" in "$p") echo m;; *) echo n;; esac' \
+  0 \
+  $'n\n'
+
+run_case \
   "asdl_exec_shassignment_word_semantics" \
   'x="a b"; y=$x; echo "<$y>"' \
   0 \
