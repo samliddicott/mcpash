@@ -12,6 +12,11 @@ HUSH_TEST_DIR="${BUSYBOX_DIR}/hush_test"
 ASH_LOG="${ASH_TEST_DIR}/mctash-ash.log"
 RUN_TIMEOUT="${RUN_TIMEOUT:-120}"
 RUN_MODULE_TIMEOUT="${RUN_MODULE_TIMEOUT:-${RUN_TIMEOUT}}"
+# Memory guardrail for mctash test subprocesses.
+# IMPORTANT: If this limit causes failures, STOP and discuss with the human
+# before increasing it. Do not "fix" by bumping memory unless we first rule
+# out leaks/regressions.
+MCTASH_MAX_VMEM_KB="${MCTASH_MAX_VMEM_KB:-262144}"
 
 fetch_if_missing() {
   if [[ -d "${ASH_TEST_DIR}" && -d "${HUSH_TEST_DIR}" ]]; then
@@ -38,6 +43,7 @@ run_ash() {
   printf '%s\n' \
     '#!/usr/bin/env bash' \
     'set -euo pipefail' \
+    "ulimit -Sv ${MCTASH_MAX_VMEM_KB}" \
     "PYTHONPATH=\"${ROOT}/src\" MCTASH_TEST_MODE=1 exec python3 -m mctash \"\$@\"" \
     > "${ASH_TEST_DIR}/ash"
   chmod +x "${ASH_TEST_DIR}/ash"
