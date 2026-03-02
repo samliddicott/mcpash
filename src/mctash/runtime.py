@@ -1775,6 +1775,11 @@ class Runtime:
                 return False
             if p.get("type") == "word_part.SingleQuoted":
                 continue
+            if p.get("type") == "word_part.SimpleVarSub":
+                name = str(p.get("name", ""))
+                if self._asdl_simple_var_safe_for_native_argv(name):
+                    continue
+                return False
             if p.get("type") != "word_part.Literal":
                 return False
             lit = str(p.get("tval", ""))
@@ -1784,6 +1789,23 @@ class Runtime:
                 return False
             if "<(" in lit or ">(" in lit:
                 return False
+        return True
+
+    def _asdl_simple_var_safe_for_native_argv(self, name: str) -> bool:
+        if not self._is_valid_name(name):
+            return False
+        value, is_set = self._get_param_state(name)
+        if not is_set:
+            return False
+        if value == "":
+            return False
+        ifs, ifs_set = self._get_var_with_state("IFS")
+        if not ifs_set:
+            ifs = " \t\n"
+        if any(ch in ifs for ch in value):
+            return False
+        if any(ch in value for ch in ["*", "?", "["]):
+            return False
         return True
 
     def _asdl_word_can_expand_case_natively_safe(self, word: dict[str, Any]) -> bool:
@@ -2246,6 +2268,8 @@ class Runtime:
                 # backslashes/quotes. Keep legacy path for those forms until
                 # fully modeled in native ASDL expansion.
                 if "\\" in lit or "'" in lit or '"' in lit:
+                    return False
+                if "<(" in lit or ">(" in lit:
                     return False
                 continue
             if t == "word_part.SingleQuoted":
