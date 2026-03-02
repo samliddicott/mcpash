@@ -2156,6 +2156,13 @@ class Runtime:
                 # Arithmetic substitution is scalar in assignment context and
                 # does not require field splitting/pathname expansion.
                 continue
+            if t == "word_part.SimpleVarSub":
+                # Restrict to named vars (avoid special params like $@/$*/$1
+                # here until native assignment expansion models those exactly).
+                name = str(p.get("name", ""))
+                if name and (name[0].isalpha() or name[0] == "_") and all(c.isalnum() or c == "_" for c in name[1:]):
+                    continue
+                return False
             # Any non-literal part stays on legacy assignment expansion for now.
             return False
         return True
