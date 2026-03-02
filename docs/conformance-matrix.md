@@ -42,7 +42,7 @@ Local regression gate status:
 
 ## Overall
 
-- Parser/AST path: **OSH-ASDL-shaped intermediate is active** (`LST -> OSH-shaped ASDL -> adapter -> runtime`).
+- Parser/runtime path: **OSH-ASDL-shaped intermediate is active** (`LST -> OSH-shaped ASDL -> runtime`).
 - Ash behavior parity: **high for BusyBox ash_test corpus**.
 - Full POSIX + full `ash` man-page parity claim: **not yet**.
 
@@ -107,9 +107,15 @@ Additional ash-man-page parity gaps (tracked for next phase):
   - `src/syntax/osh/runtime.asdl`
   - `src/syntax/osh/value.asdl`
 - Current architecture:
-  - `Parser -> LST -> src/mctash/asdl_map.py -> src/mctash/osh_adapter.py -> src/mctash/runtime.py`
+  - `Parser -> LST -> src/mctash/asdl_map.py -> src/mctash/runtime.py`
 - Remaining gap to full native OSH node execution:
-  - runtime still executes adapted internal AST, not generated typed OSH nodes directly.
+  - runtime executes ASDL command nodes directly for most command forms, but still uses compatibility conversion in some transitional helpers and is not yet generated typed-node execution end-to-end.
+
+Pipeline execution note:
+
+- External-only pipelines run as OS subprocess pipelines.
+- Pipelines requiring shell semantics use in-process ASDL stage execution with subshell-like isolation.
+- This is a runtime-architecture choice; conformance claims are based on observable behavior against corpus/spec evidence.
 
 ## What This Means
 

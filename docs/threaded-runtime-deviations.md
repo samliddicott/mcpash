@@ -16,6 +16,17 @@ This project intentionally uses a threaded execution model in places where tradi
 - Runtime now uses per-thread subshell-depth tracking and thread-local job context.
 - Background worker threads now attempt Linux `unshare(CLONE_FS|CLONE_FILES)` to isolate cwd/fd side effects from the parent thread.
 
+## Pipeline execution model
+
+- Behavioral target remains ash/POSIX-visible semantics from the running script.
+- Implementation is hybrid:
+  - External-only pipeline stages use OS pipes + subprocess children (fork/exec under `subprocess.Popen`).
+  - Pipelines that require shell semantics (builtins/functions/compound stages) run through an in-process ASDL pipeline path with subshell-like stage isolation.
+- This avoids unsafe low-level fork patterns in a multithreaded Python runtime while preserving tested shell-visible behavior.
+- Memory guardrail:
+  - BusyBox harness wrapper applies per-process virtual-memory limit (`ulimit -Sv`, default `MCTASH_MAX_VMEM_KB=262144`).
+  - Policy: if limit trips, stop and investigate leak/regression before increasing the limit.
+
 ## Known deviation classes
 
 1. Process/job-control internals

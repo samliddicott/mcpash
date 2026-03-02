@@ -138,6 +138,22 @@ Benefit:
 - preserved conformance stability for known-sensitive pipeline semantics.
 - concrete progress toward native word-part execution with lower conversion overhead.
 
+### 2026-03-02: Native ASDL pipeline execution with external fast-path (`8d87720`, `35318e6`)
+
+Pipeline execution moved onto native ASDL handling for multi-command pipelines while preserving ash-visible semantics. External-only pipelines now run as OS subprocess pipelines; shell-semantic stages (builtins/functions/compound) execute through in-process ASDL stage handling with subshell-like isolation. During this work, parity fixes were made for wait status, assignment/tracing/leak edge cases, and command-substitution status behavior.
+
+Intent:
+
+- remove remaining high-impact pipeline fallback dependency from command dispatch.
+- preserve script-visible POSIX/ash behavior while using a thread-safe Python runtime strategy.
+- avoid memory blowups in huge-output pipeline tests by using external process streaming where valid.
+
+Benefit:
+
+- better alignment with OSH-ASDL-first runtime execution.
+- improved runtime robustness under constrained memory and large corpus workloads.
+- clearer separation between external-process and shell-semantic pipeline stages.
+
 ## How ASDL Is Used Now
 
 ### Parse contract
@@ -171,7 +187,7 @@ Primary call sites:
 ### What is still transitional
 
 - Internal AST dataclasses in `src/mctash/ast_nodes.py` are still used for parts of execution compatibility.
-- Some ASDL command forms still convert to internal command nodes for reuse of mature executor logic.
+- Some transitional helpers still convert selected ASDL structures into compatibility forms for mature logic reuse.
 - Word expansion is still partly text-roundtrip based, not fully native ASDL word-part evaluation end-to-end.
 
 ## ASDL Sources and Licensing
