@@ -150,6 +150,26 @@ run_case \
   $'X5Y\n'
 
 run_case \
+  "py_callable_coercion_diag_on_total_typeerror" \
+  'py '"'"'def one(a): return a'"'"'; py one 1 2' \
+  1 \
+  $'\n' \
+  'call failed after automatic coercion and raw-string fallback'
+
+run_case \
+  "python_colon_non_callable_fallback_exec_error_diag" \
+  'python: math.sqrt 9' \
+  1 \
+  $'\n' \
+  'math.sqrt: not callable, and python-statement fallback failed (SyntaxError: invalid syntax'
+
+run_case \
+  "py_structured_exception_reset_on_success" \
+  'py -x '"'"'raise ValueError("boom")'"'"'; py -x '"'"'pass'"'"'; echo "X${PYTHON_EXCEPTION}Y|X${PYTHON_EXCEPTION_MSG}Y|X${PYTHON_EXCEPTION_LANG}Y|X${PYTHON_EXCEPTION_TB}Y"' \
+  0 \
+  $'XY|XY|XY|XY\n'
+
+run_case \
   "py_structured_exception" \
   'py -x '"'"'raise ValueError("boom")'"'"'; echo "$PYTHON_EXCEPTION|$PYTHON_EXCEPTION_MSG|$PYTHON_EXCEPTION_LANG"; case "$PYTHON_EXCEPTION_TB" in *"<string>"*) echo s:0;; *) echo s:1;; esac' \
   0 \
