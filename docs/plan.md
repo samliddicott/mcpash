@@ -134,3 +134,4 @@ Local conformance gate (no external CI required):
 - Current conformance status matrix: `docs/conformance-matrix.md`
 - POSIX requirement-to-test trace table: `docs/posix-trace-table.md`
 - Threaded-runtime deviation register: `docs/threaded-runtime-deviations.md`
+- OSH ASDL adoption and migration history: `docs/ASDL-adoption-history.md`
