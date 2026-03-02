@@ -114,10 +114,10 @@ Required operations:
 - `set_attrs(name, **flags)`
 - `declare(name, value="", **flags)`
 
-Type mapping:
+Type mapping (ash mode):
 - scalar -> scalar var
-- `list`/`tuple` -> typed Python-side list with shell scalar projection
-- `dict` -> typed Python-side map with shell scalar projection
+- integer -> integer-attribute scalar var
+- `list`/`tuple` and `dict` are deferred to Bash-compat mode and are out-of-scope in this milestone
 
 Flags:
 `exported`, `integer`, `readonly`, `uppercase`, `lowercase`, `nameref`, `trace`
@@ -231,9 +231,10 @@ Generated wrappers MUST be real shell functions visible to function introspectio
 - `sh.tie(name, getter, setter=None, type=None)`
 - `sh.untie(name)`
 
-Types:
-- `scalar`, `integer`, `array`, `assoc`
-- auto-detect if `type=None`
+Types (ash mode):
+- `scalar`, `integer`
+- `array`, `assoc` are deferred to Bash-compat mode
+- auto-detect if `type=None` SHOULD resolve only to in-scope ash-mode types
 
 Reads invoke getter; writes invoke setter (if absent and write attempted -> error).
 

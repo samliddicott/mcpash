@@ -8,7 +8,7 @@ This file tracks intentionally deferred or partial items in the shell/Python bri
   Current ash-target path remains scalar-only by design.
 - Bridge/tie support for `array` and `assoc` is deferred with shell array/hash runtime support.
 - Future enablement should be behind an explicit Bash-extension option (e.g. `set -o bash_ext` or equivalent).
-- Any current list/dict bridge behavior should be treated as non-normative until that mode exists.
+- Any list/dict bridge behavior in ash mode is non-normative and should be rejected by runtime checks.
 
 ## Partial
 

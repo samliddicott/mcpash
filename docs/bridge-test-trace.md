@@ -14,7 +14,7 @@ This table links bridge requirements to concrete cases in:
 | Phase 2 | Dedent / no-dedent | `python_block_dedent_default`, `python_block_no_dedent` |
 | Phase 2/9 | Embedded parse robustness and shell integration | `python_block_parser_robust_parens_quotes`, `python_block_in_command_substitution`, `python_block_pipeline`, `python_block_inline_end_pipeline` |
 | Phase 3 | `sh.vars` / attrs / declare / env mapping | `py_sh_vars_mapping`, `py_sh_vars_attrs`, `py_sh_vars_declare_integer`, `py_sh_env_exported` |
-| Phase 3 | Typed Python-side list/dict projections | `py_sh_vars_list_roundtrip`, `py_sh_vars_dict_roundtrip`, `py_sh_vars_typed_cleared_on_shell_write` |
+| Phase 3 | Typed collection mapping (list/dict) | Deferred in ash mode; no conformance cases in this milestone |
 | Phase 4 | `sh.fn` + `from ... import ...` wrappers | `py_sh_fn_callable_from_shell`, `py_sh_fn_assignment_declare_wrapper`, `py_from_import_callable_wrapper` |
 | Phase 5 | `sh()` / `run` / `popen` | `py_sh_call_basic`, `py_sh_run_capture_output`, `py_sh_run_check_error`, `py_sh_popen_capture` |
 | Phase 6 | ties (`py -t/-u`, `sh.tie`) | `py_tie_scalar_roundtrip`, `py_tie_integer_cast`, `py_tie_readonly_write_error` |
