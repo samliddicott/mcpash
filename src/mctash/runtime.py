@@ -1798,6 +1798,8 @@ class Runtime:
                 if any(ch in lit for ch in ["\\", "'", '"', "`"]):
                     return False
                 continue
+            if t == "word_part.SingleQuoted":
+                continue
             if t == "word_part.SimpleVarSub":
                 name = str(p.get("name", ""))
                 if self._is_valid_name(name):
