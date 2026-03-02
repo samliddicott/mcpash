@@ -726,6 +726,12 @@ run_case \
   $'a\qb\n'
 
 run_case \
+  "asdl_argv_mixed_quote_backslash_semantics" \
+  'echo a"\\"b' \
+  0 \
+  $'a\\b\n'
+
+run_case \
   "asdl_argv_dquote_var_preserve_spaces" \
   'x="a b"; set -- "m:$x"; echo "$#|$1"' \
   0 \
