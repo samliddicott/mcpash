@@ -669,6 +669,24 @@ run_case \
   $'<foobar>\n'
 
 run_case \
+  "asdl_exec_shassignment_braced_default_semantics" \
+  'unset a; x=${a:-fallback}; echo "<$x>"' \
+  0 \
+  $'<fallback>\n'
+
+run_case \
+  "asdl_exec_shassignment_braced_alt_semantics" \
+  'a=1; x=${a:+alt}; echo "<$x>"' \
+  0 \
+  $'<alt>\n'
+
+run_case \
+  "asdl_exec_shassignment_braced_len_semantics" \
+  'a=abcd; x=${#a}; echo "<$x>"' \
+  0 \
+  $'<4>\n'
+
+run_case \
   "asdl_exec_shassignment_cmdsub_status" \
   'x=$(exit 7); echo s:$?' \
   0 \

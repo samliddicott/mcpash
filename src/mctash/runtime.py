@@ -2164,15 +2164,30 @@ class Runtime:
                     continue
                 return False
             if t == "word_part.BracedVarSub":
-                # Safe subset: ${name} only; operator-bearing forms keep legacy
-                # assignment semantics for now.
+                # Safe subset: ${name}, ${#name}, and simple default/alt/error
+                # operators with literal-only arg words.
                 name = str(p.get("name", ""))
                 op = p.get("op")
                 if self._is_valid_name(name) and (op is None or op == "" or op == "__len__"):
                     continue
+                if self._is_valid_name(name) and op in {"-", ":-", "+", ":+", "?", ":?"}:
+                    arg = p.get("arg")
+                    if self._asdl_word_is_safe_literal(arg):
+                        continue
                 return False
             # Any non-literal part stays on legacy assignment expansion for now.
             return False
+        return True
+
+    def _asdl_word_is_safe_literal(self, word: Any) -> bool:
+        if not isinstance(word, dict) or word.get("type") != "word.Compound":
+            return False
+        for p in (word.get("parts") or []):
+            if not isinstance(p, dict) or p.get("type") != "word_part.Literal":
+                return False
+            lit = str(p.get("tval", ""))
+            if "\\" in lit or "'" in lit or '"' in lit:
+                return False
         return True
 
     def _expand_asdl_word_scalar(self, node: dict[str, Any], split_glob: bool = True) -> str:
