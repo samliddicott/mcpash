@@ -692,6 +692,12 @@ run_case \
   0 \
   $'s:7\n'
 
+run_case \
+  "asdl_exec_shassignment_cmdsub_text_semantics" \
+  'x=$(printf hi); y=${x}x; echo "<$y>"' \
+  0 \
+  $'<hix>\n'
+
 printf '[PASS] asdl executor-path regressions\n'
 
 # Diagnostic formatting checks.

@@ -2156,6 +2156,9 @@ class Runtime:
                 # Arithmetic substitution is scalar in assignment context and
                 # does not require field splitting/pathname expansion.
                 continue
+            if t == "word_part.CommandSub":
+                # Command substitution is scalar in assignment context.
+                continue
             if t == "word_part.SimpleVarSub":
                 # Restrict to named vars (avoid special params like $@/$*/$1
                 # here until native assignment expansion models those exactly).
