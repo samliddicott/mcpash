@@ -632,6 +632,18 @@ run_case \
   0 \
   $'s:7\n'
 
+run_case \
+  "asdl_exec_for_native_word_expansion" \
+  'x="a b"; for i in "$x" c; do echo "<$i>"; done' \
+  0 \
+  $'<a b>\n<c>\n'
+
+run_case \
+  "asdl_exec_case_native_word_expansion" \
+  'v=fooz; p="foo*"; case "$v" in $p) echo m;; *) echo n;; esac' \
+  0 \
+  $'m\n'
+
 printf '[PASS] asdl executor-path regressions\n'
 
 # Diagnostic formatting checks.
