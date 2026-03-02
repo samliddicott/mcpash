@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import List, Optional, Union
+from typing import Any, List, Optional, Union
 
 from typing import TYPE_CHECKING
 
@@ -29,6 +29,7 @@ class Redirect:
     here_doc: Optional[str] = None
     here_doc_expand: bool = True
     here_doc_strip_tabs: bool = False
+    target_word: Optional[dict[str, Any]] = None
 
 
 @dataclass

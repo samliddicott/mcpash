@@ -764,6 +764,13 @@ run_case \
   $'\n' \
   'bad substitution'
 
+run_case \
+  "bad_subst_redir_target_errors" \
+  'echo hi > ${+}; echo never' \
+  2 \
+  $'\n' \
+  'bad substitution'
+
 printf '[PASS] bad-substitution guardrails\n'
 
 # Diagnostic formatting checks.

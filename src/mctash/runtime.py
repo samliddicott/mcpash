@@ -2185,9 +2185,15 @@ class Runtime:
                 here_doc=content,
                 here_doc_expand=bool(arg.get("do_expand", True)),
                 here_doc_strip_tabs=bool(arg.get("strip_tabs", strip_tabs)),
+                target_word=begin if isinstance(begin, dict) else None,
             )
         target_word = arg.get("word") or {}
-        return Redirect(op=op or ">", target=self._asdl_word_to_text(target_word), fd=fd)
+        return Redirect(
+            op=op or ">",
+            target=self._asdl_word_to_text(target_word),
+            fd=fd,
+            target_word=target_word if isinstance(target_word, dict) else None,
+        )
 
     def _asdl_to_ast_redirect(self, node: dict[str, Any]) -> Redirect:
         # Compatibility alias used by legacy AST-conversion helpers.
@@ -2301,7 +2307,7 @@ class Runtime:
             if not isinstance(arg, dict):
                 continue
             arg_t = arg.get("type")
-            if arg_t == "redir_param.Path":
+            if arg_t in {"redir_param.Path", "redir_param.Word"}:
                 self._validate_asdl_word_bad_subst(arg.get("word"))
                 continue
             if arg_t == "redir_param.HereDoc":
@@ -4530,6 +4536,12 @@ class Runtime:
     def _expand_redir_target(self, redir: Redirect) -> str | None:
         if redir.target is None:
             return None
+        target_word = getattr(redir, "target_word", None)
+        if isinstance(target_word, dict) and self._asdl_rhs_assignment_can_expand_natively(target_word):
+            out = self._expand_asdl_word_scalar(target_word, split_glob=False)
+            if self._is_process_subst(out):
+                return self._process_substitute(out)
+            return out
         if self._is_process_subst(redir.target):
             return self._process_substitute(redir.target)
         return self._expand_assignment_word(redir.target)
@@ -4763,6 +4775,9 @@ class Runtime:
             return _expand_alt_word(text)
 
         if op == "__invalid__":
+            raise RuntimeError(self._format_error("syntax error: bad substitution", line=self.current_line))
+        special_params = {"@", "*", "#", "?", "$", "!", "-", "LINENO", "PPID"}
+        if not (self._is_valid_name(name) or name.isdigit() or name in special_params):
             raise RuntimeError(self._format_error("syntax error: bad substitution", line=self.current_line))
         if op == "__len__":
             if name in ["@", "*"]:
@@ -5231,7 +5246,7 @@ class Runtime:
         allowed_fds: set[int] | None = None,
     ) -> None:
         fd = redir.fd if redir.fd is not None else (1 if is_output else 0)
-        target = self._expand_assignment_word(redir.target) if redir.target else redir.target
+        target = self._expand_redir_target(redir) if redir.target else redir.target
         try:
             if target == "-":
                 try:
