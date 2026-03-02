@@ -1257,6 +1257,16 @@ class Runtime:
                         local_env[name] = local_env.get(name, "") + value
                     else:
                         local_env[name] = value
+                if self.options.get("x", False):
+                    trace_assigns = [
+                        Assignment(
+                            name=str(p.get("name", "")),
+                            value=self._asdl_rhs_word_to_text(p.get("rhs") or {}),
+                            op=str(p.get("op", "=")),
+                        )
+                        for p in (node.get("pairs") or [])
+                    ]
+                    self._trace_simple(SimpleCommand(argv=[], assignments=trace_assigns, redirects=[]), [], local_env)
                 if redirects:
                     with self._redirected_fds(redirects):
                         pass
@@ -1465,12 +1475,17 @@ class Runtime:
 
     def _exec_asdl_background(self, child: dict[str, Any]) -> int:
         try:
-            cmd = child.get("children", [{}])[0].get("children", [{}])[0]
+            pipeline = child.get("children", [{}])[0]
+            pipe_children = pipeline.get("children") if isinstance(pipeline, dict) else []
+            cmd = pipe_children[0] if isinstance(pipe_children, list) and pipe_children else {}
             if (
                 isinstance(cmd, dict)
                 and child.get("type") == "command.AndOr"
                 and len(child.get("children") or []) == 1
                 and len(child.get("ops") or []) == 0
+                and isinstance(pipeline, dict)
+                and pipeline.get("type") == "command.Pipeline"
+                and len(pipe_children or []) == 1
                 and cmd.get("type") == "command.Simple"
             ):
                 argv = self._expand_asdl_simple_argv(cmd)
@@ -1638,10 +1653,15 @@ class Runtime:
                         local_env[name] = self._get_var(name)
                         continue
                     local_env[name] = value
-                for n in assigned_names:
-                    self._typed_vars.pop(n, None)
-                saved_env.clear()
-                saved_env.update(self.env)
+                should_persist_env = any(
+                    not (r.op == ">&" and (r.fd is None or r.fd == 1) and r.target == "1")
+                    for r in redirects
+                )
+                if should_persist_env:
+                    for n in assigned_names:
+                        self._typed_vars.pop(n, None)
+                    saved_env.clear()
+                    saved_env.update(self.env)
                 return 0
             finally:
                 self.env = saved_env
@@ -1677,13 +1697,14 @@ class Runtime:
             if trace_cmd is not None:
                 self._trace_simple(trace_cmd, argv, local_env)
 
-        if not argv and redirects:
-            try:
-                with self._redirected_fds(redirects):
-                    pass
-            except RuntimeError as e:
-                print(str(e), file=sys.stderr)
-                return 1
+        if not argv:
+            if redirects:
+                try:
+                    with self._redirected_fds(redirects):
+                        pass
+                except RuntimeError as e:
+                    print(str(e), file=sys.stderr)
+                    return 1
             for n in assigned_names:
                 self._typed_vars.pop(n, None)
             self.env.update(local_env)
@@ -1693,8 +1714,6 @@ class Runtime:
                 status = self._cmd_sub_status
                 self._cmd_sub_used = False
                 return status
-            return 0
-        if not argv:
             return 0
 
         name = argv[0]
