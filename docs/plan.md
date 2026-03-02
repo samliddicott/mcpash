@@ -156,6 +156,17 @@ Validation gates for each step:
 2. BusyBox modules must pass: `ash-quoting`, `ash-vars`, `ash-parsing`
 3. No memory-cap override during debug runs (`MCTASH_MAX_VMEM_KB` policy remains in force)
 
+Current progress (2026-03-02):
+1. Assignment-word quote-removal parity: `in progress`
+2. Native ASDL assignment RHS now covers safe subsets:
+   - literals without quote/backslash escapes
+   - `word_part.SimpleVarSub` for named variables
+   - `word_part.BracedVarSub` for `${name}`, `${#name}`, and simple default/alt/error ops with literal-only args
+   - `word_part.ArithSub`
+   - `word_part.CommandSub` (including structured child execution path)
+3. Double-quoted backslash/parameter parity for global argv-word native path: `pending` (legacy path retained to preserve ash/POSIX behavior)
+4. Structured command substitution execution: `partial` (uses `word_part.CommandSub.child` when available; text fallback retained)
+
 ## Conformance Snapshot
 - Current conformance status matrix: `docs/conformance-matrix.md`
 - POSIX requirement-to-test trace table: `docs/posix-trace-table.md`

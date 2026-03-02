@@ -44,8 +44,9 @@ Case link notation:
 
 | Case | POSIX classification | Current behavior | Target behavior | Authority | Evidence |
 |---|---|---|---|---|---|
-| Assignment-word quote removal in RHS (`name=value`) | POSIX required | Hybrid path: native ASDL only for safe subset; quote/backslash-sensitive forms use legacy expansion path | Full native ASDL assignment expansion with POSIX quote-removal parity | POSIX XCU Chapter 2 (`2.2`/`2.6`), `man ash` | `tests/busybox/ash_test/ash-quoting/squote_in_varexp3.tests`, `tests/busybox/ash_test/ash-vars/param_expand_assign.tests` |
+| Assignment-word quote removal in RHS (`name=value`) | POSIX required | Hybrid path: native ASDL for safe subsets (literal, named var sub, safe braced forms, arith sub, command sub); quote/backslash-sensitive forms still use legacy expansion path | Full native ASDL assignment expansion with POSIX quote-removal parity | POSIX XCU Chapter 2 (`2.2`/`2.6`), `man ash` | `tests/busybox/ash_test/ash-quoting/squote_in_varexp3.tests`, `tests/busybox/ash_test/ash-vars/param_expand_assign.tests`, `tests/regressions/run.sh` (`asdl_exec_shassignment_*`) |
 | Backslash handling in double-quoted expansion-heavy words | POSIX required | Native ASDL argv expansion not yet enabled globally due parity regressions; legacy path retained | Enable native ASDL argv expansion after context-accurate quote/backslash handling is complete | POSIX XCU Chapter 2 (`2.2`/`2.6`), rationale C.2 | `tests/busybox/ash_test/ash-quoting/bkslash_case1.tests`, `tests/regressions/run.sh` (`monitor_mode_interactive_pty`) |
+| Command substitution evaluation source in ASDL word parts | POSIX required | Uses structured `word_part.CommandSub.child` when available; falls back to `child_source` text path otherwise | Remove text fallback once structured child coverage is complete | POSIX XCU Chapter 2 (`2.6.3`) and rationale C.2 | `tests/busybox/ash_test/ash-psubst/tick*.tests`, `tests/regressions/run.sh` (`asdl_exec_shassignment_cmdsub_*`) |
 
 ## 2.2 Quoting
 
