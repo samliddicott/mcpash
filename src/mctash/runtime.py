@@ -2342,7 +2342,12 @@ class Runtime:
         if not isinstance(word, dict) or word.get("type") != "word.Compound":
             return False
         for p in (word.get("parts") or []):
-            if not isinstance(p, dict) or p.get("type") != "word_part.Literal":
+            if not isinstance(p, dict):
+                return False
+            t = p.get("type")
+            if t == "word_part.SingleQuoted":
+                continue
+            if t != "word_part.Literal":
                 return False
             lit = str(p.get("tval", ""))
             if "\\" in lit or "'" in lit or '"' in lit:
