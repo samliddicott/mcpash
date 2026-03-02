@@ -89,6 +89,12 @@ Run strict race-stimulation regressions (fail on first mismatch, no tolerated fa
 make stress-race
 ```
 
+Run strict bridge stress checks:
+
+```sh
+make stress-bridge
+```
+
 Useful overrides:
 
 ```sh
@@ -159,5 +165,6 @@ Test harnesses set `MCTASH_TEST_MODE=1` to reduce nondeterminism in bridge diagn
 - ASDL adoption history: `docs/ASDL-adoption-history.md`
 - Conformance matrix: `docs/conformance-matrix.md`
 - Milestone-2 closure: `docs/milestone-2-closure-report.md`
+- Bridge examples (ash mode): `docs/bridge-examples-ash-mode.md`
 - POSIX trace: `docs/posix-trace-table.md`
 - POSIX shall-trace: `docs/posix-shall-trace.md`
