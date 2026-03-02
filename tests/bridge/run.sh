@@ -108,6 +108,12 @@ run_case \
   $'ValueError|boom|python\ns:0\n'
 
 run_case \
+  "py_structured_exception_reset_on_success" \
+  'py -x '"'"'raise ValueError("boom")'"'"'; py -x '"'"'pass'"'"'; echo "X${PYTHON_EXCEPTION}Y|X${PYTHON_EXCEPTION_MSG}Y|X${PYTHON_EXCEPTION_LANG}Y|X${PYTHON_EXCEPTION_TB}Y"' \
+  0 \
+  $'XY|XY|XY|XY\n'
+
+run_case \
   "py_exception_status" \
   'py '"'"'raise RuntimeError("bad")'"'"'; echo s:$?' \
   0 \

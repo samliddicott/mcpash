@@ -6112,6 +6112,8 @@ class Runtime:
             self._report_error(f"illegal option {a}", line=self.current_line, context="py")
             return 2
         payload = args[i:]
+        if structured_exc:
+            self._clear_structured_python_exception_vars()
         for name in untie_vars:
             self._py_ties.pop(name, None)
         for name in tie_vars:
@@ -6167,6 +6169,13 @@ class Runtime:
         if eval_mode and py_result is not None and stdout_var is None and return_var is None:
             print(self._py_to_shell(py_result))
         return 0
+
+    def _clear_structured_python_exception_vars(self) -> None:
+        # Structured exception mode should not leak stale values between runs.
+        self._assign_shell_var("PYTHON_EXCEPTION", "")
+        self._assign_shell_var("PYTHON_EXCEPTION_MSG", "")
+        self._assign_shell_var("PYTHON_EXCEPTION_TB", "")
+        self._assign_shell_var("PYTHON_EXCEPTION_LANG", "")
 
     def _run_shared(self, args: List[str]) -> int:
         store = self._get_shared_store()
