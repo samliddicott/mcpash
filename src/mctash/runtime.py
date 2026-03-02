@@ -1039,12 +1039,363 @@ class Runtime:
         return self._exec_and_or(item.node)
 
     def _exec_asdl_list_item(self, item: dict[str, Any]) -> int:
-        """Execute one ASDL-shaped list item.
+        t = item.get("type")
+        if t == "command.Sentence":
+            term = self._asdl_token_text(item.get("terminator"))
+            child = item.get("child")
+            if not isinstance(child, dict):
+                raise RuntimeError("invalid ASDL sentence node")
+            if term == "&":
+                # Keep existing background/process model behavior while the
+                # command executor migration is in progress.
+                return self._exec_list_item(self._asdl_to_ast_list_item(item))
+            return self._exec_asdl_list_item(child)
+        if t != "command.AndOr":
+            raise RuntimeError(f"invalid ASDL list item: {t}")
+        return self._exec_asdl_and_or(item)
 
-        Initial scaffold path keeps behavioral parity by adapting to the
-        existing internal AST executor while we migrate execution surfaces.
-        """
-        return self._exec_list_item(asdl_item_to_list_item(item))
+    def _exec_asdl_and_or(self, node: dict[str, Any], track_status: bool = True) -> int:
+        pipes = node.get("children") or []
+        if not pipes:
+            return 0
+        status = self._exec_asdl_pipeline(pipes[0])
+        if track_status:
+            self.last_status = status
+            if status != 0:
+                self.last_nonzero_status = status
+            self._trap_status_hint = status
+        ops = node.get("ops") or []
+        for op, pipeline in zip(ops, pipes[1:]):
+            op_s = self._asdl_token_text(op)
+            if op_s == "&&":
+                if status == 0:
+                    status = self._exec_asdl_pipeline(pipeline)
+            elif op_s == "||":
+                if status != 0:
+                    status = self._exec_asdl_pipeline(pipeline)
+            if track_status:
+                self.last_status = status
+                if status != 0:
+                    self.last_nonzero_status = status
+                self._trap_status_hint = status
+        return status
+
+    def _exec_asdl_pipeline(self, node: dict[str, Any]) -> int:
+        commands = node.get("children") or []
+        negate = bool(node.get("negated", False))
+        if not commands:
+            status = 0
+        elif len(commands) == 1:
+            status = self._exec_asdl_command(commands[0])
+        else:
+            # Reuse existing mature pipeline behavior by converting command
+            # leaves to internal command nodes for now.
+            ast_commands = [self._asdl_to_ast_command(c) for c in commands]
+            status = self._exec_pipeline(Pipeline(commands=ast_commands, negate=False))
+        if negate:
+            return 0 if status != 0 else 1
+        return status
+
+    def _exec_asdl_command(self, node: dict[str, Any]) -> int:
+        t = node.get("type")
+        if t == "command.BraceGroup":
+            children = node.get("children") or []
+            return self._exec_asdl_command_list(children)
+        if t == "command.If":
+            arms = node.get("arms") or []
+            if not arms:
+                return 0
+            for arm in arms:
+                cond = arm.get("cond") or {}
+                with self._suppress_errexit():
+                    cond_status = self._exec_asdl_command_list((cond.get("children") or []))
+                if cond_status == 0:
+                    action = arm.get("action") or {}
+                    return self._exec_asdl_command_list((action.get("children") or []))
+            else_action = node.get("else_action") or {}
+            return self._exec_asdl_command_list((else_action.get("children") or []))
+        if t == "command.WhileUntil":
+            kw = self._asdl_token_text(node.get("keyword"))
+            until = kw == "until"
+            cond_node = node.get("cond") or {}
+            body_node = node.get("body") or {}
+            body_children = body_node.get("children") or body_node.get("children", [])
+            if body_node.get("type") == "command.CommandList":
+                body_children = body_node.get("children") or []
+            self._loop_depth += 1
+            try:
+                last = 0
+                while True:
+                    with self._suppress_errexit():
+                        cond_status = self._exec_asdl_command_list((cond_node.get("children") or []))
+                    should_run = cond_status != 0 if until else cond_status == 0
+                    if not should_run:
+                        break
+                    try:
+                        last = self._exec_asdl_command_list(body_children)
+                    except ContinueLoop as e:
+                        if e.count > 1:
+                            raise ContinueLoop(e.count - 1)
+                        self._run_pending_traps()
+                        continue
+                    except BreakLoop as e:
+                        if e.count > 1:
+                            raise BreakLoop(e.count - 1)
+                        last = 0
+                        break
+                return last
+            finally:
+                self._loop_depth -= 1
+        return self._exec_command(self._asdl_to_ast_command(node))
+
+    def _exec_asdl_command_list(self, children: list[dict[str, Any]]) -> int:
+        status = 0
+        for child in children:
+            status = self._exec_asdl_list_item(child)
+            self.last_status = status
+            if status != 0:
+                self.last_nonzero_status = status
+            self._trap_status_hint = status
+            is_bg = (
+                isinstance(child, dict)
+                and child.get("type") == "command.Sentence"
+                and self._asdl_token_text(child.get("terminator")) == "&"
+            )
+            if not is_bg:
+                self._run_pending_traps()
+            if status != 0 and self.options.get("e", False) and self._errexit_suppressed == 0:
+                raise SystemExit(status)
+        self._run_pending_traps()
+        return status
+
+    def _asdl_to_ast_list_item(self, node: dict[str, Any]) -> ListItem:
+        t = node.get("type")
+        if t == "command.Sentence":
+            child = node.get("child") or {}
+            out = self._asdl_to_ast_list_item(child)
+            if self._asdl_token_text(node.get("terminator")) == "&":
+                out.background = True
+            return out
+        if t != "command.AndOr":
+            raise RuntimeError(f"invalid ASDL list item: {t}")
+        return ListItem(node=self._asdl_to_ast_and_or(node), background=False)
+
+    def _asdl_to_ast_and_or(self, node: dict[str, Any]) -> AndOr:
+        pipes = [self._asdl_to_ast_pipeline(p) for p in (node.get("children") or [])]
+        ops = [self._asdl_token_text(op) for op in (node.get("ops") or [])]
+        return AndOr(pipelines=pipes, operators=[o for o in ops if o in {"&&", "||"}])
+
+    def _asdl_to_ast_pipeline(self, node: dict[str, Any]) -> Pipeline:
+        commands = [self._asdl_to_ast_command(c) for c in (node.get("children") or [])]
+        return Pipeline(commands=commands, negate=bool(node.get("negated", False)))
+
+    def _asdl_to_ast_command(self, node: dict[str, Any]) -> Command:
+        t = node.get("type")
+        if t == "command.Simple":
+            return SimpleCommand(
+                argv=[Word(self._asdl_word_to_text(w)) for w in (node.get("words") or [])],
+                assignments=[
+                    Assignment(
+                        name=env_pair.get("name", ""),
+                        value=self._asdl_rhs_word_to_text(env_pair.get("val")),
+                        op="=",
+                    )
+                    for env_pair in (node.get("more_env") or [])
+                ],
+                redirects=[self._asdl_to_ast_redirect(r) for r in (node.get("redirects") or [])],
+                line=self._asdl_command_line(node),
+            )
+        if t == "command.Redirect":
+            child = self._asdl_to_ast_command(node.get("child") or {})
+            redirects = [self._asdl_to_ast_redirect(r) for r in (node.get("redirects") or [])]
+            return RedirectCommand(child=child, redirects=redirects)
+        if t == "command.Subshell":
+            return SubshellCommand(body=self._asdl_to_ast_list(node.get("child") or {}))
+        if t == "command.ShFunction":
+            return FunctionDef(name=node.get("name", ""), body=self._asdl_to_ast_list(node.get("body") or {}))
+        if t == "command.ForEach":
+            iterable = node.get("iterable") or {}
+            words = [Word(self._asdl_word_to_text(w)) for w in (iterable.get("words") or [])]
+            names = node.get("iter_names") or [""]
+            return ForCommand(
+                name=names[0],
+                items=words,
+                body=self._asdl_to_ast_do_group(node.get("body") or {}),
+                explicit_in=bool(node.get("explicit_in", False)),
+            )
+        if t == "command.Case":
+            to_match = node.get("to_match") or {}
+            value_word = to_match.get("word") if isinstance(to_match, dict) else {}
+            items: list[CaseItem] = []
+            for arm in (node.get("arms") or []):
+                pat = arm.get("pattern") or {}
+                patterns = [self._asdl_word_to_text(w) for w in (pat.get("words") or [])]
+                action = arm.get("action") or []
+                items.append(CaseItem(patterns=patterns, body=self._asdl_to_ast_action_list(action)))
+            return CaseCommand(value=Word(self._asdl_word_to_text(value_word or {})), items=items)
+        if t == "command.ControlFlow":
+            keyword = self._asdl_token_text(node.get("keyword"))
+            argv = [Word(keyword or "")]
+            arg = node.get("arg_word")
+            if arg is not None:
+                argv.append(Word(self._asdl_word_to_text(arg)))
+            return SimpleCommand(argv=argv, assignments=[], redirects=[], line=self._asdl_command_line(node))
+        if t == "command.ShAssignment":
+            assignments = []
+            for pair in (node.get("pairs") or []):
+                assignments.append(
+                    Assignment(
+                        name=pair.get("name", ""),
+                        value=self._asdl_rhs_word_to_text(pair.get("rhs")),
+                        op=pair.get("op", "="),
+                    )
+                )
+            redirects = [self._asdl_to_ast_redirect(r) for r in (node.get("redirects") or [])]
+            return SimpleCommand(argv=[], assignments=assignments, redirects=redirects, line=self._asdl_command_line(node))
+        if t == "command.BraceGroup":
+            return GroupCommand(body=self._asdl_to_ast_group(node))
+        if t == "command.If":
+            arms = node.get("arms") or []
+            if not arms:
+                return GroupCommand(body=ListNode(items=[]))
+            first = arms[0]
+            cond = self._asdl_to_ast_list(first.get("cond") or {})
+            then_body = self._asdl_to_ast_list(first.get("action") or {})
+            elifs = []
+            for arm in arms[1:]:
+                elifs.append((self._asdl_to_ast_list(arm.get("cond") or {}), self._asdl_to_ast_list(arm.get("action") or {})))
+            else_action = node.get("else_action")
+            else_body = self._asdl_to_ast_list(else_action) if else_action else None
+            return IfCommand(cond=cond, then_body=then_body, elifs=elifs, else_body=else_body)
+        if t == "command.WhileUntil":
+            return WhileCommand(
+                cond=self._asdl_to_ast_list(node.get("cond") or {}),
+                body=self._asdl_to_ast_do_group(node.get("body") or {}),
+                until=(self._asdl_token_text(node.get("keyword")) == "until"),
+            )
+        raise RuntimeError(f"unsupported ASDL command node {t}")
+
+    def _asdl_to_ast_group(self, node: dict[str, Any]) -> ListNode:
+        items = [self._asdl_to_ast_list_item(child) for child in (node.get("children") or [])]
+        return ListNode(items=items)
+
+    def _asdl_to_ast_list(self, node: dict[str, Any]) -> ListNode:
+        if node.get("type") != "command.CommandList":
+            return ListNode(items=[])
+        return ListNode(items=[self._asdl_to_ast_list_item(child) for child in (node.get("children") or [])])
+
+    def _asdl_to_ast_do_group(self, node: dict[str, Any]) -> ListNode:
+        t = node.get("type")
+        if t == "command.DoGroup":
+            return ListNode(items=[self._asdl_to_ast_list_item(child) for child in (node.get("children") or [])])
+        if t == "command.CommandList":
+            return self._asdl_to_ast_list(node)
+        return ListNode(items=[])
+
+    def _asdl_to_ast_action_list(self, action: list[dict[str, Any]]) -> ListNode:
+        return ListNode(items=[self._asdl_to_ast_list_item(child) for child in action])
+
+    def _asdl_to_ast_redirect(self, node: dict[str, Any]) -> Redirect:
+        op_raw = node.get("op")
+        op = self._asdl_token_text(op_raw)
+        strip_tabs = op == "<<-"
+        if op == "<<-":
+            op = "<<"
+        loc = node.get("loc") or {}
+        fd = loc.get("fd") if isinstance(loc, dict) else None
+        arg = node.get("arg") or {}
+        if arg.get("type") == "redir_param.HereDoc":
+            begin = arg.get("here_begin") or {}
+            target = self._asdl_word_to_text(begin)
+            parts = arg.get("stdin_parts") or []
+            content = "".join(self._asdl_word_part_to_heredoc_text(p) for p in parts)
+            return Redirect(
+                op=op or "<<",
+                target=target,
+                fd=fd,
+                here_doc=content,
+                here_doc_expand=bool(arg.get("do_expand", True)),
+                here_doc_strip_tabs=bool(arg.get("strip_tabs", strip_tabs)),
+            )
+        target_word = arg.get("word") or {}
+        return Redirect(op=op or ">", target=self._asdl_word_to_text(target_word), fd=fd)
+
+    def _asdl_rhs_word_to_text(self, node: dict[str, Any] | None) -> str:
+        if not node:
+            return ""
+        if node.get("type") == "rhs_word.Compound":
+            return self._asdl_word_to_text(node.get("word") or {})
+        return ""
+
+    def _asdl_word_to_text(self, node: dict[str, Any]) -> str:
+        if not isinstance(node, dict) or node.get("type") != "word.Compound":
+            return ""
+        return "".join(self._asdl_word_part_to_text(p) for p in (node.get("parts") or []))
+
+    def _asdl_word_part_to_text(self, node: dict[str, Any]) -> str:
+        t = node.get("type")
+        if t == "word_part.Literal":
+            return node.get("tval", "")
+        if t == "word_part.SingleQuoted":
+            return "'" + node.get("sval", "") + "'"
+        if t == "word_part.DoubleQuoted":
+            inner = "".join(self._asdl_word_part_to_double_text(p) for p in (node.get("parts") or []))
+            return '"' + inner + '"'
+        if t == "word_part.SimpleVarSub":
+            return "$" + node.get("name", "")
+        if t == "word_part.BracedVarSub":
+            name = node.get("name", "")
+            op = node.get("op")
+            if op == "__len__":
+                return "${#" + name + "}"
+            if op == ":substr":
+                arg = node.get("arg")
+                arg_s = self._asdl_word_to_text(arg) if isinstance(arg, dict) else ""
+                return "${" + name + ":" + arg_s + "}"
+            if op:
+                arg = node.get("arg")
+                arg_s = self._asdl_word_to_text(arg) if isinstance(arg, dict) else ""
+                return "${" + name + op + arg_s + "}"
+            return "${" + name + "}"
+        if t == "word_part.CommandSub":
+            src = node.get("child_source") or ""
+            syntax = node.get("syntax") or "dollar"
+            if syntax == "backtick":
+                return "`" + src + "`"
+            return "$(" + src + ")"
+        if t == "word_part.ArithSub":
+            return "$((" + (node.get("expr_source") or node.get("code") or "") + "))"
+        return ""
+
+    def _asdl_word_part_to_double_text(self, node: dict[str, Any]) -> str:
+        if node.get("type") == "word_part.Literal":
+            return node.get("tval", "")
+        return self._asdl_word_part_to_text(node)
+
+    def _asdl_word_part_to_heredoc_text(self, node: dict[str, Any]) -> str:
+        if node.get("type") == "word_part.Literal":
+            return node.get("tval", "")
+        return self._asdl_word_part_to_text(node)
+
+    def _asdl_command_line(self, node: dict[str, Any]) -> int | None:
+        for w in (node.get("words") or []):
+            pos = w.get("pos") if isinstance(w, dict) else None
+            if isinstance(pos, dict):
+                line = pos.get("line")
+                if isinstance(line, int):
+                    return line
+        return None
+
+    def _asdl_token_text(self, tok: Any) -> str:
+        if isinstance(tok, dict):
+            if "tval" in tok:
+                return str(tok.get("tval") or "")
+            if "value" in tok:
+                return str(tok.get("value") or "")
+            return ""
+        if tok is None:
+            return ""
+        return str(tok)
 
     def _try_unshare_thread_state(self) -> None:
         if not sys.platform.startswith("linux"):
