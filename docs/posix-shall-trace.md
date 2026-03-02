@@ -48,6 +48,9 @@ Case link notation:
 | Backslash handling in double-quoted expansion-heavy words | POSIX required | Native ASDL argv expansion not yet enabled globally due parity regressions; legacy path retained | Enable native ASDL argv expansion after context-accurate quote/backslash handling is complete | POSIX XCU Chapter 2 (`2.2`/`2.6`), rationale C.2 | `tests/busybox/ash_test/ash-quoting/bkslash_case1.tests`, `tests/regressions/run.sh` (`monitor_mode_interactive_pty`) |
 | Command substitution evaluation source in ASDL word parts | POSIX required | Uses structured `word_part.CommandSub.child` when available; falls back to `child_source` text path otherwise | Remove text fallback once structured child coverage is complete | POSIX XCU Chapter 2 (`2.6.3`) and rationale C.2 | `tests/busybox/ash_test/ash-psubst/tick*.tests`, `tests/regressions/run.sh` (`asdl_exec_shassignment_cmdsub_*`) |
 
+Diagnostic policy note:
+- For malformed expansion forms, parity target is error behavior (non-zero status and control-flow impact), not byte-for-byte diagnostic text equality, unless POSIX explicitly requires text.
+
 ## 2.2 Quoting
 
 | Requirement (normative intent) | Status | Evidence | Notes |
