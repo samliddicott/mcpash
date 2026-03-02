@@ -1,0 +1,116 @@
+# Milestone 2 Plan: Bridge Hardening + UX (Option 5)
+
+Date: 2026-03-02
+Status: approved for execution
+
+## Scope
+
+This milestone is an ash-mode bridge hardening and usability pass from the current stable baseline.
+
+In-scope:
+- shell<->python bridge correctness and diagnostics in ash mode
+- deterministic failure contracts
+- regression and stress coverage for bridge paths
+- improved CLI/bridge usability docs and examples
+
+Explicitly out-of-scope for this milestone:
+- shell-side typed array/assoc semantics
+- shell list/dict mapping behavior
+- full bash-compat extensions (deferred to the next milestone)
+
+## Week 1: Hardening
+
+### Step 1: Scope freeze in docs and contracts
+- Lock ash-mode bridge scope as scalar-first (`scalar`, `integer` only).
+- Mark list/dict shell mapping and `array`/`assoc` tie types as deferred.
+- Ensure docs/spec/checklist/limitations agree.
+
+Exit:
+- docs updated and consistent
+- no ambiguity about deferred typed collections
+
+### Step 2: Failure contract normalization
+- Normalize bridge failure signaling for `py`, `python:`, and `PYTHON ... END_PYTHON`.
+- Define and enforce structured exception variable behavior (`PYTHON_EXCEPTION*`).
+- Ensure stale structured exception state is cleared on successful structured runs.
+
+Exit:
+- deterministic status + env-variable behavior for structured exception path
+- regression tests for contract
+
+### Step 3: Hardening regression cases
+- Add focused regression rows for:
+  - structured exception reset behavior
+  - deferred list/dict and `array`/`assoc` tie rejection behavior
+  - callable resolution edge diagnostics
+
+Exit:
+- targeted bridge regressions pass locally
+
+### Step 4: Stress reliability pass
+- Run/extend stress harness to exercise bridge paths repeatedly under bounded resources.
+- Preserve fail-on-first-mismatch semantics; no masking of failures.
+
+Exit:
+- stress harness produces repeatable pass/fail outcome and artifacts
+
+### Step 5: Week-1 checkpoint report
+- Record implemented changes, remaining deltas, and evidence.
+
+Exit:
+- short report in `docs/reports/`
+
+## Week 2: UX and ergonomics
+
+### Step 6: `python:` diagnostic UX
+- Improve diagnostics when callable resolution fails and fallback execution also fails.
+- Keep behavior compatible with established `python:` dispatch rule.
+
+Exit:
+- clearer error messages with actionable context
+
+### Step 7: Scalar coercion messaging
+- Improve callable argument coercion diagnostics (where cast/fallback is ambiguous).
+- Keep runtime behavior deterministic and backward-compatible for ash mode.
+
+Exit:
+- clearer argument/type error output in bridge paths
+
+### Step 8: Docs and examples
+- Add/update practical examples for `py`, `python:`, `PYTHON` block, `from ... import ...`, ties.
+- Keep examples ash-mode-compatible and scalar-first.
+
+Exit:
+- docs reflect actual runtime behavior and constraints
+
+### Step 9: UX regression rows
+- Add regression cases for diagnostics and examples from Step 8.
+
+Exit:
+- coverage protects UX contract from regressions
+
+### Step 10: Week-2 checkpoint report
+- Record final week-2 outcomes and residual tasks.
+
+Exit:
+- report in `docs/reports/`
+
+## Validation Gates
+
+Per-step local checks:
+- `tests/bridge/run.sh`
+- `tests/regressions/run.sh`
+
+Periodic broader checks:
+- `make conformance-quick`
+- selected BusyBox ash modules via `src/tests/run_busybox_ash.sh`
+
+Resource guardrails:
+- memory cap policy remains enforced (no implicit cap increase)
+- fail-fast on first mismatch for reliability runs
+
+## Delivery Model
+
+- Commit after each numbered step.
+- Keep commits scoped and message-prefixed by area (`docs`, `runtime`, `tests`, `report`).
+
