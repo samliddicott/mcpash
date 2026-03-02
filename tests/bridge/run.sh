@@ -90,6 +90,13 @@ run_case \
   $'X5Y\n'
 
 run_case \
+  "py_callable_coercion_diag_on_total_typeerror" \
+  'py '"'"'def one(a): return a'"'"'; py one 1 2' \
+  1 \
+  $'\n' \
+  'call failed after automatic coercion and raw-string fallback'
+
+run_case \
   "python_colon_callable_dispatch" \
   'py '"'"'import math'"'"'; python: -r out math.sqrt 9; echo "X${out}Y"' \
   0 \

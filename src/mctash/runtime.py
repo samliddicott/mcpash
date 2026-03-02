@@ -6341,8 +6341,14 @@ class Runtime:
         casted: list[object] = [self._cast_shell_arg(a) for a in args]
         try:
             return func(*casted)  # type: ignore[misc]
-        except TypeError:
-            return func(*args)  # type: ignore[misc]
+        except TypeError as cast_err:
+            try:
+                return func(*args)  # type: ignore[misc]
+            except TypeError as raw_err:
+                raise TypeError(
+                    "call failed after automatic coercion and raw-string fallback: "
+                    f"coerced_args={casted!r} ({cast_err}); raw_args={args!r} ({raw_err})"
+                ) from raw_err
 
     def _install_python_callable(
         self,
