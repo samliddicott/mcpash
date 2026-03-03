@@ -676,8 +676,8 @@ class Parser:
         tok = self._peek()
         if tok is None or tok.kind != "OP" or tok.value != "(":
             return None
+        start_index = tok.index
         self._advance()  # '('
-        parts: list[str] = []
         depth = 1
         while True:
             cur = self._peek()
@@ -685,22 +685,19 @@ class Parser:
                 raise ParseError("syntax error: missing ')' in compound assignment")
             if cur.kind == "OP" and cur.value == "(":
                 depth += 1
-                parts.append("(")
                 self._advance()
                 continue
             if cur.kind == "OP" and cur.value == ")":
                 depth -= 1
                 if depth == 0:
+                    end_index = cur.index + len(cur.value)
                     self._advance()
-                    break
-                parts.append(")")
+                    return self.reader.source[start_index:end_index]
                 self._advance()
                 continue
             if cur.kind == "OP" and cur.value == "\n":
                 raise ParseError(f"syntax error: missing ')' in compound assignment at {self._where(cur)}")
-            parts.append(cur.value)
             self._advance()
-        return "(" + " ".join(parts) + ")"
 
     def _make_redirect(self, op: str, target: str, fd: int | None) -> Redirect:
         if op == "<<-":
