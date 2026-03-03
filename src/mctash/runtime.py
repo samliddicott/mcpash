@@ -6895,8 +6895,7 @@ class Runtime:
         if isinstance(sys.stdout, io.StringIO) and self._fd_redirect_depth == 0:
             sys.stdout.write(rendered)
             return 0
-        # Use latin-1 to preserve byte-oriented escapes like \xHH.
-        data = rendered.encode("latin-1", errors="ignore")
+        data = self._encode_printf_output(rendered)
         try:
             os.write(1, data)
             return 0
@@ -6906,6 +6905,21 @@ class Runtime:
                 return 1
             print(f"ash: write error: {e.strerror}", file=sys.stderr)
             return 1
+
+    def _encode_printf_output(self, text: str) -> bytes:
+        # Preserve low-byte escape semantics (\xHH, octal escapes) while also
+        # allowing regular Unicode text to pass through as UTF-8.
+        out = bytearray()
+        for ch in text:
+            code = ord(ch)
+            if 0xDC80 <= code <= 0xDCFF:
+                out.append(code - 0xDC00)
+                continue
+            if code <= 0xFF:
+                out.append(code)
+                continue
+            out.extend(ch.encode("utf-8"))
+        return bytes(out)
 
     def _run_py(self, args: List[str], entry_name: str = "py") -> int:
         eval_mode = False

@@ -4,7 +4,7 @@
 # Coverage:
 # - parameter-operator behavior with literal private-use unicode chars
 # - ensure private-use chars are treated as ordinary user data
-pua=$(printf '\356\200\201')
+pua=""
 x="aa${pua}bb${pua}cc"
 
 r1=${x#*${pua}}

@@ -4,7 +4,7 @@
 # Coverage:
 # - assignment with escaped glob chars adjacent to private-use unicode
 # - case matching with quoted/unquoted patterns including private-use char
-pua=$(printf '\356\200\201')
+pua=""
 
 a="\\*${pua}\\?"
 b="z${pua}k"

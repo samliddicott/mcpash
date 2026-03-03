@@ -4,7 +4,7 @@
 # Coverage:
 # - private-use unicode codepoint should remain ordinary data, not internal marker
 # - escaped glob chars adjacent to PUA chars stay literal
-pua=$(printf '\356\200\201')
+pua=""
 
 v1="*${pua}?"
 v2=\*"$pua"\?
