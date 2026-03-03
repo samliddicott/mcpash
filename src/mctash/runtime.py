@@ -1835,9 +1835,8 @@ class Runtime:
             if p.get("type") != "word_part.Literal":
                 return False
             lit = str(p.get("tval", ""))
-            # Keep any expansion-like or quote/escape-sensitive text on the
-            # legacy argv path for parity.
-            if any(ch in lit for ch in ["$", "`", "\\", "'", '"']):
+            # Literal fragments are now natively decoded/expanded.
+            if "\n" in lit:
                 return False
         return True
 
