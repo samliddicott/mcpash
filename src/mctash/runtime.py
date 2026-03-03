@@ -1815,11 +1815,6 @@ class Runtime:
     def _asdl_word_can_expand_argv_natively_safe(self, word: dict[str, Any]) -> bool:
         if not isinstance(word, dict) or word.get("type") != "word.Compound":
             return False
-        # Process substitution must stay on legacy argv path; native field
-        # expansion currently doesn't perform _process_substitute().
-        raw = self._asdl_word_to_text(word)
-        if "<(" in raw or ">(" in raw:
-            return False
         parts = word.get("parts") or []
         if not parts:
             return True
@@ -1843,8 +1838,6 @@ class Runtime:
             # Keep any expansion-like or quote/escape-sensitive text on the
             # legacy argv path for parity.
             if any(ch in lit for ch in ["$", "`", "\\", "'", '"']):
-                return False
-            if "<(" in lit or ">(" in lit:
                 return False
         return True
 
@@ -2564,6 +2557,10 @@ class Runtime:
                 for v in vals:
                     next_pieces.append(prefix + v)
             pieces = next_pieces
+        # Match legacy argv behavior: exact unquoted process substitution words
+        # are realized before field splitting/pathname expansion.
+        if not any_quoted and len(pieces) == 1 and self._is_process_subst(pieces[0]):
+            return [self._process_substitute(pieces[0])]
         if any_quoted or not split_glob:
             return pieces
         out: list[str] = []

@@ -25,7 +25,7 @@ Out of scope (A2):
 
 | ID | Item | Status | Completion Criteria | Evidence Gate |
 |---|---|---|---|---|
-| A2-001 | Native process substitution in ASDL argv expansion | open | `word_part` expansion path can produce `<(...)` / `>(...)` results natively without per-word legacy fallback. | `tests/regressions/run.sh` (`process_subst_*`), `tests/diff/cases/man-ash-thread-pipeline-fd.sh`, `tests/diff/cases/man-ash-thread-pipeline-cwd.sh` |
+| A2-001 | Native process substitution in ASDL argv expansion | done | `word_part` expansion path can produce `<(...)` / `>(...)` results natively without per-word legacy fallback. | `tests/regressions/run.sh` (`process_subst_*`), `tests/diff/cases/man-ash-thread-pipeline-fd.sh`, `tests/diff/cases/man-ash-thread-pipeline-cwd.sh` |
 | A2-002 | Remove quote/escape literal guard in ASDL argv safety path | open | `command.Simple` words with quote/escape-sensitive literals no longer require legacy path for correctness. | `tests/regressions/run.sh` (`asdl_argv_*`, `quoted argv guardrails`), `tests/diff/cases/man-ash-word-nesting.sh`, `tests/diff/cases/man-ash-word-nesting-deep.sh` |
 | A2-003 | Native assignment-word quote-removal parity | open | Assignment RHS expansion with quotes/backslashes is native ASDL for in-scope forms; no fallback to `_expand_assignment_word(_asdl_word_to_text(...))` in ASDL assignment execution. | `tests/regressions/run.sh` (`asdl_exec_shassignment_*`), BusyBox `ash-vars` + `ash-quoting` modules |
 | A2-004 | Native handling of special params in ASDL assignment context | open | ASDL assignment expansion correctly handles special params (`$@`, `$*`, `$1...`) where currently guarded. | New `tests/diff/cases/bash-compat-param-assignment-specials.sh` + regressions |
@@ -47,5 +47,5 @@ Out of scope (A2):
 
 ## Remaining Count
 
-- Open: 8
-- Done: 0
+- Open: 7
+- Done: 1
