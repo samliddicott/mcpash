@@ -11,6 +11,7 @@ root = Path(sys.argv[1])
 src_root = root / "src" / "mctash"
 allowed_sentinel_files = {
     src_root / "expand.py",
+    src_root / "expand_legacy_markers.py",
 }
 
 violations = []
