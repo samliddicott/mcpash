@@ -45,7 +45,7 @@ Status legend:
 | `fc` editor/history parity | partial | Added `man-ash-fc-editor-env.sh`, `man-ash-fc-ranges.sh`, and core `man-ash-fc.sh`; richer edit/re-exec flows still remain.
 | `ulimit` full flag set | partial | Query/set/error coverage now includes extended set matrix in `man-ash-ulimit-set.sh` for `-n/-f/-c/-v`; full per-resource universe remains open.
 | `trap` signal matrix | partial | Added delivery/matrix coverage via `man-ash-trap-delivery.sh` and `man-ash-trap-signal-matrix.sh` plus existing matrix/full/nested cases; interactive signal semantics remain open.
-| `fc` comparator availability | partial | Current ash target reports `fc` unavailable, so differential parity for `fc -e` semantics is blocked on comparator support (`docs/fc-comparator-blocker.md`).
+| `fc` comparator availability | partial | Current ash target reports `fc` unavailable, so `fc` differential parity uses a temporary bash comparator until ash comparator support exists (`docs/fc-comparator-blocker.md`).
 | `jobs` interactive monitor semantics | partial | Non-interactive semantics plus PTY smoke (`monitor_mode_interactive_pty`, `monitor_mode_interactive_jobs_fg`) are covered; full interactive job-control matrix remains open.
 
 ## POSIX Chapter 2 Areas

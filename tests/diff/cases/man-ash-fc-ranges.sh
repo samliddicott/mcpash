@@ -1,6 +1,7 @@
 #!/usr/bin/env ash
 # DIFF_BASELINE: bash
 # Coverage: fc range/reference semantics advertised in ash man page.
+# NOTE: temporary comparator override to bash because current ash comparator lacks `fc`.
 # Areas:
 # - negative history range listing
 # - reverse listing over range

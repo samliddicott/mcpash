@@ -1,6 +1,7 @@
 #!/usr/bin/env ash
 # DIFF_BASELINE: bash
-# Coverage: man ash-advertised `fc` operations, using bash comparator because ash lacks fc.
+# Coverage: man ash-advertised `fc` operations.
+# NOTE: temporary comparator override to bash because current ash comparator lacks `fc`.
 # Areas:
 # - list mode with -l/-n
 # - reverse listing with -r

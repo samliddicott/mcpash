@@ -10,7 +10,7 @@ Problem:
 Observed evidence:
 
 - `ash -c 'fc -e : -l -1'` exits with command-not-found in this environment.
-- Differential `fc` coverage now runs against bash baseline:
+- Differential `fc` coverage now runs against a **temporary** bash baseline:
   - `tests/diff/cases/man-ash-fc.sh`
   - `tests/diff/cases/man-ash-fc-editor-env.sh`
   - `tests/diff/cases/man-ash-fc-ranges.sh`
@@ -27,6 +27,11 @@ Interim strategy:
      - `fc_invalid_reference_status`
 3. Continue bash-baseline differential coverage for editor/range/list/substitute surface.
 4. If an ash build with `fc` is introduced, add ash-lane parity for the same matrix.
+
+Temporary status:
+
+- Bash is a temporary comparator for `fc` parity only.
+- Exit this temporary mode once comparator `ash` provides `fc`.
 
 Exit criteria for removing blocker:
 

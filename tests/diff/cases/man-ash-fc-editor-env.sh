@@ -1,6 +1,7 @@
 #!/usr/bin/env ash
 # DIFF_BASELINE: bash
 # Coverage: fc editor selection surface in ash-advertised mode.
+# NOTE: temporary comparator override to bash because current ash comparator lacks `fc`.
 # Areas:
 # - FCEDIT precedence
 # - EDITOR fallback
