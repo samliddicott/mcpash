@@ -2386,7 +2386,7 @@ class Runtime:
         if node.get("type") == "rhs_word.Compound":
             word = node.get("word") or {}
             if self._asdl_rhs_assignment_can_expand_natively(word):
-                return self._expand_asdl_word_scalar(word, split_glob=False)
+                return self._expand_asdl_assignment_scalar(word)
             return self._expand_assignment_word(self._asdl_word_to_text(word))
         return ""
 
@@ -2415,10 +2415,8 @@ class Runtime:
                 # Command substitution is scalar in assignment context.
                 continue
             if t == "word_part.SimpleVarSub":
-                # Restrict to named vars (avoid special params like $@/$*/$1
-                # here until native assignment expansion models those exactly).
                 name = str(p.get("name", ""))
-                if self._is_valid_name(name):
+                if self._is_valid_param_ref_name(name):
                     continue
                 return False
             if t == "word_part.BracedVarSub":
@@ -2426,9 +2424,9 @@ class Runtime:
                 # operators with literal-only arg words.
                 name = str(p.get("name", ""))
                 op = p.get("op")
-                if self._is_valid_name(name) and (op is None or op == "" or op == "__len__"):
+                if self._is_valid_param_ref_name(name) and (op is None or op == "" or op == "__len__"):
                     continue
-                if self._is_valid_name(name) and op in {
+                if self._is_valid_param_ref_name(name) and op in {
                     "-",
                     ":-",
                     "+",
@@ -2449,6 +2447,68 @@ class Runtime:
             # Any non-literal part stays on legacy assignment expansion for now.
             return False
         return True
+
+    def _is_valid_param_ref_name(self, name: str) -> bool:
+        if self._is_valid_name(name):
+            return True
+        if name.isdigit():
+            return True
+        return name in {"@", "*", "#", "?", "$", "!", "-"}
+
+    def _scalarize_assignment_expansion(self, value: Any) -> str:
+        if isinstance(value, PresplitFields):
+            return self._ifs_join([str(v) for v in value.fields])
+        if isinstance(value, list):
+            return self._ifs_join([str(v) for v in value])
+        return "" if value is None else str(value)
+
+    def _expand_asdl_assignment_scalar(self, node: dict[str, Any] | None) -> str:
+        if not isinstance(node, dict) or node.get("type") != "word.Compound":
+            return ""
+        out: list[str] = []
+        for part in (node.get("parts") or []):
+            out.append(self._expand_asdl_assignment_part_scalar(part, quoted_context=False))
+        return "".join(out)
+
+    def _expand_asdl_assignment_part_scalar(self, node: dict[str, Any], quoted_context: bool) -> str:
+        t = node.get("type")
+        if t == "word_part.Literal":
+            return self._decode_asdl_literal(str(node.get("tval", "")), quoted_context=quoted_context)
+        if t == "word_part.SingleQuoted":
+            return str(node.get("sval", ""))
+        if t == "word_part.DoubleQuoted":
+            parts = node.get("parts") or []
+            return "".join(self._expand_asdl_assignment_part_scalar(p, quoted_context=True) for p in parts)
+        if t == "word_part.SimpleVarSub":
+            name = str(node.get("name", ""))
+            if name in {"@", "*"}:
+                return self._ifs_join(self.positional)
+            return self._scalarize_assignment_expansion(self._expand_param(name, quoted_context))
+        if t == "word_part.BracedVarSub":
+            name = str(node.get("name", ""))
+            op = node.get("op")
+            arg_node = node.get("arg")
+            arg_text = (
+                self._expand_asdl_assignment_scalar(arg_node)
+                if isinstance(arg_node, dict)
+                else None
+            )
+            if name in {"@", "*"} and (op is None or op == ""):
+                return self._ifs_join(self.positional)
+            value = self._expand_braced_param(name, op, arg_text, quoted_context)
+            return self._scalarize_assignment_expansion(value)
+        if t == "word_part.CommandSub":
+            child = node.get("child")
+            syntax = str(node.get("syntax") or "dollar")
+            backtick = syntax == "backtick"
+            if isinstance(child, dict) and child.get("type") == "command.CommandList":
+                return self._expand_command_subst_asdl(child, backtick=backtick)
+            src = str(node.get("child_source") or "")
+            return self._expand_command_subst_text(src, backtick=backtick)
+        if t == "word_part.ArithSub":
+            expr = str(node.get("expr_source") or node.get("code") or "")
+            return self._expand_arith(expr)
+        return ""
 
     def _asdl_word_is_safe_literal(self, word: Any) -> bool:
         if not isinstance(word, dict) or word.get("type") != "word.Compound":
