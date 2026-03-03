@@ -2412,11 +2412,6 @@ class Runtime:
             t = p.get("type")
             if t == "word_part.Literal":
                 lit = str(p.get("tval", ""))
-                # Assignment words have delicate quote-removal behavior around
-                # backslashes/quotes. Keep legacy path for those forms until
-                # fully modeled in native ASDL expansion.
-                if "\\" in lit or "'" in lit or '"' in lit:
-                    return False
                 if "<(" in lit or ">(" in lit:
                     return False
                 continue
@@ -2573,7 +2568,7 @@ class Runtime:
     def _expand_asdl_word_part_values(self, node: dict[str, Any], quoted_context: bool) -> tuple[list[str], bool]:
         t = node.get("type")
         if t == "word_part.Literal":
-            return [str(node.get("tval", ""))], quoted_context
+            return [self._decode_asdl_literal(str(node.get("tval", "")), quoted_context=quoted_context)], quoted_context
         if t == "word_part.SingleQuoted":
             return [str(node.get("sval", ""))], True
         if t == "word_part.DoubleQuoted":
@@ -2618,6 +2613,29 @@ class Runtime:
             expr = str(node.get("expr_source") or node.get("code") or "")
             return [self._expand_arith(expr)], quoted_context
         return [""], quoted_context
+
+    def _decode_asdl_literal(self, text: str, *, quoted_context: bool) -> str:
+        if "\\" not in text:
+            return text
+        out: list[str] = []
+        i = 0
+        while i < len(text):
+            ch = text[i]
+            if ch != "\\" or i + 1 >= len(text):
+                out.append(ch)
+                i += 1
+                continue
+            nxt = text[i + 1]
+            if quoted_context:
+                if nxt in {'$', '"', "\\", "`"}:
+                    out.append(nxt)
+                else:
+                    out.append("\\")
+                    out.append(nxt)
+            else:
+                out.append(nxt)
+            i += 2
+        return "".join(out)
 
     def _normalize_asdl_expanded_values(self, value: Any) -> list[str]:
         if isinstance(value, PresplitFields):
