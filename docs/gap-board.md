@@ -61,6 +61,13 @@ Reference summary source: `docs/posix-shall-trace.md`.
 | 2.10 Shell Grammar | partial | `docs/posix-shall-trace.md`, `docs/grammar-production-checklist.md`, `tests/diff/cases/man-ash-prefix-suffix.sh`, `tests/diff/cases/man-ash-grammar-negative.sh`, `tests/diff/cases/man-ash-grammar-reserved.sh`.
 | 2.11 Signals/Traps | partial | `man-ash-trap` plus signal corpus; full matrix still open.
 
+## Bash-Compat Lane (Differential vs bash baseline)
+
+| Area | Status | Evidence | Notes |
+|---|---|---|---|
+| Indexed-vs-assoc subscript evaluation mode | covered | `tests/diff/cases/bash-compat-subscript-eval-indexed.sh`, `tests/diff/cases/bash-compat-subscript-eval-indexed-extended.sh`, `tests/diff/cases/bash-compat-subscript-eval-assoc.sh`, `tests/diff/cases/bash-compat-subscript-eval-assoc-quoted.sh` | Indexed paths use arithmetic evaluation; assoc paths use string-key semantics. |
+| Array/hash operator expansion contexts (`[@]`/`[*]`, quoted/unquoted) | covered | `tests/diff/cases/bash-compat-param-array-contexts.sh`, `tests/diff/cases/bash-compat-param-array-hash-ops.sh`, `tests/diff/cases/bash-compat-param-contexts.sh` | Replacement/trim and field-boundary behavior are now covered in bash lane. |
+
 ## Untested/Backlog Buckets
 
 | Bucket | Status | Next concrete step |

@@ -114,6 +114,14 @@ Diagnostic policy note:
 | Shell options/variables exposed by builtins (`set`, readonly/export state) are reflected consistently | Partial | `tests/busybox/ash_test/ash-vars/*.tests`, `tests/diff/cases/man-ash-set.sh`, `tests/diff/cases/set-listing.sh`, `tests/diff/cases/man-ash-set-monitor.sh` | Functional behavior is covered; output formatting parity remains partial. |
 | `$PWD` behavior across `cd` aligns with shell semantics in non-interactive runs | Verified | `tests/diff/cases/man-ash-pwd.sh`, `tests/diff/cases/man-ash-cd-source.sh` | Differential cases enforce parity on observed outputs. |
 
+### Bash-Compat Variable Extensions (Tracked with Differential Bash Lane)
+
+| Extension requirement | Status | Evidence | Notes |
+|---|---|---|---|
+| Indexed-array subscripts evaluate in arithmetic mode | Covered | `tests/diff/cases/bash-compat-subscript-eval-indexed.sh`, `tests/diff/cases/bash-compat-subscript-eval-indexed-extended.sh` | Includes variable/expression indices, negative index behavior, and invalid-index non-success behavior. |
+| Assoc-array subscripts use string-key mode (no numeric coercion) | Covered | `tests/diff/cases/bash-compat-subscript-eval-assoc.sh`, `tests/diff/cases/bash-compat-subscript-eval-assoc-quoted.sh` | Includes numeric-like keys (`01`, `1+1`) and quoted/expanded key forms. |
+| Array operator expansion preserves quoted/unquoted `[@]`/`[*]` context behavior | Covered | `tests/diff/cases/bash-compat-param-array-contexts.sh`, `tests/diff/cases/bash-compat-param-array-hash-ops.sh`, `tests/diff/cases/bash-compat-param-contexts.sh` | Covers replacement/trim operators and field-boundary behavior under quoting variants. |
+
 ## 2.14 Special Built-In Utilities
 
 | Requirement (normative intent) | Status | Evidence | Notes |
