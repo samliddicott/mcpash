@@ -5632,6 +5632,7 @@ class Runtime:
             return 0
 
         show_funcs = False
+        print_vars = False
         declare_array = False
         declare_assoc = False
         idx = 0
@@ -5645,6 +5646,8 @@ class Runtime:
             for ch in arg[1:]:
                 if ch == "F":
                     show_funcs = True
+                elif ch == "p":
+                    print_vars = True
                 elif ch == "a":
                     declare_array = True
                 elif ch == "A":
@@ -5665,12 +5668,37 @@ class Runtime:
                 print(name)
             return 0
 
+        if print_vars:
+            if not names:
+                return 0
+            status = 0
+            for name in names:
+                if not self._is_valid_name(name):
+                    self._report_error(f"not found: {name}", line=self.current_line, context="declare")
+                    status = 1
+                    continue
+                attrs = self._var_attrs.get(name, set())
+                value = self._get_var(name)
+                if "assoc" in attrs:
+                    print(f"declare -A {name}")
+                elif "array" in attrs:
+                    print(f"declare -a {name}")
+                elif "integer" in attrs:
+                    print(f"declare -i {name}='{value}'")
+                else:
+                    print(f"declare -- {name}='{value}'")
+            return status
+
         if declare_assoc:
             if not self._bash_feature_enabled("declare_assoc"):
                 self._report_error("declare -A requires BASH_COMPAT to be set", line=self.current_line, context="declare")
                 return 2
             for spec in names:
-                name = spec.split("=", 1)[0]
+                if "=" in spec:
+                    name, value = spec.split("=", 1)
+                    self._declare_var(name, value, assoc=True)
+                    continue
+                name = spec
                 self._declare_var(name, self._get_var(name), assoc=True)
             return 0
 
@@ -5679,7 +5707,11 @@ class Runtime:
                 self._report_error("declare -a requires BASH_COMPAT to be set", line=self.current_line, context="declare")
                 return 2
             for spec in names:
-                name = spec.split("=", 1)[0]
+                if "=" in spec:
+                    name, value = spec.split("=", 1)
+                    self._declare_var(name, value, array=True)
+                    continue
+                name = spec
                 self._declare_var(name, self._get_var(name), array=True)
             return 0
 

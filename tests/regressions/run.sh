@@ -508,6 +508,14 @@ run_case \
   'BASH_COMPAT=50'
 
 run_case \
+  "declare_array_print_attr_with_bash_compat" \
+  'declare -a arr; declare -p arr' \
+  0 \
+  $'declare -a arr\n' \
+  '' \
+  'BASH_COMPAT=50'
+
+run_case \
   "declare_assoc_requires_bash_compat" \
   'declare -A map; echo s:$?' \
   0 \
@@ -519,6 +527,14 @@ run_case \
   'declare -A map; echo s:$?' \
   0 \
   $'s:0\n' \
+  '' \
+  'BASH_COMPAT=50'
+
+run_case \
+  "declare_assoc_print_attr_with_bash_compat" \
+  'declare -A map; declare -p map' \
+  0 \
+  $'declare -A map\n' \
   '' \
   'BASH_COMPAT=50'
 
