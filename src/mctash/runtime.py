@@ -1293,10 +1293,7 @@ class Runtime:
                     self._validate_asdl_word_bad_subst(w)
                 items: list[str] = []
                 for w in (iterable.get("words") or []):
-                    if self._asdl_word_can_expand_argv_natively_safe(w):
-                        items.extend(self._expand_asdl_word_fields(w, split_glob=True))
-                        continue
-                    items.extend(self._expand_argv([Word(self._asdl_word_to_text(w))]))
+                    items.extend(self._expand_asdl_word_fields_or_legacy(w))
             else:
                 items = list(self.positional)
             body = self._asdl_do_group_children(node.get("body") or {})
@@ -1805,13 +1802,15 @@ class Runtime:
 
     def _expand_asdl_simple_argv(self, node: dict[str, Any]) -> list[str]:
         words = node.get("words") or []
-        if words and all(self._asdl_word_can_expand_argv_natively_safe(w) for w in words):
-            out: list[str] = []
-            for w in words:
-                out.extend(self._expand_asdl_word_fields(w, split_glob=True))
-            return out
-        legacy_words = [Word(self._asdl_word_to_text(w)) for w in words]
-        return self._expand_argv(legacy_words)
+        out: list[str] = []
+        for w in words:
+            out.extend(self._expand_asdl_word_fields_or_legacy(w))
+        return out
+
+    def _expand_asdl_word_fields_or_legacy(self, word: dict[str, Any]) -> list[str]:
+        if self._asdl_word_can_expand_argv_natively_safe(word):
+            return self._expand_asdl_word_fields(word, split_glob=True)
+        return self._expand_argv([Word(self._asdl_word_to_text(word))])
 
     def _asdl_word_can_expand_argv_natively_safe(self, word: dict[str, Any]) -> bool:
         if not isinstance(word, dict) or word.get("type") != "word.Compound":
