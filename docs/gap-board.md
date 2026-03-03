@@ -44,9 +44,9 @@ Status legend:
 | `read` option matrix across ash variants | partial | Coverage now includes `man-ash-read-options.sh`, `man-ash-read-ifs-matrix.sh`, and `man-ash-read-option-probe.sh`; this ash comparator behavior is covered, broader cross-variant matrices remain open.
 | `fc` editor/history parity | partial | Added `man-ash-fc-editor-env.sh`, `man-ash-fc-ranges.sh`, and core `man-ash-fc.sh`; richer edit/re-exec flows still remain.
 | `ulimit` full flag set | partial | Query/set/error coverage now includes extended set matrix in `man-ash-ulimit-set.sh` for `-n/-f/-c/-v`; full per-resource universe remains open.
-| `trap` signal matrix | partial | Added delivery/matrix coverage via `man-ash-trap-delivery.sh` and `man-ash-trap-signal-matrix.sh` plus existing matrix/full/nested cases; interactive signal semantics remain open.
+| `trap` signal matrix | partial | Added delivery/matrix coverage via `man-ash-trap-delivery.sh` and `man-ash-trap-signal-matrix.sh`; compatibility matrix runners now exist (`tests/compat/run_trap_noninteractive_matrix.sh`, `tests/compat/run_trap_interactive_matrix.sh`, `tests/compat/run_trap_variant_matrix.sh`) and report to `docs/reports/trap-variant-matrix-latest.md`; full interactive/platform edge closure remains open.
 | `fc` comparator availability | partial | Current ash target reports `fc` unavailable, so `fc` differential parity uses a temporary bash comparator until ash comparator support exists (`docs/fc-comparator-blocker.md`).
-| `jobs` interactive monitor semantics | partial | Non-interactive semantics plus PTY smoke (`monitor_mode_interactive_pty`, `monitor_mode_interactive_jobs_fg`) are covered; full interactive job-control matrix remains open.
+| `jobs` interactive monitor semantics | partial | Non-interactive semantics plus PTY smoke (`monitor_mode_interactive_pty`, `monitor_mode_interactive_jobs_fg`) are covered; compatibility matrix harness exists (`tests/compat/run_jobs_interactive_matrix.sh`), but full interactive job-control closure remains open.
 
 ## POSIX Chapter 2 Areas
 

@@ -112,6 +112,14 @@ Local conformance gate (no external CI required):
 - `make read-matrix`
   - Runs `read` differential matrix across ash-family comparators and bash comparator lane.
   - Includes bash-mode `read` option surface (`-a -d -e -i -n -N -p -r -s -t -u`).
+- `make jobs-interactive-matrix`
+  - Runs PTY-based interactive jobs/fg/bg compatibility probes (`STRICT=1` enforces parity checks).
+- `make trap-noninteractive-matrix`
+  - Runs non-interactive trap delivery matrix across a catchable signal set (`STRICT=1` enforces parity checks).
+- `make trap-interactive-matrix`
+  - Runs PTY-based interactive trap subset probes (`STRICT=1` enforces parity checks).
+- `make trap-variant-matrix`
+  - Generates comparator-by-signal report at `docs/reports/trap-variant-matrix-latest.md`.
 - `make conformance`
   - Runs targeted regressions, then BusyBox ash corpus, then Oil subset corpus.
   - Enforces baseline thresholds to catch regressions during local development.
