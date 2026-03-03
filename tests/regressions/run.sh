@@ -1187,6 +1187,11 @@ grep -Fxq 'one' "$tmpdir/out" || fail "startup_noclobber_behavior: expected file
 grep -Fq 'file exists' "$tmpdir/err" || fail "startup_noclobber_behavior: expected noclobber diagnostic"
 printf '[PASS] startup_noclobber_behavior\n'
 
+if ! "$ROOT/tests/regressions/asdl_fallback_audit.sh" >"$tmpdir/out" 2>"$tmpdir/err"; then
+  fail "asdl_fallback_audit"
+fi
+printf '[PASS] asdl_fallback_audit\n'
+
 printf '[PASS] all regressions (including startup options)\n'
 
 if ! PYROOT="$ROOT" python3 - <<'PY'
