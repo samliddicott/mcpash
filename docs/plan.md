@@ -230,6 +230,47 @@ Step-2 note:
 1. A guarded argv-native attempt (literal-only words) was evaluated and rolled back after ash-vars regressions.
 2. Current conclusion: global argv-native rollout needs stronger word-part fidelity guarantees before reattempt.
 
+## Expansion Engine Transition: Sentinels -> Structured Data
+Goal: remove sentinel-character transport from expansion internals and use typed expansion segments end-to-end.
+
+Why:
+1. Sentinel markers (`\ue001`... etc.) can collide with real user input.
+2. Semantics become implicit in text and harder to reason about.
+3. Structured expansion is the safer foundation for ASDL-native execution and future compile-to-Python mode.
+
+Scope:
+1. Word expansion (argv, assignment RHS, case patterns, redirection targets).
+2. Quote-removal, field-splitting, pathname expansion, pattern escaping.
+3. Existing sentinel helper paths remain only behind transition adapters until removed.
+
+Phased plan:
+1. Define typed expansion model:
+   - `ExpansionSegment(text, quoted, glob_active, split_active, source_kind)`
+   - `ExpansionField(segments, preserve_boundary)`
+2. Build adapters:
+   - ASDL `word_part.*` -> typed segments.
+   - legacy text parser -> typed segments (temporary bridge).
+3. Replace expansion stages:
+   - quote-removal operates on flags, not text rewriting.
+   - field splitting uses segment metadata.
+   - globbing runs only where `glob_active=true`.
+4. Remove sentinel reliance:
+   - eliminate `\ue00x` marker transport in runtime paths.
+   - keep compatibility shim only for legacy parser paths; then delete.
+5. Expand differential tests:
+   - add cases containing literal private-use chars (e.g. `U+E001`) to prove no collision.
+   - add mixed quoted/unquoted glob tests and case-pattern quoting tests.
+
+Guardrails:
+1. No new sentinel markers introduced in runtime/expansion code.
+2. Any temporary adapter must be explicitly documented and time-bounded.
+3. Every phase must keep `tests/regressions/run.sh` and parity matrix green.
+
+Exit criteria:
+1. No sentinel-marker based semantic transport in core expansion engine.
+2. ASDL-native command/assignment/case expansion paths are fully structured.
+3. Collision tests with literal private-use Unicode pass under ash/bash differential harnesses.
+
 ## Conformance Snapshot
 - Current conformance status matrix: `docs/conformance-matrix.md`
 - POSIX requirement-to-test trace table: `docs/posix-trace-table.md`

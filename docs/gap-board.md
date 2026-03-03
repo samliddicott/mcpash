@@ -1,6 +1,6 @@
 # Gap Board
 
-Date: 2026-02-28
+Date: 2026-03-03
 
 Purpose:
 
@@ -75,3 +75,14 @@ Reference summary source: `docs/posix-shall-trace.md`.
 | Requirement-level trace completeness (all "shall" rows) | partial | Continue adding explicit case-id links for every remaining row in `docs/posix-shall-trace.md`.
 | Grammar production closure | partial | Closure-order artifacts are completed; remaining work is deeper word-level/operator combinatorics and diagnostic text parity.
 | Threaded-runtime parity checks | partial | Core cwd/fd/var isolation cases are covered (`man-ash-thread-cwd.sh`, `man-ash-thread-fd.sh`, `man-ash-thread-vars.sh`, `man-ash-thread-pipeline-cwd.sh`, `man-ash-thread-pipeline-fd.sh`) plus fallback-diag/process-subst regressions (`thread_unshare_fallback_diag`, `thread_unshare_forced_fail_diag`, `process_subst_*`, `thread_combined_bg_pipeline_process_subst`, `thread_multi_job_concurrency_isolation`, `thread_high_load_concurrency_isolation`, `monitor_mode_noninteractive_diag` in `tests/regressions/run.sh`); expand to long-running mixed workloads and interactive monitor semantics.
+
+## Sentinel-To-Structured Expansion Transition
+
+| Area | Status | Evidence | Next step |
+|---|---|---|---|
+| Expansion engine migration plan exists | covered | `docs/plan.md` ("Expansion Engine Transition: Sentinels -> Structured Data") | Track execution progress here as items move from design to implementation. |
+| Sentinel usage inventory and guard | partial | `tests/regressions/asdl_fallback_audit.sh`, `tests/regressions/asdl_fallback_allowlist.txt` | Extend audit to sentinel-marker transport checks (not just fallback helpers). |
+| Typed expansion model introduction | untested | Planned in `docs/plan.md` phase 1 (`ExpansionSegment`, `ExpansionField`) | Add first implementation slice and tests for segment composition/flattening. |
+| Typed adapters (ASDL and legacy parser) | untested | Planned in `docs/plan.md` phase 2 | Implement adapters and run side-by-side diff checks. |
+| Split/glob/pattern stages on structured fields | untested | Planned in `docs/plan.md` phase 3 | Replace sentinel-based behavior with metadata-driven behavior. |
+| Sentinel collision proof cases | untested | Planned in `docs/plan.md` phase 5 | Add differential cases containing literal private-use chars (e.g. `U+E001`). |
