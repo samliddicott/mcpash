@@ -26,10 +26,10 @@ Mode: atomic items only (`open` -> `done`)
 | PARAM-001 | Positional parameter operator matrix complete | done | `tests/diff/cases/bash-compat-param-positional-extended.sh`. |
 | PARAM-002 | Collection operator matrix complete (array + assoc) | done | `tests/diff/cases/bash-compat-param-array-hash-ops.sh`, `tests/diff/cases/bash-compat-param-array-hash-extended.sh`, `tests/diff/cases/bash-compat-param-array-contexts.sh`. |
 | PARAM-003 | Collection slicing semantics parity (`[@]:off:len`, `[*]:off:len`) | done | `tests/diff/cases/bash-compat-param-collection-slicing.sh`. |
-| DOC-001 | Trace docs updated to link new atomic tests | open | Update `docs/posix-shall-trace.md` + `docs/gap-board.md` with new item test links. |
-| GATE-001 | Full gate clean | open | `make diff-parity-matrix`, `make compat-posix-bash-strict`, `tests/regressions/run.sh`. |
+| DOC-001 | Trace docs updated to link new atomic tests | done | `docs/posix-shall-trace.md`, `docs/gap-board.md` updated with indexed assign/unset and slicing case links. |
+| GATE-001 | Full gate clean | done | `make diff-parity-matrix`, `make compat-posix-bash-strict`, `tests/regressions/run.sh` (all passing on HEAD). |
 
 ## Remaining Count
 
-- Open: 2
-- Done: 13
+- Open: 0
+- Done: 15

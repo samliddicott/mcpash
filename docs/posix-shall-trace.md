@@ -118,9 +118,9 @@ Diagnostic policy note:
 
 | Extension requirement | Status | Evidence | Notes |
 |---|---|---|---|
-| Indexed-array subscripts evaluate in arithmetic mode | Covered | `tests/diff/cases/bash-compat-subscript-eval-indexed.sh`, `tests/diff/cases/bash-compat-subscript-eval-indexed-extended.sh` | Includes variable/expression indices, negative index behavior, and invalid-index non-success behavior. |
+| Indexed-array subscripts evaluate in arithmetic mode | Covered | `tests/diff/cases/bash-compat-subscript-eval-indexed.sh`, `tests/diff/cases/bash-compat-subscript-eval-indexed-extended.sh`, `tests/diff/cases/bash-compat-subscript-eval-indexed-sideeffects.sh`, `tests/diff/cases/bash-compat-subscript-eval-indexed-assign.sh`, `tests/diff/cases/bash-compat-subscript-eval-indexed-unset.sh` | Includes variable/expression indices, read/assign/unset side effects, negative index behavior, and invalid-index non-success behavior. |
 | Assoc-array subscripts use string-key mode (no numeric coercion) | Covered | `tests/diff/cases/bash-compat-subscript-eval-assoc.sh`, `tests/diff/cases/bash-compat-subscript-eval-assoc-quoted.sh` | Includes numeric-like keys (`01`, `1+1`) and quoted/expanded key forms. |
-| Array operator expansion preserves quoted/unquoted `[@]`/`[*]` context behavior | Covered | `tests/diff/cases/bash-compat-param-array-contexts.sh`, `tests/diff/cases/bash-compat-param-array-hash-ops.sh`, `tests/diff/cases/bash-compat-param-contexts.sh` | Covers replacement/trim operators and field-boundary behavior under quoting variants. |
+| Array operator expansion preserves quoted/unquoted `[@]`/`[*]` context behavior | Covered | `tests/diff/cases/bash-compat-param-array-contexts.sh`, `tests/diff/cases/bash-compat-param-array-hash-ops.sh`, `tests/diff/cases/bash-compat-param-array-hash-extended.sh`, `tests/diff/cases/bash-compat-param-contexts.sh`, `tests/diff/cases/bash-compat-param-collection-slicing.sh` | Covers replacement/trim/substr operators and field-boundary behavior under quoting variants. |
 
 ## 2.14 Special Built-In Utilities
 

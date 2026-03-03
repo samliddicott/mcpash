@@ -65,8 +65,8 @@ Reference summary source: `docs/posix-shall-trace.md`.
 
 | Area | Status | Evidence | Notes |
 |---|---|---|---|
-| Indexed-vs-assoc subscript evaluation mode | covered | `tests/diff/cases/bash-compat-subscript-eval-indexed.sh`, `tests/diff/cases/bash-compat-subscript-eval-indexed-extended.sh`, `tests/diff/cases/bash-compat-subscript-eval-assoc.sh`, `tests/diff/cases/bash-compat-subscript-eval-assoc-quoted.sh` | Indexed paths use arithmetic evaluation; assoc paths use string-key semantics. |
-| Array/hash operator expansion contexts (`[@]`/`[*]`, quoted/unquoted) | covered | `tests/diff/cases/bash-compat-param-array-contexts.sh`, `tests/diff/cases/bash-compat-param-array-hash-ops.sh`, `tests/diff/cases/bash-compat-param-contexts.sh` | Replacement/trim and field-boundary behavior are now covered in bash lane. |
+| Indexed-vs-assoc subscript evaluation mode | covered | `tests/diff/cases/bash-compat-subscript-eval-indexed.sh`, `tests/diff/cases/bash-compat-subscript-eval-indexed-extended.sh`, `tests/diff/cases/bash-compat-subscript-eval-indexed-sideeffects.sh`, `tests/diff/cases/bash-compat-subscript-eval-indexed-assign.sh`, `tests/diff/cases/bash-compat-subscript-eval-indexed-unset.sh`, `tests/diff/cases/bash-compat-subscript-eval-assoc.sh`, `tests/diff/cases/bash-compat-subscript-eval-assoc-quoted.sh` | Indexed paths use arithmetic evaluation in read/assign/unset flows; assoc paths use string-key semantics. |
+| Array/hash operator expansion contexts (`[@]`/`[*]`, quoted/unquoted) | covered | `tests/diff/cases/bash-compat-param-array-contexts.sh`, `tests/diff/cases/bash-compat-param-array-hash-ops.sh`, `tests/diff/cases/bash-compat-param-array-hash-extended.sh`, `tests/diff/cases/bash-compat-param-contexts.sh`, `tests/diff/cases/bash-compat-param-collection-slicing.sh` | Replacement/trim/substr and field-boundary behavior are covered in bash lane. |
 
 ## Untested/Backlog Buckets
 
