@@ -43,6 +43,23 @@ def escape_marker_literals(text: str) -> str:
     return "".join(out)
 
 
+def unescape_marker_literals(text: str) -> str:
+    out: list[str] = []
+    i = 0
+    while i < len(text):
+        ch = text[i]
+        if ch == MARKER_ESCAPE and i + 1 < len(text):
+            tok = text[i + 1]
+            orig = _UNESCAPE_TOKENS.get(tok)
+            if orig is not None:
+                out.append(orig)
+                i += 2
+                continue
+        out.append(ch)
+        i += 1
+    return "".join(out)
+
+
 def protect_glob_meta(s: str) -> str:
     return "".join(GLOB_PROTECT.get(ch, ch) for ch in s)
 

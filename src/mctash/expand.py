@@ -12,6 +12,7 @@ from .expand_legacy_markers import (
     glob_pattern_for_match,
     protect_glob_meta,
     unprotect_glob_meta,
+    unescape_marker_literals,
 )
 
 
@@ -787,11 +788,13 @@ def expand_word(
     expanded: List[str] = []
     for f, quoted, _, has_meta in fields:
         rendered = unprotect_glob_meta(f) if unprotect_literals else f
+        rendered = unescape_marker_literals(rendered)
         rendered = rendered.replace(QUOTED_EMPTY_MARK, "")
         # Globbing is driven by unquoted meta presence, not by whether any
         # quoted fragments contributed to the same output field.
         if has_meta or not quoted:
             g = f if unprotect_literals else rendered
+            g = unescape_marker_literals(g)
             g = g.replace(QUOTED_EMPTY_MARK, "")
             expanded.extend(glob_field(g))
         else:
