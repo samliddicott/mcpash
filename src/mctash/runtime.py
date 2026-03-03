@@ -5628,6 +5628,13 @@ class Runtime:
             out.append(str(v))
         return out
 
+    @staticmethod
+    def _array_max_index(seq: list[object]) -> int | None:
+        for i in range(len(seq) - 1, -1, -1):
+            if seq[i] is not None:
+                return i
+        return None
+
     def _argv_assignment_words(self, argv: list[str]) -> list[tuple[str, str, object, bool]] | None:
         out: list[tuple[str, str, object, bool]] = []
         i = 0
@@ -5744,10 +5751,8 @@ class Runtime:
         cur_arr = self._typed_vars.get(base)
         if not isinstance(cur_arr, list):
             cur_arr = []
-        idx = self._eval_index_subscript(key)
+        idx = self._eval_index_subscript(key, cur_arr, strict=True, name=name)
         if idx is None:
-            raise RuntimeError(f"{name}: bad array subscript")
-        if idx < 0:
             raise RuntimeError(f"{name}: bad array subscript")
         if idx >= len(cur_arr):
             cur_arr.extend([None] * (idx + 1 - len(cur_arr)))
@@ -5758,14 +5763,46 @@ class Runtime:
         self._set_var_attrs(base, array=True)
         return True
 
-    def _eval_index_subscript(self, key: str) -> int | None:
+    def _eval_index_subscript(
+        self,
+        key: str,
+        seq: list[object],
+        *,
+        strict: bool = False,
+        name: str | None = None,
+    ) -> int | None:
         text = (key or "").strip()
         if text == "":
+            if strict:
+                label = name or key or "array"
+                raise RuntimeError(f"{label}: bad array subscript")
             return None
         try:
-            return self._to_int_arith(text)
-        except Exception:
+            idx = int(self._expand_arith(text, context="subscript"))
+        except ArithExpansionFailure:
+            if strict:
+                label = name or key or "array"
+                raise RuntimeError(f"{label}: bad array subscript")
             return None
+        except Exception:
+            if strict:
+                label = name or key or "array"
+                raise RuntimeError(f"{label}: bad array subscript")
+            return None
+        if idx < 0:
+            max_idx = self._array_max_index(seq)
+            if max_idx is None:
+                if strict:
+                    label = name or key or "array"
+                    raise RuntimeError(f"{label}: bad array subscript")
+                return None
+            idx = max_idx + 1 + idx
+            if idx < 0:
+                if strict:
+                    label = name or key or "array"
+                    raise RuntimeError(f"{label}: bad array subscript")
+                return None
+        return idx
 
     def _get_var_with_state(self, name: str) -> tuple[str, bool]:
         parsed = self._parse_subscripted_name(name)
@@ -5793,7 +5830,7 @@ class Runtime:
                 if key == "*":
                     return self._ifs_join(vals), bool(vals)
                 return " ".join(vals), bool(vals)
-            idx = self._eval_index_subscript(key)
+            idx = self._eval_index_subscript(key, typed, strict=True, name=base)
             if idx is None:
                 return "", False
             if idx < 0 or idx >= len(typed):
@@ -6308,7 +6345,7 @@ class Runtime:
                     self._set_subscript_projection(base, str(typed.get("0", "")) if typed else "")
                     continue
                 if isinstance(typed, list):
-                    i_key = self._eval_index_subscript(key)
+                    i_key = self._eval_index_subscript(key, typed, strict=True, name=base)
                     if i_key is None:
                         continue
                     if 0 <= i_key < len(typed):
