@@ -50,10 +50,6 @@ from .ast_nodes import (
 )
 from .expand import (
     PresplitFields,
-    contains_glob_meta,
-    expand_word,
-    glob_pattern_display,
-    glob_pattern_for_match,
     parse_word_parts,
     _extract_balanced,
     _find_braced_end,
@@ -62,7 +58,8 @@ from .expand import (
 from .expansion_model import ExpansionField, ExpansionSegment, fields_to_text_list
 from .lexer import LexContext, TokenReader
 from .parser import ParseError, Parser
-from .asdl_map import AsdlMappingError, lst_list_item_to_asdl
+from .asdl_map import AsdlMappingError, lst_list_item_to_asdl, word as lst_word_to_asdl_word
+from .word_parser import parse_word as parse_legacy_word
 
 try:
     import fcntl
@@ -2574,44 +2571,36 @@ class Runtime:
         return fields
 
     def _legacy_word_to_expansion_fields(self, text: str, *, assignment: bool = False) -> list[ExpansionField]:
-        # Transitional adapter for non-ASDL parser paths. This preserves
-        # current behavior while exposing a typed field model for comparison.
+        lst_word = parse_legacy_word(text)
+        asdl_word = lst_word_to_asdl_word(lst_word)
         if assignment:
-            out = self._expand_assignment_word(text)
-            return [
-                ExpansionField(
-                    [
-                        ExpansionSegment(
-                            text=out,
-                            quoted=True,
-                            glob_active=False,
-                            split_active=False,
-                            source_kind="legacy.assignment",
-                        )
-                    ],
-                    preserve_boundary=True,
+            return self._expand_asdl_assignment_fields(asdl_word)
+        raw_fields = self._asdl_word_to_expansion_fields(asdl_word)
+        split_fields: list[ExpansionField] = []
+        for field in raw_fields:
+            split_fields.extend(self._split_structured_field(field))
+        out: list[ExpansionField] = []
+        for field in split_fields:
+            globbed = self._glob_structured_field(field)
+            if globbed == [field.text()]:
+                out.append(field)
+                continue
+            for g in globbed:
+                out.append(
+                    ExpansionField(
+                        [
+                            ExpansionSegment(
+                                text=g,
+                                quoted=False,
+                                glob_active=False,
+                                split_active=False,
+                                source_kind="legacy.glob",
+                            )
+                        ],
+                        preserve_boundary=False,
+                    )
                 )
-            ]
-        parts = parse_word_parts(text)
-        has_quoted = any(p.quoted for p in parts)
-        values = self._expand_argv([Word(text)])
-        fields: list[ExpansionField] = []
-        for v in values:
-            fields.append(
-                ExpansionField(
-                    [
-                        ExpansionSegment(
-                            text=v,
-                            quoted=has_quoted,
-                            glob_active=(not has_quoted),
-                            split_active=(not has_quoted),
-                            source_kind="legacy.word",
-                        )
-                    ],
-                    preserve_boundary=has_quoted,
-                )
-            )
-        return fields
+        return out
 
     def _asdl_literal_to_segments(self, text: str, *, quoted_context: bool, source_kind: str) -> list[ExpansionSegment]:
         if "\\" not in text:
@@ -5024,36 +5013,8 @@ class Runtime:
     def _expand_argv(self, words: List[Word]) -> List[str]:
         argv: List[str] = []
         for w in words:
-            if self._is_process_subst(w.text):
-                argv.append(self._process_substitute(w.text))
-                continue
-            fields = expand_word(
-                w.text,
-                self._expand_param,
-                self._expand_braced_param,
-                self._expand_command_subst_text,
-                self._expand_arith,
-                self._split_ifs,
-                self._glob_field,
-            )
-            # Unquoted empty expansions are elided (e.g. $1 when unset).
-            parts = parse_word_parts(w.text)
-            if not any(p.quoted for p in parts):
-                has_cmd_subst = any(p.kind in {"CMD", "CMD_BQ"} for p in parts)
-                if ("'" in w.text or '"' in w.text) and not has_cmd_subst:
-                    argv.extend(fields)
-                    continue
-                keep_split_empties = False
-                has_side_effect_expansion = any(p.kind in {"CMD", "CMD_BQ", "ARITH"} for p in parts)
-                if not has_side_effect_expansion:
-                    raw = self._expand_assignment_word(w.text)
-                    if raw != "":
-                        ifs = self.env.get("IFS", " \t\n")
-                        ifs_nonws = "".join(ch for ch in ifs if ch not in " \t\n")
-                        keep_split_empties = any(ch in ifs_nonws for ch in raw)
-                if not keep_split_empties:
-                    fields = [f for f in fields if f != ""]
-            argv.extend(fields)
+            fields = self._legacy_word_to_expansion_fields(w.text, assignment=False)
+            argv.extend(fields_to_text_list(fields))
         return argv
 
     def _expand_word(self, text: str) -> str:
@@ -5064,55 +5025,14 @@ class Runtime:
     def _expand_assignment_word(self, text: str) -> str:
         if self._is_process_subst(text):
             return self._process_substitute(text)
-        def _assign_param(name: str, quoted: bool):
-            if name in ["@", "*"]:
-                return self._ifs_join(self.positional)
-            return self._expand_param(name, quoted)
-
-        def _assign_braced(name: str, op: str | None, arg: str | None, quoted: bool):
-            if name in ["@", "*"] and op is None:
-                return self._ifs_join(self.positional)
-            val = self._expand_braced_param(name, op, arg, quoted)
-            if isinstance(val, list):
-                return self._ifs_join([str(v) for v in val])
-            return val
-
-        fields = expand_word(
-            text,
-            _assign_param,
-            _assign_braced,
-            self._expand_command_subst_text,
-            self._expand_arith,
-            lambda s: [s],
-            lambda s: [s],
-        )
-        return fields[0] if fields else ""
+        fields = self._legacy_word_to_expansion_fields(text, assignment=True)
+        texts = fields_to_text_list(fields)
+        return texts[0] if texts else ""
 
     def _expand_assignment_word_protected(self, text: str) -> str:
-        def _assign_param(name: str, quoted: bool):
-            if name in ["@", "*"]:
-                return self._ifs_join(self.positional)
-            return self._expand_param(name, quoted)
-
-        def _assign_braced(name: str, op: str | None, arg: str | None, quoted: bool):
-            if name in ["@", "*"] and op is None:
-                return self._ifs_join(self.positional)
-            val = self._expand_braced_param(name, op, arg, quoted)
-            if isinstance(val, list):
-                return self._ifs_join([str(v) for v in val])
-            return val
-
-        fields = expand_word(
-            text,
-            _assign_param,
-            _assign_braced,
-            self._expand_command_subst_text,
-            self._expand_arith,
-            lambda s: [s],
-            lambda s: [s],
-            unprotect_literals=False,
-        )
-        return fields[0] if fields else ""
+        # Legacy compatibility alias now that assignment expansion is
+        # structured and no marker unprotection step is required.
+        return self._expand_assignment_word(text)
 
     def _expand_redir_target(self, redir: Redirect) -> str | None:
         if redir.target is None:
@@ -5177,14 +5097,67 @@ class Runtime:
     def _glob_field(self, text: str) -> List[str]:
         text = self._tilde_expand(text)
         if self.options.get("f", False):
-            return [glob_pattern_display(text)]
-        if contains_glob_meta(text):
-            pattern_for_match = glob_pattern_for_match(text)
+            return [self._glob_pattern_display_runtime(text)]
+        if self._contains_glob_meta_runtime(text):
+            pattern_for_match = self._glob_pattern_for_match_runtime(text)
             matches = sorted(glob.glob(pattern_for_match))
             if matches:
                 return matches
-            return [glob_pattern_display(text)]
+            return [self._glob_pattern_display_runtime(text)]
         return [text]
+
+    def _contains_glob_meta_runtime(self, text: str) -> bool:
+        escaped = False
+        for ch in text:
+            if escaped:
+                escaped = False
+                continue
+            if ch == "\\":
+                escaped = True
+                continue
+            if ch in {"*", "?", "["}:
+                return True
+        return False
+
+    def _glob_pattern_for_match_runtime(self, text: str) -> str:
+        out: list[str] = []
+        i = 0
+        while i < len(text):
+            ch = text[i]
+            if ch == "\\" and i + 1 < len(text):
+                nxt = text[i + 1]
+                if nxt == "*":
+                    out.append("[*]")
+                elif nxt == "?":
+                    out.append("[?]")
+                elif nxt == "[":
+                    out.append("[[]")
+                elif nxt == "]":
+                    out.append("[]]")
+                elif nxt == "\\":
+                    out.append("[\\\\]")
+                else:
+                    out.append(nxt)
+                i += 2
+                continue
+            out.append(ch)
+            i += 1
+        return "".join(out)
+
+    def _glob_pattern_display_runtime(self, text: str) -> str:
+        out: list[str] = []
+        i = 0
+        while i < len(text):
+            ch = text[i]
+            if ch == "\\" and i + 1 < len(text):
+                nxt = text[i + 1]
+                if nxt in {"*", "?", "[", "]", "\\"}:
+                    out.append(nxt)
+                    i += 2
+                    continue
+            out.append(ch)
+            i += 1
+        return "".join(out)
 
     def _tilde_expand(self, text: str) -> str:
         def expand_one(seg: str) -> str:
@@ -5264,18 +5237,7 @@ class Runtime:
                 if w_parts and all(p.quoted for p in w_parts):
                     out_fields.append(self._expand_assignment_word_protected(w))
                     continue
-                out_fields.extend(
-                    expand_word(
-                        w,
-                        self._expand_param,
-                        self._expand_braced_param,
-                        self._expand_command_subst_text,
-                        self._expand_arith,
-                        self._split_ifs,
-                        self._glob_field,
-                        split_unquoted_literals=True,
-                    )
-                )
+                out_fields.extend(fields_to_text_list(self._legacy_word_to_expansion_fields(w, assignment=False)))
             ifs_value, ifs_set = self._get_var_with_state("IFS")
             if not ifs_set:
                 ifs_value = " \t\n"

@@ -3,18 +3,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Callable, List, Tuple, Union
 
-from .expand_legacy_markers import (
-    ESCAPED_SLASH_MARK,
-    QUOTED_EMPTY_MARK,
-    contains_glob_meta,
-    escape_marker_literals,
-    glob_pattern_display,
-    glob_pattern_for_match,
-    protect_glob_meta,
-    unprotect_glob_meta,
-    unescape_marker_literals,
-)
-
 
 @dataclass
 class WordPart:
@@ -78,7 +66,7 @@ def parse_word_parts(text: str) -> List[WordPart]:
                     # Preserve an explicit escaped slash (\ /) distinctly from
                     # plain quoted slashes so later pathname display can keep
                     # the backslash where ash does.
-                    parts.append(WordPart("LIT", ESCAPED_SLASH_MARK, quoted=True))
+                    parts.append(WordPart("LIT", "\\/", quoted=True))
                 else:
                     parts.append(WordPart("LIT", text[i + 1], quoted=True))
                 i += 2
@@ -599,14 +587,40 @@ def expand_word(
     fields: List[Tuple[str, bool, bool, bool]] = [("", False, True, False)]
 
     def has_glob_meta(s: str) -> bool:
-        return any(ch in s for ch in ["*", "?", "["])
+        escaped = False
+        for ch in s:
+            if escaped:
+                escaped = False
+                continue
+            if ch == "\\":
+                escaped = True
+                continue
+            if ch in ["*", "?", "["]:
+                return True
+        return False
+
+    def escape_glob_literal(s: str) -> str:
+        out: list[str] = []
+        for ch in s:
+            if ch in ["*", "?", "[", "]", "\\"]:
+                out.append("\\")
+            out.append(ch)
+        return "".join(out)
+
+    def unescape_glob_literal(s: str) -> str:
+        out: list[str] = []
+        i = 0
+        while i < len(s):
+            if s[i] == "\\" and i + 1 < len(s) and s[i + 1] in ["*", "?", "[", "]", "\\", "/"]:
+                out.append(s[i + 1])
+                i += 2
+                continue
+            out.append(s[i])
+            i += 1
+        return "".join(out)
     for idx, part in enumerate(parts):
         if part.kind == "LIT":
             value: Union[str, List[str]] = part.value
-            if part.quoted and value == "":
-                # Preserve explicit quoted-empty literals as word anchors
-                # around later unquoted field splitting.
-                value = QUOTED_EMPTY_MARK
         elif part.kind == "PARAM":
             value = get_param(part.value, part.quoted)
         elif part.kind == "BRACED":
@@ -619,10 +633,6 @@ def expand_word(
             value = eval_arith(part.value)
         else:
             value = part.value
-        if isinstance(value, list):
-            value = [escape_marker_literals(v) for v in value]
-        elif isinstance(value, str) and value != QUOTED_EMPTY_MARK:
-            value = escape_marker_literals(value)
 
         is_quoted_list_splat = (
             isinstance(value, list)
@@ -655,9 +665,9 @@ def expand_word(
 
         if part.quoted:
             if isinstance(value, list):
-                value = [protect_glob_meta(v) for v in value]
+                value = [escape_glob_literal(v) for v in value]
             else:
-                value = protect_glob_meta(value)
+                value = escape_glob_literal(value)
 
         if isinstance(value, list):
             new_fields = []
@@ -787,15 +797,11 @@ def expand_word(
 
     expanded: List[str] = []
     for f, quoted, _, has_meta in fields:
-        rendered = unprotect_glob_meta(f) if unprotect_literals else f
-        rendered = unescape_marker_literals(rendered)
-        rendered = rendered.replace(QUOTED_EMPTY_MARK, "")
+        rendered = unescape_glob_literal(f) if unprotect_literals else f
         # Globbing is driven by unquoted meta presence, not by whether any
         # quoted fragments contributed to the same output field.
         if has_meta or not quoted:
             g = f if unprotect_literals else rendered
-            g = unescape_marker_literals(g)
-            g = g.replace(QUOTED_EMPTY_MARK, "")
             expanded.extend(glob_field(g))
         else:
             expanded.append(rendered)
