@@ -935,6 +935,23 @@ grep -Eq '^[[:alpha:]]*u[[:alpha:]]*$' "$tmpdir/out" || fail "startup_long_optio
 printf '[PASS] startup_long_option\n'
 
 set +e
+PYTHONPATH="$ROOT/src" python3 -m mctash --posix -c 'set -o | sed -n "s/^posix[[:space:]]*//p"' >"$tmpdir/out" 2>"$tmpdir/err"
+status=$?
+set -e
+[[ "$status" -eq 0 ]] || fail "startup_posix_long_option: expected status 0, got $status"
+grep -Fxq 'on' "$tmpdir/out" || fail "startup_posix_long_option: expected posix to be on"
+printf '[PASS] startup_posix_long_option\n'
+
+set +e
+PYTHONPATH="$ROOT/src" BASH_COMPAT=50 python3 -m mctash --posix -c 'set -o | sed -n "s/^posix[[:space:]]*//p"; echo "${BASH_COMPAT}"' >"$tmpdir/out" 2>"$tmpdir/err"
+status=$?
+set -e
+[[ "$status" -eq 0 ]] || fail "startup_posix_bash_compat_env: expected status 0, got $status"
+grep -Fxq 'on' "$tmpdir/out" || fail "startup_posix_bash_compat_env: expected posix to be on"
+grep -Fxq '50' "$tmpdir/out" || fail "startup_posix_bash_compat_env: expected BASH_COMPAT env to be visible"
+printf '[PASS] startup_posix_bash_compat_env\n'
+
+set +e
 PYTHONPATH="$ROOT/src" python3 -m mctash -u -c 'echo $UNSET' >"$tmpdir/out" 2>"$tmpdir/err"
 status=$?
 set -e

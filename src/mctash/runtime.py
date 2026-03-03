@@ -473,6 +473,7 @@ class Runtime:
         "nolog",
         "debug",
         "pipefail",
+        "posix",
     ]
     SET_O_OPTION_MAP: Dict[str, str] = {
         "allexport": "a",
@@ -495,6 +496,7 @@ class Runtime:
         "debug": "debug",
         "quiet": "q",
         "pipefail": "pipefail",
+        "posix": "posix",
     }
     ENV_MUTATING_BUILTINS = {
         "cd",

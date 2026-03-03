@@ -35,6 +35,14 @@ Near-term staged behavior:
 - Stage C: gate `declare -A` when associative runtime support is available.
 - Stage D: gate bridge list/dict and tie `array`/`assoc` on the same policy.
 
+## Current Status
+
+- Stage A in progress:
+  - `--posix` startup option is parsed and applied.
+  - `-o posix` is accepted in startup option parsing/listing.
+  - `BASH_COMPAT` is currently passed through as environment-visible input for upcoming feature gates.
+- Extension behavior itself is not enabled yet (arrays/assoc still pending gate implementation).
+
 ## Test Strategy
 
 - Add matrix tests that run both Bash and mctash for:

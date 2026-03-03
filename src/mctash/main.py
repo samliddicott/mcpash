@@ -237,6 +237,7 @@ def _option_name_to_letter(name: str) -> str | None:
         "quiet": "q",
         "stdin": "s",
         "privileged": "p",
+        "posix": "posix",
     }
     return mapping.get(name.lower())
 
@@ -244,12 +245,23 @@ def _option_name_to_letter(name: str) -> str | None:
 def _parse_startup_options(argv: List[str]) -> Tuple[Dict[str, bool], List[str], str | None]:
     changes: Dict[str, bool] = {}
     out: List[str] = []
+    passthrough_long = {"--dump-lst"}
     i = 0
     while i < len(argv):
         arg = argv[i]
         if arg in ["-c", "-s", "--"]:
             out.extend(argv[i:])
             break
+        if arg in passthrough_long:
+            out.append(arg)
+            i += 1
+            continue
+        if arg == "--posix":
+            changes["posix"] = True
+            i += 1
+            continue
+        if arg.startswith("--"):
+            return changes, out, f"illegal option name: {arg[2:]}"
         if arg in ["-o", "+o"]:
             if i + 1 >= len(argv):
                 return changes, out, f"{arg} requires an argument"
