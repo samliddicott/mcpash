@@ -536,6 +536,7 @@ class Runtime:
         "python:",
         "from",
         "shared",
+        "shopt",
     }
     SPECIAL_BUILTINS = {
         ":",
@@ -602,6 +603,7 @@ class Runtime:
         "python:",
         "from",
         "shared",
+        "shopt",
     }
 
     def __init__(self) -> None:
@@ -661,6 +663,9 @@ class Runtime:
         self._errexit_suppressed: int = 0
         self._py_callables: Dict[str, Any] = {}
         self._py_ties: Dict[str, tuple[Any, Any, str | None]] = {}
+        self._shopts: Dict[str, bool] = {"read_interruptible": False}
+        self._last_read_interrupt_status: int | None = None
+        self._last_read_timed_out: bool = False
         shared_path = self.env.get(
             "MCTASH_SHARED_FILE",
             os.path.join(tempfile.gettempdir(), f"mctash-shared-{os.getuid()}.json"),
@@ -4020,6 +4025,8 @@ class Runtime:
             return self._run_from_import(argv[1:])
         if name == "shared":
             return self._run_shared(argv[1:])
+        if name == "shopt":
+            return self._run_shopt(argv[1:])
         if name in ["[", "[[", "test"]:
             return self._run_test(name, argv[1:])
         if name == "exit":
@@ -6957,6 +6964,62 @@ class Runtime:
             pos = 1
         return finish(0, ch, "")
 
+    def _run_shopt(self, args: List[str]) -> int:
+        set_mode = False
+        unset_mode = False
+        query_mode = False
+        print_mode = False
+        i = 0
+        while i < len(args) and args[i].startswith("-") and args[i] != "-":
+            opt = args[i]
+            if opt == "--":
+                i += 1
+                break
+            for ch in opt[1:]:
+                if ch == "s":
+                    set_mode = True
+                    continue
+                if ch == "u":
+                    unset_mode = True
+                    continue
+                if ch == "q":
+                    query_mode = True
+                    continue
+                if ch == "p":
+                    print_mode = True
+                    continue
+                self._report_error(f"shopt: invalid option -- {ch}")
+                return 2
+            i += 1
+        names = args[i:]
+        if set_mode and unset_mode:
+            self._report_error("shopt: cannot set and unset in same invocation")
+            return 2
+        if not names:
+            for name in sorted(self._shopts.keys()):
+                val = self._shopts[name]
+                if print_mode:
+                    print(f"shopt {'-s' if val else '-u'} {name}")
+                else:
+                    print(f"{name}\t{'on' if val else 'off'}")
+            return 0
+        status = 0
+        for name in names:
+            if name not in self._shopts:
+                self._report_error(f"shopt: invalid shell option name: {name}")
+                status = 1
+                continue
+            if set_mode:
+                self._shopts[name] = True
+            elif unset_mode:
+                self._shopts[name] = False
+            if print_mode:
+                val = self._shopts[name]
+                print(f"shopt {'-s' if val else '-u'} {name}")
+            if query_mode and not self._shopts[name]:
+                status = 1
+        return status
+
     def _run_printf(self, args: List[str]) -> int:
         if not args:
             return 0
@@ -7664,6 +7727,11 @@ class Runtime:
         n_chars: int | None = None
         timeout_sec: float | None = None
         prompt: str | None = None
+        exact_chars = False
+        array_name: str | None = None
+        fd = 0
+        edit_mode = False
+        init_text: str | None = None
 
         names: List[str] = []
         i = 0
@@ -7678,6 +7746,20 @@ class Runtime:
             if a == "-r":
                 raw_mode = True
                 i += 1
+                continue
+            if a == "-a" or a.startswith("-a"):
+                if self._bash_compat_level is None:
+                    self._report_error("read: Illegal option -a")
+                    return 2
+                if a == "-a":
+                    if i + 1 >= len(args):
+                        self._report_error("read: option requires an argument -- a")
+                        return 2
+                    array_name = args[i + 1]
+                    i += 2
+                else:
+                    array_name = a[2:]
+                    i += 1
                 continue
             if a == "-p" or a.startswith("-p"):
                 if a == "-p":
@@ -7709,6 +7791,28 @@ class Runtime:
                 except ValueError:
                     self._report_error("read: Illegal number")
                     return 2
+                exact_chars = False
+                continue
+            if a == "-N" or a.startswith("-N"):
+                if self._bash_compat_level is None:
+                    self._report_error("read: Illegal option -N")
+                    return 2
+                val = None
+                if a == "-N":
+                    if i + 1 >= len(args):
+                        self._report_error("read: option requires an argument -- N")
+                        return 2
+                    val = args[i + 1]
+                    i += 2
+                else:
+                    val = a[2:]
+                    i += 1
+                try:
+                    n_chars = max(0, int(val))
+                except ValueError:
+                    self._report_error("read: Illegal number")
+                    return 2
+                exact_chars = True
                 continue
             if a == "-d" or a.startswith("-d"):
                 if self._bash_compat_level is None:
@@ -7748,46 +7852,107 @@ class Runtime:
                 if timeout_sec < 0:
                     timeout_sec = 0.0
                 continue
+            if a == "-u" or a.startswith("-u"):
+                if self._bash_compat_level is None:
+                    self._report_error("read: Illegal option -u")
+                    return 2
+                val = None
+                if a == "-u":
+                    if i + 1 >= len(args):
+                        self._report_error("read: option requires an argument -- u")
+                        return 2
+                    val = args[i + 1]
+                    i += 2
+                else:
+                    val = a[2:]
+                    i += 1
+                try:
+                    fd = int(val, 10)
+                except ValueError:
+                    self._report_error("read: Illegal number")
+                    return 2
+                if fd < 0:
+                    self._report_error("read: Illegal file descriptor")
+                    return 2
+                continue
+            if a == "-s":
+                if self._bash_compat_level is None:
+                    self._report_error("read: Illegal option -s")
+                    return 2
+                i += 1
+                continue
+            if a == "-e":
+                if self._bash_compat_level is None:
+                    self._report_error("read: Illegal option -e")
+                    return 2
+                edit_mode = True
+                i += 1
+                continue
+            if a == "-i" or a.startswith("-i"):
+                if self._bash_compat_level is None:
+                    self._report_error("read: Illegal option -i")
+                    return 2
+                if a == "-i":
+                    if i + 1 >= len(args):
+                        self._report_error("read: option requires an argument -- i")
+                        return 2
+                    init_text = args[i + 1]
+                    i += 2
+                else:
+                    init_text = a[2:]
+                    i += 1
+                continue
             self._report_error(f"read: unknown option {a}")
             return 2
         else:
             names = []
 
+        _ = edit_mode
+        _ = init_text
         implicit_reply = False
-        if not names:
+        if array_name is not None:
+            names = []
+        elif not names:
             names = ["REPLY"]
             implicit_reply = True
 
-        if prompt is not None and os.isatty(0):
+        if prompt is not None and os.isatty(fd):
             os.write(2, prompt.encode("utf-8", errors="surrogateescape"))
 
-        if timeout_sec == 0.0:
-            ready = self._stdin_ready_now()
-            if not ready:
-                return 1
-            for name in names:
-                self.env[name] = ""
-            return 0
+        self._last_read_interrupt_status = None
+        self._last_read_timed_out = False
 
-        text, ok = self._read_from_fd0(
+        text, ok = self._read_from_fd(
+            fd=fd,
             delimiter=delimiter,
             raw_mode=raw_mode,
             n_chars=n_chars,
             timeout_sec=timeout_sec,
+            exact_chars=exact_chars,
         )
+        if self._last_read_interrupt_status is not None:
+            return self._last_read_interrupt_status
+        if not ok and self._last_read_timed_out:
+            return 142 if self._bash_compat_level is not None else 1
         if not ok and text == "":
             return 1
 
+        if array_name is not None:
+            fields = self._split_ifs(text)
+            self._typed_vars[array_name] = list(fields)
+            self._set_var_attrs(array_name, array=True)
+            self._set_subscript_projection(array_name, fields[0] if fields else "")
+            return 0 if ok else 1
         if implicit_reply and names == ["REPLY"]:
             values = [text]
         else:
             values = self._split_read_fields(text, names)
         for name, value in zip(names, values):
             self.env[name] = value
-        return 0 if ok or text != "" else 1
+        return 0 if ok else 1
 
-    def _stdin_ready_now(self) -> bool:
-        if isinstance(sys.stdin, io.StringIO):
+    def _fd_ready_now(self, fd: int) -> bool:
+        if fd == 0 and isinstance(sys.stdin, io.StringIO):
             pos = sys.stdin.tell()
             ch = sys.stdin.read(1)
             sys.stdin.seek(pos)
@@ -7799,42 +7964,92 @@ class Runtime:
                 return True
             return False
         try:
-            r, _, _ = select.select([0], [], [], 0)
+            r, _, _ = select.select([fd], [], [], 0)
             return bool(r)
         except Exception:
             return False
 
-    def _read_one_stdin_char(self, timeout_sec: float | None, deadline: float | None) -> str | None:
-        if isinstance(sys.stdin, io.StringIO):
+    def _read_interrupt_status(self) -> int | None:
+        if not self._shopts.get("read_interruptible", False):
+            return None
+        if not self._pending_signals:
+            return None
+        sig_name = self._pending_signals[0]
+        self._run_pending_traps()
+        sig_num = self._signal_number(sig_name)
+        return 128 + sig_num if sig_num else 1
+
+    def _read_one_fd_char(
+        self,
+        fd: int,
+        timeout_sec: float | None,
+        deadline: float | None,
+    ) -> str | None:
+        if fd == 0 and isinstance(sys.stdin, io.StringIO):
             ch = sys.stdin.read(1)
             if ch == "":
                 return ""
             return ch
-        if timeout_sec is not None:
+        if timeout_sec is None:
+            if self._shopts.get("read_interruptible", False):
+                while True:
+                    status = self._read_interrupt_status()
+                    if status is not None:
+                        self._last_read_interrupt_status = status
+                        return None
+                    r, _, _ = select.select([fd], [], [], 0.05)
+                    if r:
+                        break
+            else:
+                r, _, _ = select.select([fd], [], [], None)
+                if not r:
+                    return None
+        else:
             now = time.monotonic()
             remaining = timeout_sec if deadline is None else (deadline - now)
             if remaining <= 0:
                 return None
-            r, _, _ = select.select([0], [], [], remaining)
-            if not r:
-                return None
-        chunk = os.read(0, 1)
+            if self._shopts.get("read_interruptible", False):
+                while remaining > 0:
+                    status = self._read_interrupt_status()
+                    if status is not None:
+                        self._last_read_interrupt_status = status
+                        return None
+                    sl = min(remaining, 0.05)
+                    r, _, _ = select.select([fd], [], [], sl)
+                    if r:
+                        break
+                    now = time.monotonic()
+                    remaining = timeout_sec if deadline is None else (deadline - now)
+                else:
+                    return None
+            else:
+                r, _, _ = select.select([fd], [], [], remaining)
+                if not r:
+                    return None
+        chunk = os.read(fd, 1)
         if not chunk:
             return ""
         return chunk.decode("utf-8", errors="surrogateescape")
 
-    def _read_from_fd0(
+    def _read_from_fd(
         self,
+        *,
+        fd: int,
         delimiter: str = "\n",
         raw_mode: bool = False,
         n_chars: int | None = None,
         timeout_sec: float | None = None,
+        exact_chars: bool = False,
     ) -> Tuple[str, bool]:
         buf: List[str] = []
         saw_input = False
         saw_delim = False
+        hit_eof = False
         deadline = time.monotonic() + timeout_sec if timeout_sec is not None else None
         if (
+            fd == 0
+            and
             timeout_sec is not None
             and isinstance(sys.stdin, io.StringIO)
             and self._pipeline_input_latency is not None
@@ -7845,21 +8060,29 @@ class Runtime:
         while True:
             if n_chars is not None and len(buf) >= n_chars:
                 break
-            ch = self._read_one_stdin_char(timeout_sec, deadline)
+            ch = self._read_one_fd_char(fd, timeout_sec, deadline)
             if ch is None:
+                if self._last_read_interrupt_status is not None:
+                    return "".join(buf), False
                 # Timeout.
-                return "", False
+                self._last_read_timed_out = True
+                return "".join(buf), False
             if ch == "":
+                hit_eof = True
                 break
-            saw_input = True
-            if ch == delimiter:
+            if not exact_chars and ch == delimiter:
                 saw_delim = True
                 break
+            saw_input = True
             if not raw_mode and ch == "\\":
-                nxt = self._read_one_stdin_char(timeout_sec, deadline)
+                nxt = self._read_one_fd_char(fd, timeout_sec, deadline)
                 if nxt is None:
-                    return "", False
+                    if self._last_read_interrupt_status is not None:
+                        return "".join(buf), False
+                    self._last_read_timed_out = True
+                    return "".join(buf), False
                 if nxt == "":
+                    hit_eof = True
                     break
                 saw_input = True
                 if nxt == "\n":
@@ -7870,7 +8093,13 @@ class Runtime:
 
         if not saw_input and not saw_delim:
             return "", False
-        return "".join(buf), True
+        if exact_chars and n_chars is not None:
+            return "".join(buf), len(buf) >= n_chars
+        if n_chars is not None:
+            if len(buf) >= n_chars or saw_delim:
+                return "".join(buf), True
+            return "".join(buf), not hit_eof
+        return "".join(buf), saw_delim
 
     def _split_read_fields(self, text: str, names: List[str]) -> List[str]:
         ifs = self.env.get("IFS", " \t\n")

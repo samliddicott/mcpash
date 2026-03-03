@@ -461,6 +461,25 @@ run_case \
   $'s:0 opt:? arg: ind:2\n' \
   'No arg for -a option'
 
+set +e
+PYTHONPATH="$ROOT/src" BASH_COMPAT=50 MCTASH_MODE=bash python3 -m mctash -c '
+  trap : INT
+  shopt -s read_interruptible
+  p=$(mktemp -u)
+  mkfifo "$p"
+  { exec 9>"$p"; sleep 2; } &
+  { sleep 0.1; kill -INT $$; } &
+  read -t 1 x <"$p"
+  st=$?
+  rm -f "$p"
+  echo "s:$st"
+' >"$tmpdir/out" 2>"$tmpdir/err"
+status=$?
+set -e
+[[ "$status" -eq 0 ]] || fail "read_interruptible_signal: expected shell status 0, got $status"
+grep -Fxq 's:130' "$tmpdir/out" || fail "read_interruptible_signal: expected read status 130"
+printf '[PASS] read_interruptible_signal\n'
+
 run_case \
   "redir_bad_fd_builtin" \
   'echo hi >&100; echo s:$?' \
