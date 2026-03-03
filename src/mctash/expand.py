@@ -3,17 +3,15 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Callable, List, Tuple, Union
 
-_GLOB_PROTECT = {
-    "*": "\ue001",
-    "?": "\ue002",
-    "[": "\ue003",
-    "]": "\ue004",
-    "\\": "\ue005",
-    "-": "\ue007",
-    "!": "\ue008",
-}
-_GLOB_UNPROTECT = {v: k for k, v in _GLOB_PROTECT.items()}
-_QUOTED_EMPTY_MARK = "\ue00c"
+from .expand_legacy_markers import (
+    ESCAPED_SLASH_MARK,
+    QUOTED_EMPTY_MARK,
+    contains_glob_meta,
+    glob_pattern_display,
+    glob_pattern_for_match,
+    protect_glob_meta,
+    unprotect_glob_meta,
+)
 
 
 @dataclass
@@ -78,7 +76,7 @@ def parse_word_parts(text: str) -> List[WordPart]:
                     # Preserve an explicit escaped slash (\ /) distinctly from
                     # plain quoted slashes so later pathname display can keep
                     # the backslash where ash does.
-                    parts.append(WordPart("LIT", "\ue006", quoted=True))
+                    parts.append(WordPart("LIT", ESCAPED_SLASH_MARK, quoted=True))
                 else:
                     parts.append(WordPart("LIT", text[i + 1], quoted=True))
                 i += 2
@@ -240,84 +238,6 @@ def _parse_ansi_c_single(text: str, start: int) -> Tuple[str, int]:
         out.append(ch)
         i += 1
     return "".join(out), start + 1
-
-
-def _protect_glob_meta(s: str) -> str:
-    return "".join(_GLOB_PROTECT.get(ch, ch) for ch in s)
-
-
-def _unprotect_glob_meta(s: str) -> str:
-    return "".join(_GLOB_UNPROTECT.get(ch, "/" if ch == "\ue006" else ch) for ch in s)
-
-
-def contains_glob_meta(text: str) -> bool:
-    return any(c in text for c in ["*", "?", "[", "\ue001", "\ue002", "\ue003", "\ue004", "\ue005", "\ue007"])
-
-
-def glob_pattern_for_match(text: str) -> str:
-    protected = (
-        text.replace("\ue001", "[*]")
-        .replace("\ue002", "[?]")
-        .replace("\ue003", "[[]")
-        .replace("\ue004", "[]]")
-        .replace("\ue005", "[\\\\]")
-        .replace("\ue006", "/")
-        .replace("\ue008", "!")
-    )
-    out: List[str] = []
-    i = 0
-    while i < len(protected):
-        ch = protected[i]
-        if ch == "[":
-            j = i + 1
-            cls: List[str] = []
-            while j < len(protected) and protected[j] != "]":
-                cls.append(protected[j])
-                j += 1
-            if j < len(protected) and protected[j] == "]":
-                hy_count = cls.count("\ue007")
-                cls = [c for c in cls if c != "\ue007"]
-                if hy_count:
-                    cls.extend("-" for _ in range(hy_count))
-                out.append("[")
-                out.extend(cls)
-                out.append("]")
-                i = j + 1
-                continue
-        if ch == "\\" and i + 1 < len(protected):
-            nxt = protected[i + 1]
-            if nxt == "*":
-                out.append("[*]")
-            elif nxt == "?":
-                out.append("[?]")
-            elif nxt == "[":
-                out.append("[[]")
-            elif nxt == "]":
-                out.append("[]]")
-            else:
-                out.append(nxt)
-            i += 2
-            continue
-        if ch == "\ue007":
-            out.append("-")
-            i += 1
-            continue
-        out.append(ch)
-        i += 1
-    return "".join(out)
-
-
-def glob_pattern_display(text: str) -> str:
-    return (
-        text.replace("\ue001", "*")
-        .replace("\ue002", "?")
-        .replace("\ue003", "[")
-        .replace("\ue004", "]")
-        .replace("\ue005", "\\")
-        .replace("\ue006", "\\/")
-        .replace("\ue007", "-")
-        .replace("\ue008", "!")
-    )
 
 
 def _parse_dollar(text: str, i: int, quoted: bool) -> Tuple[WordPart, int]:
@@ -684,7 +604,7 @@ def expand_word(
             if part.quoted and value == "":
                 # Preserve explicit quoted-empty literals as word anchors
                 # around later unquoted field splitting.
-                value = _QUOTED_EMPTY_MARK
+                value = QUOTED_EMPTY_MARK
         elif part.kind == "PARAM":
             value = get_param(part.value, part.quoted)
         elif part.kind == "BRACED":
@@ -729,9 +649,9 @@ def expand_word(
 
         if part.quoted:
             if isinstance(value, list):
-                value = [_protect_glob_meta(v) for v in value]
+                value = [protect_glob_meta(v) for v in value]
             else:
-                value = _protect_glob_meta(value)
+                value = protect_glob_meta(value)
 
         if isinstance(value, list):
             new_fields = []
@@ -861,13 +781,13 @@ def expand_word(
 
     expanded: List[str] = []
     for f, quoted, _, has_meta in fields:
-        rendered = _unprotect_glob_meta(f) if unprotect_literals else f
-        rendered = rendered.replace(_QUOTED_EMPTY_MARK, "")
+        rendered = unprotect_glob_meta(f) if unprotect_literals else f
+        rendered = rendered.replace(QUOTED_EMPTY_MARK, "")
         # Globbing is driven by unquoted meta presence, not by whether any
         # quoted fragments contributed to the same output field.
         if has_meta or not quoted:
             g = f if unprotect_literals else rendered
-            g = g.replace(_QUOTED_EMPTY_MARK, "")
+            g = g.replace(QUOTED_EMPTY_MARK, "")
             expanded.extend(glob_field(g))
         else:
             expanded.append(rendered)
