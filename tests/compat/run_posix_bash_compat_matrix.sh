@@ -4,6 +4,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 MCTASH=(python3 -m mctash)
 STRICT="${STRICT:-0}"
+PARITY_COMPAT="${PARITY_COMPAT:-50}"
 
 tmpdir="$(mktemp -d)"
 cleanup() { rm -rf "$tmpdir"; }
@@ -16,6 +17,42 @@ record() {
   local out="$2"
   echo "=== ${label} ==="
   sed 's/^/  /' "$out"
+}
+
+probe_pair_parity() {
+  local label="$1"
+  local script="$2"
+  local bash_out="$tmpdir/${label}.bash.pair.out"
+  local bash_err="$tmpdir/${label}.bash.pair.err"
+  local m_out="$tmpdir/${label}.mctash.pair.out"
+  local m_err="$tmpdir/${label}.mctash.pair.err"
+  local bash_rc=0
+  local m_rc=0
+
+  set +e
+  env BASH_COMPAT="$PARITY_COMPAT" bash --posix -c "$script" >"$bash_out" 2>"$bash_err"
+  bash_rc=$?
+  PYTHONPATH="$ROOT/src" env BASH_COMPAT="$PARITY_COMPAT" "${MCTASH[@]}" --posix -c "$script" >"$m_out" 2>"$m_err"
+  m_rc=$?
+  set -e
+
+  echo "=== pair:${label} (compat=${PARITY_COMPAT}, posix=on) ==="
+  echo "  bash rc=${bash_rc} mctash rc=${m_rc}"
+
+  if [[ "$STRICT" == "1" ]]; then
+    if [[ "$bash_rc" -ne "$m_rc" ]]; then
+      echo "[FAIL] pair ${label}: rc mismatch bash=${bash_rc} mctash=${m_rc}" >&2
+      fail=1
+    fi
+    if ! diff -u "$bash_out" "$m_out" >/dev/null; then
+      echo "[FAIL] pair ${label}: stdout mismatch" >&2
+      fail=1
+    fi
+    if ! diff -u "$bash_err" "$m_err" >/dev/null; then
+      echo "[FAIL] pair ${label}: stderr mismatch" >&2
+      fail=1
+    fi
+  fi
 }
 
 # Bash truth probes (hard assertions)
@@ -90,12 +127,16 @@ probe_mctash() {
 # Bash reference matrix
 probe_bash plain bash
 probe_bash posix bash --posix
-probe_bash posix_compat50 env BASH_COMPAT=50 bash --posix
+probe_bash posix_compat env BASH_COMPAT="${PARITY_COMPAT}" bash --posix
 
 # mctash progress matrix
 probe_mctash plain "" "" 2 2
 probe_mctash posix "--posix" "" 2 2
-probe_mctash posix_compat50 "--posix" "50" 0 0
+probe_mctash posix_compat "--posix" "${PARITY_COMPAT}" 0 0
+
+probe_pair_parity \
+  "declare_index_assoc_roundtrip" \
+  'declare -a arr; arr[0]=a; arr[1]=b; echo "a1:${arr[1]} s:${arr}"; declare -A map; map[k]=v; echo "mk:${map[k]}"'
 
 if [[ "$STRICT" == "0" ]]; then
   echo "[INFO] STRICT=0: mctash checks are informational while compat gates are under implementation"

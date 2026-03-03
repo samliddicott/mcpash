@@ -107,10 +107,16 @@ Run POSIX/`BASH_COMPAT` compatibility matrix (Bash reference + mctash progress):
 make compat-posix-bash
 ```
 
-Strict mode (fail on mctash parity gaps) is available for later rollout:
+Strict mode (Bash parity checks enabled for the gated compatibility slice):
 
 ```sh
-STRICT=1 make compat-posix-bash
+make compat-posix-bash-strict
+```
+
+Choose compatibility level under test:
+
+```sh
+PARITY_COMPAT=50 make compat-posix-bash-strict
 ```
 
 Useful overrides:

@@ -57,3 +57,7 @@ Near-term staged behavior:
   - `--posix` + `BASH_COMPAT`
 - Keep initial mctash checks non-gating (soft mode) while implementation lands.
 - Enable strict parity mode once each feature gate is implemented.
+
+Current harness status:
+- `make compat-posix-bash` runs the reference/progress matrix.
+- `make compat-posix-bash-strict` enables strict Bash-vs-mctash parity checks for the gated declaration/indexed/assoc slice, with mirrored `BASH_COMPAT` and `--posix`.
