@@ -5743,7 +5743,8 @@ class Runtime:
             cur = self._typed_vars.get(base)
             if not isinstance(cur, dict):
                 cur = {}
-            cur[str(key)] = value
+            akey = self._eval_assoc_subscript_key(key)
+            cur[str(akey)] = value
             self._typed_vars[base] = cur
             self._set_subscript_projection(base, str(cur.get("0", "")))
             return True
@@ -5820,8 +5821,9 @@ class Runtime:
                     if key == "*":
                         return self._ifs_join(vals), bool(vals)
                     return " ".join(vals), bool(vals)
-                if key in typed:
-                    return str(typed[key]), True
+                akey = self._eval_assoc_subscript_key(key)
+                if akey in typed:
+                    return str(typed[akey]), True
                 return "", False
             if not isinstance(typed, list):
                 return "", False
@@ -6341,7 +6343,8 @@ class Runtime:
                 typed = self._typed_vars.get(base)
                 attrs = self._var_attrs.get(base, set())
                 if isinstance(typed, dict) and "assoc" in attrs:
-                    typed.pop(key, None)
+                    akey = self._eval_assoc_subscript_key(key)
+                    typed.pop(akey, None)
                     self._set_subscript_projection(base, str(typed.get("0", "")) if typed else "")
                     continue
                 if isinstance(typed, list):
@@ -6367,6 +6370,9 @@ class Runtime:
             if name == "OPTIND":
                 self._getopts_state = None
         return status
+
+    def _eval_assoc_subscript_key(self, key: str) -> str:
+        return self._expand_assignment_word(key)
 
     def _run_shift(self, args: List[str]) -> int:
         n = 1
