@@ -1197,6 +1197,46 @@ if ! "$ROOT/tests/regressions/sentinel_transport_audit.sh" >"$tmpdir/out" 2>"$tm
 fi
 printf '[PASS] sentinel_transport_audit\n'
 
+if ! PYROOT="$ROOT" python3 - <<'PY' >"$tmpdir/out" 2>"$tmpdir/err"
+import os
+from mctash.runtime import Runtime
+from mctash.expansion_model import fields_to_text_list
+
+rt = Runtime()
+rt.env.update({"HOME": os.environ.get("HOME", "/tmp"), "IFS": " \t\n", "X": "a b", "Y": "z"})
+samples = [
+    'a',
+    '"a b"',
+    '$X',
+    '${X:-d}',
+    'pre$Y/post',
+    r'\*',
+    "'x y'",
+]
+for w in samples:
+    lhs = fields_to_text_list(rt._legacy_word_to_expansion_fields(w))
+    rhs = rt._expand_argv([type("W", (), {"text": w})()])
+    if lhs != rhs:
+        raise SystemExit(f"word adapter mismatch {w!r}: {lhs!r} != {rhs!r}")
+
+assign_samples = [
+    '$X',
+    '${X:-d}',
+    r"\*",
+    "'a b'",
+]
+for w in assign_samples:
+    lhs = fields_to_text_list(rt._legacy_word_to_expansion_fields(w, assignment=True))
+    rhs = [rt._expand_assignment_word(w)]
+    if lhs != rhs:
+        raise SystemExit(f"assignment adapter mismatch {w!r}: {lhs!r} != {rhs!r}")
+print("ok")
+PY
+then
+  fail "legacy_expansion_adapter_equiv"
+fi
+printf '[PASS] legacy_expansion_adapter_equiv\n'
+
 printf '[PASS] all regressions (including startup options)\n'
 
 if ! PYROOT="$ROOT" python3 - <<'PY'

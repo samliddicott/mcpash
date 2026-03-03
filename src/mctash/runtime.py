@@ -2573,6 +2573,46 @@ class Runtime:
             fields = next_fields
         return fields
 
+    def _legacy_word_to_expansion_fields(self, text: str, *, assignment: bool = False) -> list[ExpansionField]:
+        # Transitional adapter for non-ASDL parser paths. This preserves
+        # current behavior while exposing a typed field model for comparison.
+        if assignment:
+            out = self._expand_assignment_word(text)
+            return [
+                ExpansionField(
+                    [
+                        ExpansionSegment(
+                            text=out,
+                            quoted=True,
+                            glob_active=False,
+                            split_active=False,
+                            source_kind="legacy.assignment",
+                        )
+                    ],
+                    preserve_boundary=True,
+                )
+            ]
+        parts = parse_word_parts(text)
+        has_quoted = any(p.quoted for p in parts)
+        values = self._expand_argv([Word(text)])
+        fields: list[ExpansionField] = []
+        for v in values:
+            fields.append(
+                ExpansionField(
+                    [
+                        ExpansionSegment(
+                            text=v,
+                            quoted=has_quoted,
+                            glob_active=(not has_quoted),
+                            split_active=(not has_quoted),
+                            source_kind="legacy.word",
+                        )
+                    ],
+                    preserve_boundary=has_quoted,
+                )
+            )
+        return fields
+
     def _asdl_literal_to_segments(self, text: str, *, quoted_context: bool, source_kind: str) -> list[ExpansionSegment]:
         if "\\" not in text:
             return [
