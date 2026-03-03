@@ -7691,6 +7691,9 @@ class Runtime:
                     i += 1
                 continue
             if a == "-n" or a.startswith("-n"):
+                if self._bash_compat_level is None:
+                    self._report_error("read: Illegal option -n")
+                    return 2
                 val = None
                 if a == "-n":
                     if i + 1 >= len(args):
@@ -7708,6 +7711,9 @@ class Runtime:
                     return 2
                 continue
             if a == "-d" or a.startswith("-d"):
+                if self._bash_compat_level is None:
+                    self._report_error("read: Illegal option -d")
+                    return 2
                 val = None
                 if a == "-d":
                     if i + 1 >= len(args):
@@ -7721,6 +7727,9 @@ class Runtime:
                 delimiter = "\0" if val == "" else val[0]
                 continue
             if a == "-t" or a.startswith("-t"):
+                if self._bash_compat_level is None:
+                    self._report_error("read: Illegal option -t")
+                    return 2
                 val = None
                 if a == "-t":
                     if i + 1 >= len(args):

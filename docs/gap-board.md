@@ -41,7 +41,7 @@ Status legend:
 
 | Area | Status | What is missing |
 |---|---|---|
-| `read` option matrix across ash variants | partial | Coverage now includes `man-ash-read-options.sh` and `man-ash-read-ifs-matrix.sh`; cross-variant option matrices remain open.
+| `read` option matrix across ash variants | partial | Coverage now includes `man-ash-read-options.sh`, `man-ash-read-ifs-matrix.sh`, and `man-ash-read-option-probe.sh`; this ash comparator behavior is covered, broader cross-variant matrices remain open.
 | `fc` editor/history parity | partial | Added `man-ash-fc-editor-env.sh` and core `man-ash-fc.sh`; richer history-edit flows still remain.
 | `ulimit` full flag set | partial | Query/set/error coverage now includes extended set matrix in `man-ash-ulimit-set.sh` for `-n/-f/-c/-v`; full per-resource universe remains open.
 | `trap` signal matrix | partial | Added delivery coverage via `man-ash-trap-delivery.sh` plus existing matrix/full/nested cases; full signal-by-signal interaction remains open.
