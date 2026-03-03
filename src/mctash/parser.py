@@ -571,6 +571,11 @@ class Parser:
                     command_line = tok.line
                 if self._is_assignment(tok.value) and not argv:
                     name, op, value = self._split_assignment(tok.value)
+                    self._advance()
+                    if value == "":
+                        comp = self._parse_compound_assignment_rhs()
+                        if comp is not None:
+                            value = comp
                     assignments.append(Assignment(name=name, value=value, op=op))
                     lst_assignments.append(
                         LstAssignment(
@@ -581,6 +586,7 @@ class Parser:
                             op=op,
                         )
                     )
+                    continue
                 else:
                     argv.append(Word(tok.value))
                     lst_argv.append(
@@ -588,7 +594,7 @@ class Parser:
                             parse_word(tok.value, line=tok.line, col=tok.col, index=tok.index)
                         )
                     )
-                self._advance()
+                    self._advance()
                 continue
             break
         if not argv and not assignments and not redirects:
@@ -665,6 +671,36 @@ class Parser:
             op = "+="
             name = name[:-1]
         return name, op, value
+
+    def _parse_compound_assignment_rhs(self) -> str | None:
+        tok = self._peek()
+        if tok is None or tok.kind != "OP" or tok.value != "(":
+            return None
+        self._advance()  # '('
+        parts: list[str] = []
+        depth = 1
+        while True:
+            cur = self._peek()
+            if cur is None:
+                raise ParseError("syntax error: missing ')' in compound assignment")
+            if cur.kind == "OP" and cur.value == "(":
+                depth += 1
+                parts.append("(")
+                self._advance()
+                continue
+            if cur.kind == "OP" and cur.value == ")":
+                depth -= 1
+                if depth == 0:
+                    self._advance()
+                    break
+                parts.append(")")
+                self._advance()
+                continue
+            if cur.kind == "OP" and cur.value == "\n":
+                raise ParseError(f"syntax error: missing ')' in compound assignment at {self._where(cur)}")
+            parts.append(cur.value)
+            self._advance()
+        return "(" + " ".join(parts) + ")"
 
     def _make_redirect(self, op: str, target: str, fd: int | None) -> Redirect:
         if op == "<<-":

@@ -1359,6 +1359,7 @@ class Runtime:
             local_env = dict(self.env)
             saved_env = self.env
             assigned_names: set[str] = set()
+            compound_assigned: set[str] = set()
             redirects = [self._asdl_to_redirect(r) for r in (node.get("redirects") or [])]
             try:
                 self.env = local_env
@@ -1376,11 +1377,21 @@ class Runtime:
                     if name in self.readonly_vars:
                         print(self._format_error(f"{name}: is read only", line=self.current_line), file=sys.stderr)
                         raise SystemExit(2)
+                    comp_vals = self._parse_compound_assignment_rhs(self._asdl_rhs_word_to_text(rhs))
+                    if comp_vals is not None and self._bash_compat_level is None:
+                        comp_vals = None
                     if name in self._py_ties:
+                        if comp_vals is not None:
+                            raise RuntimeError(f"{name}: cannot assign array value to tied variable")
                         if op == "+=":
                             self._assign_shell_var(name, self._get_var(name) + value)
                         else:
                             self._assign_shell_var(name, value)
+                        local_env[name] = self._get_var(name)
+                        continue
+                    if comp_vals is not None:
+                        self._assign_compound_var(name, op, comp_vals)
+                        compound_assigned.add(name)
                         local_env[name] = self._get_var(name)
                         continue
                     if op == "+=":
@@ -1407,6 +1418,8 @@ class Runtime:
             finally:
                 self.env = saved_env
             for n in assigned_names:
+                if n in compound_assigned:
+                    continue
                 self._typed_vars.pop(n, None)
             self.env.update(local_env)
             for tied_name in self._py_ties:
@@ -1942,6 +1955,7 @@ class Runtime:
             local_env = dict(self.env)
             saved_env = self.env
             assigned_names: set[str] = set()
+            compound_assigned: set[str] = set()
             try:
                 self.env = local_env
                 self._apply_persistent_redirects(redirects)
@@ -1957,8 +1971,22 @@ class Runtime:
                     if name in self.readonly_vars:
                         print(self._format_error(f"{name}: is read only", line=self.current_line), file=sys.stderr)
                         raise SystemExit(2)
+                    is_compound = False
+                    comp_vals: list[str] | None = None
+                    if self._bash_compat_level is not None:
+                        rhs_text = self._asdl_rhs_word_to_text(assign.get("val") or {})
+                        comp_vals = self._parse_compound_assignment_rhs(rhs_text)
+                        is_compound = comp_vals is not None
                     if name in self._py_ties:
+                        if is_compound:
+                            raise RuntimeError(f"{name}: cannot assign array value to tied variable")
                         self._assign_shell_var(name, value)
+                        local_env[name] = self._get_var(name)
+                        continue
+                    op = str(assign.get("op") or "=")
+                    if is_compound and comp_vals is not None:
+                        self._assign_compound_var(name, op, comp_vals)
+                        compound_assigned.add(name)
                         local_env[name] = self._get_var(name)
                         continue
                     local_env[name] = value
@@ -1968,6 +1996,8 @@ class Runtime:
                 )
                 if should_persist_env:
                     for n in assigned_names:
+                        if n in compound_assigned:
+                            continue
                         self._typed_vars.pop(n, None)
                     saved_env.clear()
                     saved_env.update(self.env)
@@ -1978,6 +2008,7 @@ class Runtime:
         local_env = dict(self.env)
         saved_env = self.env
         assigned_names: set[str] = set()
+        compound_assigned: set[str] = set()
         try:
             self.env = local_env
             for assign in assign_pairs:
@@ -1992,9 +2023,24 @@ class Runtime:
                 if name in self.readonly_vars:
                     print(self._format_error(f"{name}: is read only", line=self.current_line), file=sys.stderr)
                     raise SystemExit(2)
+                is_compound = False
+                comp_vals: list[str] | None = None
+                if self._bash_compat_level is not None:
+                    rhs_text = self._asdl_rhs_word_to_text(assign.get("val") or {})
+                    comp_vals = self._parse_compound_assignment_rhs(rhs_text)
+                    is_compound = comp_vals is not None
                 if name in self._py_ties:
+                    if is_compound:
+                        raise RuntimeError(f"{name}: cannot assign array value to tied variable")
                     self._assign_shell_var(name, value)
                     local_env[name] = self._get_var(name)
+                    continue
+                op = str(assign.get("op") or "=")
+                if is_compound and comp_vals is not None:
+                    self._assign_compound_var(name, op, comp_vals)
+                    compound_assigned.add(name)
+                    local_env[name] = self._get_var(name)
+                    self.env = local_env
                     continue
                 local_env[name] = value
                 self.env = local_env
@@ -2016,6 +2062,8 @@ class Runtime:
                     print(msg, file=sys.stderr)
                     return self._runtime_error_status(msg)
             for n in assigned_names:
+                if n in compound_assigned:
+                    continue
                 self._typed_vars.pop(n, None)
             self.env.update(local_env)
             for tied_name in self._py_ties:
@@ -2031,14 +2079,16 @@ class Runtime:
             saved_env = self.env
             try:
                 self.env = local_env
-                for name, op, value in argv_assigns:
+                for name, op, value, is_compound in argv_assigns:
                     if name in self.readonly_vars:
                         print(self._format_error(f"{name}: is read only", line=self.current_line), file=sys.stderr)
                         raise SystemExit(2)
-                    if op == "+=":
-                        self._assign_shell_var(name, self._get_var(name) + value)
+                    if is_compound:
+                        self._assign_compound_var(name, op, list(value) if isinstance(value, list) else [])
+                    elif op == "+=":
+                        self._assign_shell_var(name, self._get_var(name) + str(value))
                     else:
-                        self._assign_shell_var(name, value)
+                        self._assign_shell_var(name, str(value))
                     local_env[name.split("[", 1)[0]] = self._get_var(name.split("[", 1)[0])
                 saved_env.update(local_env)
                 for tied_name in self._py_ties:
@@ -2584,6 +2634,16 @@ class Runtime:
             op = node.get("op")
             if op == "__len__":
                 return "${#" + name + "}"
+            if op == "__keys__":
+                arg = node.get("arg")
+                suffix = ""
+                if isinstance(arg, dict):
+                    suffix = self._asdl_word_to_text(arg)
+                elif isinstance(arg, str):
+                    suffix = arg
+                if suffix not in {"@", "*"}:
+                    suffix = "@"
+                return "${!" + name + "[" + suffix + "]}"
             if op == ":substr":
                 arg = node.get("arg")
                 arg_s = self._asdl_word_to_text(arg) if isinstance(arg, dict) else ""
@@ -3173,6 +3233,7 @@ class Runtime:
                 local_env = dict(self.env)
                 saved_env = self.env
                 assigned_names: set[str] = set()
+                compound_assigned: set[str] = set()
                 try:
                     self.env = local_env
                     self._apply_persistent_redirects(node.redirects)
@@ -3189,11 +3250,19 @@ class Runtime:
                         if name in self.readonly_vars:
                             print(self._format_error(f"{name}: is read only", line=self.current_line), file=sys.stderr)
                             raise SystemExit(2)
+                        comp_vals = self._parse_compound_assignment_rhs(assign.value) if self._bash_compat_level is not None else None
                         if name in self._py_ties:
+                            if comp_vals is not None:
+                                raise RuntimeError(f"{name}: cannot assign array value to tied variable")
                             if op == "+=":
                                 self._assign_shell_var(name, self._get_var(name) + value)
                             else:
                                 self._assign_shell_var(name, value)
+                            local_env[name] = self._get_var(name)
+                            continue
+                        if comp_vals is not None:
+                            self._assign_compound_var(name, op, comp_vals)
+                            compound_assigned.add(name)
                             local_env[name] = self._get_var(name)
                             continue
                         if op == "+=":
@@ -3206,6 +3275,8 @@ class Runtime:
                     )
                     if should_persist_env:
                         for n in assigned_names:
+                            if n in compound_assigned:
+                                continue
                             self._typed_vars.pop(n, None)
                         saved_env.clear()
                         saved_env.update(self.env)
@@ -3216,6 +3287,7 @@ class Runtime:
             local_env = dict(self.env)
             saved_env = self.env
             assigned_names: set[str] = set()
+            compound_assigned: set[str] = set()
             try:
                 self.env = local_env
                 for assign in node.assignments:
@@ -3231,12 +3303,21 @@ class Runtime:
                     if name in self.readonly_vars:
                         print(self._format_error(f"{name}: is read only", line=self.current_line), file=sys.stderr)
                         raise SystemExit(2)
+                    comp_vals = self._parse_compound_assignment_rhs(assign.value) if self._bash_compat_level is not None else None
                     if name in self._py_ties:
+                        if comp_vals is not None:
+                            raise RuntimeError(f"{name}: cannot assign array value to tied variable")
                         if op == "+=":
                             self._assign_shell_var(name, self._get_var(name) + value)
                         else:
                             self._assign_shell_var(name, value)
                         local_env[name] = self._get_var(name)
+                        continue
+                    if comp_vals is not None:
+                        self._assign_compound_var(name, op, comp_vals)
+                        compound_assigned.add(name)
+                        local_env[name] = self._get_var(name)
+                        self.env = local_env
                         continue
                     if op == "+=":
                         local_env[name] = local_env.get(name, "") + value
@@ -3256,6 +3337,8 @@ class Runtime:
                     print(str(e), file=sys.stderr)
                     return 1
                 for n in assigned_names:
+                    if n in compound_assigned:
+                        continue
                     self._typed_vars.pop(n, None)
                 self.env.update(local_env)
                 for tied_name in self._py_ties:
@@ -3272,14 +3355,20 @@ class Runtime:
                 saved_env2 = self.env
                 try:
                     self.env = local_env
-                    for var_name, op, value in argv_assigns:
+                    for var_name, op, value, is_compound in argv_assigns:
                         if var_name in self.readonly_vars:
                             print(self._format_error(f"{var_name}: is read only", line=self.current_line), file=sys.stderr)
                             raise SystemExit(2)
-                        if op == "+=":
-                            self._assign_shell_var(var_name, self._get_var(var_name) + value)
+                        if is_compound:
+                            self._assign_compound_var(
+                                var_name,
+                                op,
+                                list(value) if isinstance(value, list) else [],
+                            )
+                        elif op == "+=":
+                            self._assign_shell_var(var_name, self._get_var(var_name) + str(value))
                         else:
-                            self._assign_shell_var(var_name, value)
+                            self._assign_shell_var(var_name, str(value))
                         base = var_name.split("[", 1)[0]
                         local_env[base] = self._get_var(base)
                     saved_env2.update(local_env)
@@ -4971,6 +5060,19 @@ class Runtime:
                 return str(len(v))
             value, _ = self._get_param_state(name)
             return str(len(value))
+        if op == "__keys__":
+            typed = self._typed_vars.get(name)
+            attrs = self._var_attrs.get(name, set())
+            vals: list[str] = []
+            if isinstance(typed, dict) and "assoc" in attrs:
+                vals = [str(k) for k in reversed(list(typed.keys()))]
+            elif isinstance(typed, list):
+                vals = [str(i) for i, v in enumerate(typed) if v is not None]
+            if quoted:
+                return self._ifs_join(vals)
+            if arg == "*":
+                return vals
+            return vals
         if name == "@" and op is None:
             return list(self.positional)
         if name == "*" and op is None:
@@ -5509,9 +5611,53 @@ class Runtime:
             out.append(str(v))
         return out
 
-    def _argv_assignment_words(self, argv: list[str]) -> list[tuple[str, str, str]] | None:
-        out: list[tuple[str, str, str]] = []
-        for tok in argv:
+    def _argv_assignment_words(self, argv: list[str]) -> list[tuple[str, str, object, bool]] | None:
+        out: list[tuple[str, str, object, bool]] = []
+        i = 0
+        while i < len(argv):
+            tok = argv[i]
+            m_comp = re.match(r"^([A-Za-z_][A-Za-z0-9_]*)(\+?=)\((.*)$", tok)
+            if m_comp is not None:
+                name = m_comp.group(1)
+                op = m_comp.group(2)
+                tail = m_comp.group(3)
+                vals: list[str] = []
+                while True:
+                    if tail.endswith(")"):
+                        chunk = tail[:-1]
+                        if chunk != "":
+                            vals.append(chunk)
+                        break
+                    if tail != "":
+                        vals.append(tail)
+                    i += 1
+                    if i >= len(argv):
+                        return None
+                    tail = argv[i]
+                out.append((name, op, vals, True))
+                i += 1
+                continue
+
+            m_comp_open = re.match(r"^([A-Za-z_][A-Za-z0-9_]*)(\+?=)$", tok)
+            if m_comp_open is not None:
+                name = m_comp_open.group(1)
+                op = m_comp_open.group(2)
+                if i + 1 >= len(argv) or argv[i + 1] != "(":
+                    return None
+                i += 2
+                vals = []
+                while i < len(argv):
+                    cur = argv[i]
+                    if cur == ")":
+                        break
+                    vals.append(cur)
+                    i += 1
+                if i >= len(argv) or argv[i] != ")":
+                    return None
+                out.append((name, op, vals, True))
+                i += 1
+                continue
+
             m = re.match(r"^([^=]+?)(\+?=)(.*)$", tok)
             if m is None:
                 return None
@@ -5520,8 +5666,43 @@ class Runtime:
             value = m.group(3)
             if not (self._is_valid_name(name) or self._parse_subscripted_name(name) is not None):
                 return None
-            out.append((name, op, value))
+            out.append((name, op, value, False))
+            i += 1
         return out
+
+    def _assign_compound_var(self, name: str, op: str, values: list[str]) -> None:
+        if self._bash_compat_level is None:
+            raise RuntimeError(f"{name}: compound assignment requires BASH_COMPAT")
+        cur = self._typed_vars.get(name)
+        cur_vals: list[str] = []
+        if isinstance(cur, list):
+            cur_vals = [str(v) for v in cur if v is not None]
+        if op == "+=":
+            cur_vals.extend(values)
+        else:
+            cur_vals = list(values)
+        self._typed_vars[name] = cur_vals
+        self._set_var_attrs(name, array=True)
+        self._set_subscript_projection(name, cur_vals[0] if cur_vals else "")
+
+    def _parse_compound_assignment_rhs(self, rhs: str) -> list[str] | None:
+        text = rhs.strip()
+        if not (text.startswith("(") and text.endswith(")")):
+            return None
+        inner = text[1:-1]
+        if inner.strip() == "":
+            return []
+        vals: list[str] = []
+        reader = TokenReader(inner)
+        ctx = LexContext(reserved_words=set(), allow_reserved=False, allow_newline=False)
+        while True:
+            tok = reader.next(ctx)
+            if tok is None:
+                break
+            if tok.kind != "WORD":
+                return None
+            vals.append(self._expand_assignment_word(tok.value))
+        return vals
 
     def _assign_subscripted_var(self, name: str, value: str) -> bool:
         parsed = self._parse_subscripted_name(name)
