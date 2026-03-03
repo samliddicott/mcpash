@@ -2384,12 +2384,26 @@ class Runtime:
         return "" if value is None else str(value)
 
     def _expand_asdl_assignment_scalar(self, node: dict[str, Any] | None) -> str:
+        fields = self._expand_asdl_assignment_fields(node)
+        texts = fields_to_text_list(fields)
+        return texts[0] if texts else ""
+
+    def _expand_asdl_assignment_fields(self, node: dict[str, Any] | None) -> list[ExpansionField]:
         if not isinstance(node, dict) or node.get("type") != "word.Compound":
-            return ""
-        out: list[str] = []
+            return []
+        out: list[ExpansionSegment] = []
         for part in (node.get("parts") or []):
-            out.append(self._expand_asdl_assignment_part_scalar(part, quoted_context=False))
-        return "".join(out)
+            text = self._expand_asdl_assignment_part_scalar(part, quoted_context=False)
+            out.append(
+                ExpansionSegment(
+                    text=text,
+                    quoted=True,
+                    glob_active=False,
+                    split_active=False,
+                    source_kind=str(part.get("type", "word_part.Unknown")) if isinstance(part, dict) else "word_part.Unknown",
+                )
+            )
+        return [ExpansionField(out, preserve_boundary=True)]
 
     def _expand_asdl_assignment_part_scalar(self, node: dict[str, Any], quoted_context: bool) -> str:
         t = node.get("type")
@@ -2409,11 +2423,7 @@ class Runtime:
             name = str(node.get("name", ""))
             op = node.get("op")
             arg_node = node.get("arg")
-            arg_text = (
-                self._asdl_word_to_text(arg_node)
-                if isinstance(arg_node, dict)
-                else None
-            )
+            arg_text, _arg_fields = self._asdl_operator_arg_text_and_fields(arg_node)
             if name in {"@", "*"} and (op is None or op == ""):
                 return self._ifs_join(self.positional)
             value = self._expand_braced_param(name, op, arg_text, quoted_context)
@@ -2802,11 +2812,7 @@ class Runtime:
             return self._normalize_asdl_expanded_values(val), quoted_context
         if t == "word_part.BracedVarSub":
             arg_node = node.get("arg")
-            arg_text = (
-                self._asdl_word_to_text(arg_node)
-                if isinstance(arg_node, dict)
-                else None
-            )
+            arg_text, _arg_fields = self._asdl_operator_arg_text_and_fields(arg_node)
             val = self._expand_braced_param(
                 str(node.get("name", "")),
                 node.get("op"),
@@ -2828,6 +2834,13 @@ class Runtime:
             expr = str(node.get("expr_source") or node.get("code") or "")
             return [self._expand_arith(expr)], quoted_context
         return [""], quoted_context
+
+    def _asdl_operator_arg_text_and_fields(self, arg_node: Any) -> tuple[str | None, list[ExpansionField] | None]:
+        if not isinstance(arg_node, dict):
+            return None, None
+        if arg_node.get("type") != "word.Compound":
+            return None, None
+        return self._asdl_word_to_text(arg_node), self._asdl_word_to_expansion_fields(arg_node)
 
     def _decode_asdl_literal(self, text: str, *, quoted_context: bool) -> str:
         if "\\" not in text:
@@ -5253,9 +5266,7 @@ class Runtime:
         def _expand_alt_word(text: str) -> str:
             # Under outer double quotes, single quotes are literal chars.
             if quoted and "'" in text:
-                marker = "\ue00a"
-                expanded = self._expand_assignment_word_protected(text.replace("'", marker))
-                return expanded.replace(marker, "'")
+                return self._expand_assignment_word_protected(text.replace("'", "\\'"))
             return self._expand_assignment_word_protected(text)
 
         def _expand_alt_fields(text: str) -> PresplitFields:
@@ -6219,7 +6230,6 @@ class Runtime:
         return self._pattern_from_literalized_raw(raw, for_case=for_case)
 
     def _pattern_from_literalized_raw(self, raw: str, *, for_case: bool = False) -> str:
-        backslash_marker = "\ue00d"
         rb = r"\]" if for_case else "]"
         raw = raw.replace(r"\]", rb)
         out: List[str] = []
@@ -6262,7 +6272,7 @@ class Runtime:
                 continue
             out.append(ch)
             i += 1
-        pat = "".join(out).replace(backslash_marker, "[\\\\]")
+        pat = "".join(out)
         if for_case:
             return self._normalize_class_escapes(pat)
         return pat
