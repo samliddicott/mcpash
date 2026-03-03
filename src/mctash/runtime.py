@@ -49,6 +49,7 @@ from .ast_nodes import (
     Word,
 )
 from .expand import PresplitFields, expand_word, parse_word_parts, _extract_balanced, _find_braced_end, _split_braced
+from .expansion_model import ExpansionField, ExpansionSegment, fields_to_text_list
 from .lexer import LexContext, TokenReader
 from .parser import ParseError, Parser
 from .asdl_map import AsdlMappingError, lst_list_item_to_asdl
@@ -2506,6 +2507,39 @@ class Runtime:
         fields = self._expand_asdl_word_fields(node, split_glob=split_glob)
         return fields[0] if fields else ""
 
+    def _asdl_word_to_expansion_fields(self, node: dict[str, Any]) -> list[ExpansionField]:
+        # Transitional adapter: expose typed expansion metadata without yet
+        # changing expansion semantics.
+        if not isinstance(node, dict) or node.get("type") != "word.Compound":
+            return []
+        parts = node.get("parts") or []
+        fields: list[ExpansionField] = [ExpansionField([])]
+        for part in parts:
+            vals, quoted = self._expand_asdl_word_part_values(part, quoted_context=False)
+            if not vals:
+                vals = [""]
+            kind = str(part.get("type", "word_part.Unknown")) if isinstance(part, dict) else "word_part.Unknown"
+            next_fields: list[ExpansionField] = []
+            for base in fields:
+                for v in vals:
+                    next_fields.append(
+                        ExpansionField(
+                            segments=base.segments
+                            + [
+                                ExpansionSegment(
+                                    text=v,
+                                    quoted=quoted,
+                                    glob_active=(not quoted),
+                                    split_active=(not quoted),
+                                    source_kind=kind,
+                                )
+                            ],
+                            preserve_boundary=base.preserve_boundary or quoted,
+                        )
+                    )
+            fields = next_fields
+        return fields
+
     def _expand_asdl_word_fields(self, node: dict[str, Any], split_glob: bool = True) -> list[str]:
         if not isinstance(node, dict) or node.get("type") != "word.Compound":
             return []
@@ -2515,11 +2549,9 @@ class Runtime:
         parts = node.get("parts") or []
         pieces: list[str] = [""]
         any_quoted = False
-        all_quoted = bool(parts)
         for part in parts:
             vals, quoted = self._expand_asdl_word_part_values(part, quoted_context=False)
             any_quoted = any_quoted or quoted
-            all_quoted = all_quoted and quoted
             if not vals:
                 vals = [""]
             next_pieces: list[str] = []
@@ -2531,7 +2563,17 @@ class Runtime:
         # are realized before field splitting/pathname expansion.
         if not any_quoted and len(pieces) == 1 and self._is_process_subst(pieces[0]):
             return [self._process_substitute(pieces[0])]
-        if all_quoted or not split_glob:
+        if any_quoted or not split_glob:
+            if split_glob and self._asdl_word_has_unquoted_glob(parts):
+                out: list[str] = []
+                for frag in pieces:
+                    out.extend(self._glob_field(frag))
+                return out
+            # Transitional structured path: adapter is now present, while the
+            # returned text behavior remains unchanged.
+            modeled = self._asdl_word_to_expansion_fields(node)
+            if modeled:
+                return fields_to_text_list(modeled)
             return pieces
         out: list[str] = []
         for frag in pieces:
@@ -2539,6 +2581,18 @@ class Runtime:
             for field in split:
                 out.extend(self._glob_field(field))
         return [f for f in out if f != ""]
+
+    def _asdl_word_has_unquoted_glob(self, parts: list[Any]) -> bool:
+        for part in parts:
+            if not isinstance(part, dict):
+                continue
+            t = part.get("type")
+            if t != "word_part.Literal":
+                continue
+            lit = self._decode_asdl_literal(str(part.get("tval", "")), quoted_context=False)
+            if any(ch in lit for ch in ("*", "?", "[")):
+                return True
+        return False
 
     def _expand_asdl_word_part_values(self, node: dict[str, Any], quoted_context: bool) -> tuple[list[str], bool]:
         t = node.get("type")

@@ -82,7 +82,7 @@ Reference summary source: `docs/posix-shall-trace.md`.
 |---|---|---|---|
 | Expansion engine migration plan exists | covered | `docs/plan.md` ("Expansion Engine Transition: Sentinels -> Structured Data") | Track execution progress here as items move from design to implementation. |
 | Sentinel usage inventory and guard | partial | `tests/regressions/asdl_fallback_audit.sh`, `tests/regressions/asdl_fallback_allowlist.txt` | Extend audit to sentinel-marker transport checks (not just fallback helpers). |
-| Typed expansion model introduction | untested | Planned in `docs/plan.md` phase 1 (`ExpansionSegment`, `ExpansionField`) | Add first implementation slice and tests for segment composition/flattening. |
+| Typed expansion model introduction | partial | `src/mctash/expansion_model.py`, `src/mctash/runtime.py` (`_asdl_word_to_expansion_fields`) | Extend segment metadata usage beyond adapter-only scope and cover unquoted split/glob path end-to-end. |
 | Typed adapters (ASDL and legacy parser) | untested | Planned in `docs/plan.md` phase 2 | Implement adapters and run side-by-side diff checks. |
 | Split/glob/pattern stages on structured fields | untested | Planned in `docs/plan.md` phase 3 | Replace sentinel-based behavior with metadata-driven behavior. |
 | Sentinel collision proof cases | untested | Planned in `docs/plan.md` phase 5 | Add differential cases containing literal private-use chars (e.g. `U+E001`). |
