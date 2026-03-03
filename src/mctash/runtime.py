@@ -5041,12 +5041,29 @@ class Runtime:
                     if isinstance(typed, dict) and "assoc" in attrs:
                         return str(len(typed))
                     return "0"
-            if op is None and key in {"@", "*"}:
+            if key in {"@", "*"}:
                 vals: list[str] = []
                 if isinstance(typed, list):
                     vals = self._array_visible_values(typed)
                 elif isinstance(typed, dict) and "assoc" in attrs:
-                    vals = [str(v) for v in typed.values()]
+                    vals = [str(v) for v in reversed(list(typed.values()))]
+                if op is None:
+                    if key == "*":
+                        if quoted:
+                            return self._ifs_join(vals)
+                        return vals
+                    return vals
+                arg_text = arg or ""
+                if op in ["#", "##"]:
+                    pattern = self._pattern_from_word(arg_text)
+                    vals = [self._remove_prefix(v, pattern, longest=(op == "##")) for v in vals]
+                elif op in ["%", "%%"]:
+                    pattern = self._pattern_from_word(arg_text)
+                    vals = [self._remove_suffix(v, pattern, longest=(op == "%%")) for v in vals]
+                elif op == "/":
+                    vals = [self._replace_pattern(v, arg_text) for v in vals]
+                elif op == ":substr":
+                    vals = [self._substring(v, arg_text) for v in vals]
                 if key == "*":
                     if quoted:
                         return self._ifs_join(vals)
@@ -5753,6 +5770,11 @@ class Runtime:
             if "assoc" in attrs:
                 if not isinstance(typed, dict):
                     return "", False
+                if key in {"@", "*"}:
+                    vals = [str(v) for v in reversed(list(typed.values()))]
+                    if key == "*":
+                        return self._ifs_join(vals), bool(vals)
+                    return " ".join(vals), bool(vals)
                 if key in typed:
                     return str(typed[key]), True
                 return "", False
