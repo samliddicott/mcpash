@@ -14,6 +14,33 @@ GLOB_PROTECT = {
 GLOB_UNPROTECT = {v: k for k, v in GLOB_PROTECT.items()}
 ESCAPED_SLASH_MARK = "\ue006"
 QUOTED_EMPTY_MARK = "\ue00c"
+MARKER_ESCAPE = "\ue00f"
+
+_ESCAPE_TOKENS = {
+    MARKER_ESCAPE: "0",
+    GLOB_PROTECT["*"]: "1",
+    GLOB_PROTECT["?"]: "2",
+    GLOB_PROTECT["["]: "3",
+    GLOB_PROTECT["]"]: "4",
+    GLOB_PROTECT["\\"]: "5",
+    ESCAPED_SLASH_MARK: "6",
+    GLOB_PROTECT["-"]: "7",
+    GLOB_PROTECT["!"]: "8",
+    QUOTED_EMPTY_MARK: "9",
+}
+_UNESCAPE_TOKENS = {v: k for k, v in _ESCAPE_TOKENS.items()}
+
+
+def escape_marker_literals(text: str) -> str:
+    out: list[str] = []
+    for ch in text:
+        token = _ESCAPE_TOKENS.get(ch)
+        if token is None:
+            out.append(ch)
+            continue
+        out.append(MARKER_ESCAPE)
+        out.append(token)
+    return "".join(out)
 
 
 def protect_glob_meta(s: str) -> str:
@@ -21,7 +48,20 @@ def protect_glob_meta(s: str) -> str:
 
 
 def unprotect_glob_meta(s: str) -> str:
-    return "".join(GLOB_UNPROTECT.get(ch, "/" if ch == ESCAPED_SLASH_MARK else ch) for ch in s)
+    out: list[str] = []
+    i = 0
+    while i < len(s):
+        ch = s[i]
+        if ch == MARKER_ESCAPE and i + 1 < len(s):
+            tok = s[i + 1]
+            orig = _UNESCAPE_TOKENS.get(tok)
+            if orig is not None:
+                out.append(orig)
+                i += 2
+                continue
+        out.append(GLOB_UNPROTECT.get(ch, "/" if ch == ESCAPED_SLASH_MARK else ch))
+        i += 1
+    return "".join(out)
 
 
 def contains_glob_meta(text: str) -> bool:

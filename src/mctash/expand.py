@@ -7,6 +7,7 @@ from .expand_legacy_markers import (
     ESCAPED_SLASH_MARK,
     QUOTED_EMPTY_MARK,
     contains_glob_meta,
+    escape_marker_literals,
     glob_pattern_display,
     glob_pattern_for_match,
     protect_glob_meta,
@@ -617,6 +618,10 @@ def expand_word(
             value = eval_arith(part.value)
         else:
             value = part.value
+        if isinstance(value, list):
+            value = [escape_marker_literals(v) for v in value]
+        elif isinstance(value, str) and value != QUOTED_EMPTY_MARK:
+            value = escape_marker_literals(value)
 
         is_quoted_list_splat = (
             isinstance(value, list)
