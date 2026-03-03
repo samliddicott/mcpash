@@ -5744,9 +5744,8 @@ class Runtime:
         cur_arr = self._typed_vars.get(base)
         if not isinstance(cur_arr, list):
             cur_arr = []
-        try:
-            idx = int(key, 10)
-        except ValueError:
+        idx = self._eval_index_subscript(key)
+        if idx is None:
             raise RuntimeError(f"{name}: bad array subscript")
         if idx < 0:
             raise RuntimeError(f"{name}: bad array subscript")
@@ -5758,6 +5757,15 @@ class Runtime:
         self._set_subscript_projection(base, vis[0] if vis else "")
         self._set_var_attrs(base, array=True)
         return True
+
+    def _eval_index_subscript(self, key: str) -> int | None:
+        text = (key or "").strip()
+        if text == "":
+            return None
+        try:
+            return self._to_int_arith(text)
+        except Exception:
+            return None
 
     def _get_var_with_state(self, name: str) -> tuple[str, bool]:
         parsed = self._parse_subscripted_name(name)
@@ -5785,9 +5793,8 @@ class Runtime:
                 if key == "*":
                     return self._ifs_join(vals), bool(vals)
                 return " ".join(vals), bool(vals)
-            try:
-                idx = int(key, 10)
-            except ValueError:
+            idx = self._eval_index_subscript(key)
+            if idx is None:
                 return "", False
             if idx < 0 or idx >= len(typed):
                 return "", False
@@ -6301,9 +6308,8 @@ class Runtime:
                     self._set_subscript_projection(base, str(typed.get("0", "")) if typed else "")
                     continue
                 if isinstance(typed, list):
-                    try:
-                        i_key = int(key, 10)
-                    except ValueError:
+                    i_key = self._eval_index_subscript(key)
+                    if i_key is None:
                         continue
                     if 0 <= i_key < len(typed):
                         typed[i_key] = None
