@@ -22,6 +22,12 @@ Run differential ash vs mctash cases:
 make diff-conformance
 ```
 
+For bash-baseline differential cases, you can mirror compat settings across both shells:
+
+```sh
+PARITY_BASH_COMPAT=50 PARITY_MIRROR_POSIX=1 make diff-conformance
+```
+
 Run full BusyBox ash corpus:
 
 ```sh

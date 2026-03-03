@@ -9,6 +9,8 @@ read -r -a ASH_CMD <<< "${ASH_BIN}"
 BASH_BIN="${BASH_BIN:-bash --posix}"
 read -r -a BASH_CMD <<< "${BASH_BIN}"
 MCTASH_CMD="${MCTASH_CMD:-PYTHONPATH=${ROOT}/src python3 -m mctash}"
+PARITY_BASH_COMPAT="${PARITY_BASH_COMPAT:-}"
+PARITY_MIRROR_POSIX="${PARITY_MIRROR_POSIX:-0}"
 
 GENERATE_EXPECTED=0
 CASE_FILTER=()
@@ -107,18 +109,37 @@ for case in "${CASE_FILES[@]}"; do
   if grep -q '^# DIFF_BASELINE: bash$' "${CASES_DIR}/${case}"; then
     compare_name="bash"
     compare_cmd=("${BASH_CMD[@]}")
+    if [[ "${PARITY_MIRROR_POSIX}" == "1" ]]; then
+      has_posix=0
+      for a in "${compare_cmd[@]}"; do
+        [[ "$a" == "--posix" ]] && has_posix=1 && break
+      done
+      [[ "$has_posix" -eq 1 ]] || compare_cmd+=("--posix")
+    fi
   fi
 
   if [[ ${ASH_ONLY} -eq 0 ]]; then
     ash_status=0
-    if ! "${compare_cmd[@]}" "${CASES_DIR}/${case}" >"${ash_stdout}" 2>"${ash_stderr}"; then
+    if [[ "${compare_name}" == "bash" && -n "${PARITY_BASH_COMPAT}" ]]; then
+      if ! env BASH_COMPAT="${PARITY_BASH_COMPAT}" "${compare_cmd[@]}" "${CASES_DIR}/${case}" >"${ash_stdout}" 2>"${ash_stderr}"; then
+        ash_status=$?
+      fi
+    elif ! "${compare_cmd[@]}" "${CASES_DIR}/${case}" >"${ash_stdout}" 2>"${ash_stderr}"; then
       ash_status=$?
     fi
   fi
 
   if [[ ${MCTASH_ONLY} -eq 0 ]]; then
+    mctash_prefix=""
+    mctash_opts=""
+    if [[ -n "${PARITY_BASH_COMPAT}" ]]; then
+      mctash_prefix="BASH_COMPAT=${PARITY_BASH_COMPAT} "
+    fi
+    if [[ "${PARITY_MIRROR_POSIX}" == "1" ]]; then
+      mctash_opts="--posix "
+    fi
     set +e
-    eval "${MCTASH_CMD} \"${CASES_DIR}/${case}\"" >"${mctash_stdout}" 2>"${mctash_stderr}"
+    eval "${mctash_prefix}${MCTASH_CMD} ${mctash_opts}\"${CASES_DIR}/${case}\"" >"${mctash_stdout}" 2>"${mctash_stderr}"
     mctash_status=$?
     set -e
   fi
