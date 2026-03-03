@@ -508,11 +508,19 @@ run_case \
   'BASH_COMPAT=50'
 
 run_case \
-  "declare_assoc_deferred_even_with_bash_compat" \
+  "declare_assoc_requires_bash_compat" \
   'declare -A map; echo s:$?' \
   0 \
   $'s:2\n' \
-  'declare -A is deferred'
+  'declare -A requires BASH_COMPAT to be set'
+
+run_case \
+  "declare_assoc_enabled_with_bash_compat" \
+  'declare -A map; echo s:$?' \
+  0 \
+  $'s:0\n' \
+  '' \
+  'BASH_COMPAT=50'
 
 run_case \
   "thread_unshare_fallback_diag" \

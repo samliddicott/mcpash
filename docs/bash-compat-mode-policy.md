@@ -44,7 +44,10 @@ Near-term staged behavior:
 - Stage B partial:
   - `declare -a NAME` is gated by `BASH_COMPAT` and now succeeds when compat is set (e.g. `BASH_COMPAT=50`), including under `--posix`.
   - without `BASH_COMPAT`, `declare -a` fails with explicit diagnostics.
-  - `declare -A` remains deferred and currently fails with explicit diagnostics.
+- Stage C partial:
+  - `declare -A NAME` is now minimally accepted under `BASH_COMPAT` (attribute-level declaration only).
+  - without `BASH_COMPAT`, `declare -A` fails with explicit diagnostics.
+  - full associative variable semantics remain pending.
 
 ## Test Strategy
 

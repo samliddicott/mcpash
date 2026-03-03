@@ -676,7 +676,7 @@ class Runtime:
         if feature == "declare_array":
             return True
         if feature == "declare_assoc":
-            return False
+            return True
         return False
 
     def _get_subshell_depth(self) -> int:
@@ -5666,8 +5666,13 @@ class Runtime:
             return 0
 
         if declare_assoc:
-            self._report_error("declare -A is deferred (assoc vars not implemented yet)", line=self.current_line, context="declare")
-            return 2
+            if not self._bash_feature_enabled("declare_assoc"):
+                self._report_error("declare -A requires BASH_COMPAT to be set", line=self.current_line, context="declare")
+                return 2
+            for spec in names:
+                name = spec.split("=", 1)[0]
+                self._declare_var(name, self._get_var(name), assoc=True)
+            return 0
 
         if declare_array:
             if not self._bash_feature_enabled("declare_array"):

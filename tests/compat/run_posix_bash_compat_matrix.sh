@@ -47,6 +47,8 @@ probe_mctash() {
   local label="$1"
   local opts="$2"
   local compat="$3"
+  local expect_arr="$4"
+  local expect_assoc="$5"
   local out="$tmpdir/${label}.mctash.out"
 
   local rc=0
@@ -71,15 +73,17 @@ probe_mctash() {
     echo "[INFO] mctash ${label}: startup option path not yet hardened; captured traceback for now"
   fi
 
+  if ! grep -q "^arr:${expect_arr}$" "$out"; then
+    echo "[FAIL] mctash ${label}: expected arr:${expect_arr}" >&2
+    fail=1
+  fi
+  if ! grep -q "^assoc:${expect_assoc}$" "$out"; then
+    echo "[FAIL] mctash ${label}: expected assoc:${expect_assoc}" >&2
+    fail=1
+  fi
+
   if [[ "$STRICT" == "1" ]]; then
-    if ! grep -q '^arr:0$' "$out"; then
-      echo "[FAIL] mctash ${label}: expected declare -a success in strict mode" >&2
-      fail=1
-    fi
-    if ! grep -q '^assoc:0$' "$out"; then
-      echo "[FAIL] mctash ${label}: expected declare -A success in strict mode" >&2
-      fail=1
-    fi
+    echo "[INFO] mctash ${label}: strict mode active (expectations enforced)"
   fi
 }
 
@@ -89,9 +93,9 @@ probe_bash posix bash --posix
 probe_bash posix_compat50 env BASH_COMPAT=50 bash --posix
 
 # mctash progress matrix
-probe_mctash plain "" ""
-probe_mctash posix "--posix" ""
-probe_mctash posix_compat50 "--posix" "50"
+probe_mctash plain "" "" 2 2
+probe_mctash posix "--posix" "" 2 2
+probe_mctash posix_compat50 "--posix" "50" 0 0
 
 if [[ "$STRICT" == "0" ]]; then
   echo "[INFO] STRICT=0: mctash checks are informational while compat gates are under implementation"
