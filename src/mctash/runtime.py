@@ -191,9 +191,22 @@ class _PyVarsMapping(MutableMapping[str, object]):
 
     def __setitem__(self, key: str, value: object) -> None:
         if isinstance(value, (list, tuple)):
-            raise TypeError("sh.vars list/tuple mapping is deferred in ash mode")
+            if not self._rt._bash_feature_enabled("bridge_collections"):
+                raise TypeError("sh.vars list/tuple mapping is deferred in ash mode")
+            seq = list(value)
+            self._rt._assign_shell_var(key, " ".join(self._rt._py_to_shell(v) for v in seq))
+            self._rt._typed_vars[key] = seq
+            return
         if isinstance(value, dict):
-            raise TypeError("sh.vars dict mapping is deferred in ash mode")
+            if not self._rt._bash_feature_enabled("bridge_collections"):
+                raise TypeError("sh.vars dict mapping is deferred in ash mode")
+            d = {str(k): v for k, v in value.items()}
+            self._rt._assign_shell_var(
+                key,
+                " ".join(f"{k}={self._rt._py_to_shell(v)}" for k, v in d.items()),
+            )
+            self._rt._typed_vars[key] = d
+            return
         self._rt._typed_vars.pop(key, None)
         self._rt._assign_shell_var(key, self._rt._py_to_shell(value))
 
@@ -440,9 +453,12 @@ class _PyBridge:
         if setter is not None and not callable(setter):
             raise TypeError("setter must be callable when provided")
         tie_type = type or "scalar"
-        if tie_type in {"array", "assoc"}:
+        if tie_type in {"array", "assoc"} and not self._rt._bash_feature_enabled("bridge_collections"):
             raise ValueError(f"{tie_type} tie type is deferred in ash mode")
         if tie_type not in {"scalar", "integer"}:
+            if tie_type in {"array", "assoc"}:
+                self._rt._py_ties[name] = (getter, setter, tie_type)
+                return
             raise ValueError(f"unsupported tie type: {tie_type}")
         self._rt._py_ties[name] = (getter, setter, tie_type)
 
@@ -676,6 +692,8 @@ class Runtime:
         if feature == "declare_array":
             return True
         if feature == "declare_assoc":
+            return True
+        if feature == "bridge_collections":
             return True
         return False
 
@@ -4919,9 +4937,32 @@ class Runtime:
         if op == "__invalid__":
             raise RuntimeError(self._format_error("syntax error: bad substitution", line=self.current_line))
         special_params = {"@", "*", "#", "?", "$", "!", "-", "LINENO", "PPID"}
-        subscript_ok = self._parse_subscripted_name(name) is not None
+        parsed_sub = self._parse_subscripted_name(name)
+        subscript_ok = parsed_sub is not None
         if not (self._is_valid_name(name) or subscript_ok or name.isdigit() or name in special_params):
             raise RuntimeError(self._format_error("syntax error: bad substitution", line=self.current_line))
+        if parsed_sub is not None:
+            base, key = parsed_sub
+            typed = self._typed_vars.get(base)
+            attrs = self._var_attrs.get(base, set())
+            if op == "__len__":
+                if key in {"@", "*"}:
+                    if isinstance(typed, list):
+                        return str(len(self._array_visible_values(typed)))
+                    if isinstance(typed, dict) and "assoc" in attrs:
+                        return str(len(typed))
+                    return "0"
+            if op is None and key in {"@", "*"}:
+                vals: list[str] = []
+                if isinstance(typed, list):
+                    vals = self._array_visible_values(typed)
+                elif isinstance(typed, dict) and "assoc" in attrs:
+                    vals = [str(v) for v in typed.values()]
+                if key == "*":
+                    if quoted:
+                        return self._ifs_join(vals)
+                    return vals
+                return vals
         if op == "__len__":
             if name in ["@", "*"]:
                 return str(len(self._ifs_join(self.positional)))
@@ -5426,6 +5467,10 @@ class Runtime:
             raise RuntimeError(self._format_error(f"{target}: {e.strerror}", line=self.current_line))
 
     def _get_var(self, name: str) -> str:
+        parsed = self._parse_subscripted_name(name)
+        if parsed is not None:
+            v, is_set = self._get_var_with_state(name)
+            return v if is_set else ""
         tied = self._py_ties.get(name)
         if tied is not None:
             getter, _, tie_type = tied
@@ -5454,6 +5499,15 @@ class Runtime:
                 scope[base] = value
                 return
         self.env[base] = value
+
+    @staticmethod
+    def _array_visible_values(seq: list[object]) -> list[str]:
+        out: list[str] = []
+        for v in seq:
+            if v is None:
+                continue
+            out.append(str(v))
+        return out
 
     def _argv_assignment_words(self, argv: list[str]) -> list[tuple[str, str, str]] | None:
         out: list[tuple[str, str, str]] = []
@@ -5498,10 +5552,11 @@ class Runtime:
         if idx < 0:
             raise RuntimeError(f"{name}: bad array subscript")
         if idx >= len(cur_arr):
-            cur_arr.extend([""] * (idx + 1 - len(cur_arr)))
+            cur_arr.extend([None] * (idx + 1 - len(cur_arr)))
         cur_arr[idx] = value
         self._typed_vars[base] = cur_arr
-        self._set_subscript_projection(base, str(cur_arr[0] if cur_arr else ""))
+        vis = self._array_visible_values(cur_arr)
+        self._set_subscript_projection(base, vis[0] if vis else "")
         self._set_var_attrs(base, array=True)
         return True
 
@@ -5521,13 +5576,21 @@ class Runtime:
                 return "", False
             if not isinstance(typed, list):
                 return "", False
+            if key in {"@", "*"}:
+                vals = self._array_visible_values(typed)
+                if key == "*":
+                    return self._ifs_join(vals), bool(vals)
+                return " ".join(vals), bool(vals)
             try:
                 idx = int(key, 10)
             except ValueError:
                 return "", False
             if idx < 0 or idx >= len(typed):
                 return "", False
-            return str(typed[idx]), True
+            cell = typed[idx]
+            if cell is None:
+                return "", False
+            return str(cell), True
         for scope in reversed(self.local_stack):
             if name in scope:
                 return scope[name], True
@@ -6024,6 +6087,25 @@ class Runtime:
                 self.functions.pop(name, None)
                 self.functions_asdl.pop(name, None)
                 continue
+            parsed = self._parse_subscripted_name(name)
+            if parsed is not None:
+                base, key = parsed
+                typed = self._typed_vars.get(base)
+                attrs = self._var_attrs.get(base, set())
+                if isinstance(typed, dict) and "assoc" in attrs:
+                    typed.pop(key, None)
+                    self._set_subscript_projection(base, str(typed.get("0", "")) if typed else "")
+                    continue
+                if isinstance(typed, list):
+                    try:
+                        i_key = int(key, 10)
+                    except ValueError:
+                        continue
+                    if 0 <= i_key < len(typed):
+                        typed[i_key] = None
+                    vis = self._array_visible_values(typed)
+                    self._set_subscript_projection(base, vis[0] if vis else "")
+                    continue
             self._typed_vars.pop(name, None)
             removed_local = False
             for scope in reversed(self.local_stack):

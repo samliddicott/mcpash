@@ -4,11 +4,10 @@ This file tracks intentionally deferred or partial items in the shell/Python bri
 
 ## Deferred
 
-- Full typed shell arrays/associative arrays are deferred until Bash-compat mode is introduced.
-  Current ash-target path remains scalar-only by design.
-- Bridge/tie support for `array` and `assoc` is deferred with shell array/hash runtime support.
-- Future enablement should be behind an explicit Bash-extension option (e.g. `set -o bash_ext` or equivalent).
-- Any list/dict bridge behavior in ash mode is non-normative and should be rejected by runtime checks.
+- In ash/POSIX mode, typed shell arrays/associative arrays remain out of scope.
+- In ash/POSIX mode, bridge/tie support for `array` and `assoc` remains rejected by runtime checks.
+- Bash-compat mode (`BASH_COMPAT` set) now enables initial list/dict projection and tie `array`/`assoc` behavior.
+- Full bash-level array/hash semantics are still in progress; current support is a compatibility slice, not complete parity.
 
 ## Partial
 

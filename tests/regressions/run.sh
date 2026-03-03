@@ -404,6 +404,38 @@ run_case \
   $'ValueError|assoc tie type is deferred in ash mode\n'
 
 run_case \
+  "py_sh_vars_list_enabled_in_bash_mode" \
+  'py '"'"'sh.vars["LST"]=["a","b"]; print(len(sh.vars["LST"])); print(sh.vars["LST"][1])'"'"'' \
+  0 \
+  $'2\nb\n' \
+  '' \
+  'MCTASH_MODE=bash BASH_COMPAT=50'
+
+run_case \
+  "py_sh_vars_dict_enabled_in_bash_mode" \
+  'py '"'"'sh.vars["MAP"]={"k":"v"}; print(sh.vars["MAP"]["k"])'"'"'' \
+  0 \
+  $'v\n' \
+  '' \
+  'MCTASH_MODE=bash BASH_COMPAT=50'
+
+run_case \
+  "py_tie_array_enabled_in_bash_mode" \
+  'py '"'"'x=["a","b"]; sh.tie("TA", lambda: x, lambda v: globals().__setitem__("x", v), type="array")'"'"'; TA="q r"; py -e '"'"'x[1]'"'"'' \
+  0 \
+  $'r\n' \
+  '' \
+  'MCTASH_MODE=bash BASH_COMPAT=50'
+
+run_case \
+  "py_tie_assoc_enabled_in_bash_mode" \
+  'py '"'"'m={"k":"v"}; sh.tie("TM", lambda: m, lambda v: globals().__setitem__("m", v), type="assoc")'"'"'; TM="x=1 y=2"; py -e '"'"'m["y"]'"'"'' \
+  0 \
+  $'2\n' \
+  '' \
+  'MCTASH_MODE=bash BASH_COMPAT=50'
+
+run_case \
   "param_len_special_at_star" \
   'set -- aa b; echo ${#@}; echo ${#*}' \
   0 \
@@ -543,6 +575,22 @@ run_case \
   'declare -a arr; arr[0]=a; arr[1]=b; echo "${arr[1]}|${arr}"' \
   0 \
   $'b|a\n' \
+  '' \
+  'BASH_COMPAT=50'
+
+run_case \
+  "declare_array_at_star_len_with_bash_compat" \
+  'declare -a arr; arr[0]=a; arr[1]=b; arr[2]=c; echo "n:${#arr[@]}"; echo "at:${arr[@]}"; echo "star:${arr[*]}"' \
+  0 \
+  $'n:3\nat:a b c\nstar:a b c\n' \
+  '' \
+  'BASH_COMPAT=50'
+
+run_case \
+  "declare_array_unset_element_with_bash_compat" \
+  'declare -a arr; arr[0]=a; arr[1]=b; arr[2]=c; unset arr[1]; echo "n:${#arr[@]}"; echo "at:${arr[@]}"; echo "i1:${arr[1]}";' \
+  0 \
+  $'n:2\nat:a c\ni1:\n' \
   '' \
   'BASH_COMPAT=50'
 

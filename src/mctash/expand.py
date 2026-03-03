@@ -614,7 +614,15 @@ def expand_word(
         else:
             value = part.value
 
-        if part.kind == "PARAM" and part.value == "@" and part.quoted and isinstance(value, list):
+        is_quoted_list_splat = (
+            isinstance(value, list)
+            and part.quoted
+            and (
+                (part.kind == "PARAM" and part.value == "@")
+                or (part.kind == "BRACED" and part.value.endswith("[@]"))
+            )
+        )
+        if is_quoted_list_splat:
             new_fields: List[Tuple[str, bool, bool, bool]] = []
             for f, q, active, gm in fields:
                 if not active:
