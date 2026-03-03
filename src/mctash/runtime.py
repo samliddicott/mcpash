@@ -1871,13 +1871,13 @@ class Runtime:
         if not self._is_valid_name(name):
             return False
         op = part.get("op")
-        if op in {"=", ":=", "#", "##", "%", "%%", ":substr", "/", "__invalid__"}:
+        if op == "__invalid__":
             return False
-        if op not in {None, "", "__len__", "-", ":-", "+", ":+", "?", ":?"}:
+        if op not in {None, "", "__len__", "-", ":-", "+", ":+", "?", ":?", "#", "##", "%", "%%", ":substr", "/"}:
             return False
         arg_text: str | None = None
         arg = part.get("arg")
-        if op in {"-", ":-", "+", ":+", "?", ":?"}:
+        if op in {"-", ":-", "+", ":+", "?", ":?", "#", "##", "%", "%%", ":substr", "/"}:
             if not self._asdl_word_is_safe_literal(arg):
                 return False
             arg_text = self._asdl_word_to_text(arg)
@@ -1922,8 +1922,12 @@ class Runtime:
             if t == "word_part.BracedVarSub":
                 name = str(p.get("name", ""))
                 op = p.get("op")
-                if op in {"__invalid__", ":substr", "/"}:
+                if op == "__invalid__":
                     return False
+                if op in {"-", ":-", "+", ":+", "?", ":?", "#", "##", "%", "%%", ":substr", "/"}:
+                    arg = p.get("arg")
+                    if not self._asdl_word_is_safe_literal(arg):
+                        return False
                 if self._is_valid_name(name):
                     continue
                 return False
@@ -2447,7 +2451,20 @@ class Runtime:
                 op = p.get("op")
                 if self._is_valid_name(name) and (op is None or op == "" or op == "__len__"):
                     continue
-                if self._is_valid_name(name) and op in {"-", ":-", "+", ":+", "?", ":?"}:
+                if self._is_valid_name(name) and op in {
+                    "-",
+                    ":-",
+                    "+",
+                    ":+",
+                    "?",
+                    ":?",
+                    "#",
+                    "##",
+                    "%",
+                    "%%",
+                    ":substr",
+                    "/",
+                }:
                     arg = p.get("arg")
                     if self._asdl_word_is_safe_literal(arg):
                         continue
