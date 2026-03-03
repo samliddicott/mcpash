@@ -5051,19 +5051,21 @@ class Runtime:
             base, key = parsed_sub
             typed = self._typed_vars.get(base)
             attrs = self._var_attrs.get(base, set())
+            vals_for_key: list[str] = []
+            if key in {"@", "*"}:
+                if isinstance(typed, list):
+                    vals_for_key = self._array_visible_values(typed)
+                elif isinstance(typed, dict) and "assoc" in attrs:
+                    vals_for_key = [str(v) for v in reversed(list(typed.values()))]
             if op == "__len__":
                 if key in {"@", "*"}:
                     if isinstance(typed, list):
-                        return str(len(self._array_visible_values(typed)))
+                        return str(len(vals_for_key))
                     if isinstance(typed, dict) and "assoc" in attrs:
-                        return str(len(typed))
+                        return str(len(vals_for_key))
                     return "0"
             if key in {"@", "*"}:
-                vals: list[str] = []
-                if isinstance(typed, list):
-                    vals = self._array_visible_values(typed)
-                elif isinstance(typed, dict) and "assoc" in attrs:
-                    vals = [str(v) for v in reversed(list(typed.values()))]
+                vals: list[str] = vals_for_key
                 if op is None:
                     if key == "*":
                         if quoted:
@@ -5080,7 +5082,7 @@ class Runtime:
                 elif op == "/":
                     vals = [self._replace_pattern(v, arg_text) for v in vals]
                 elif op == ":substr":
-                    vals = [self._substring(v, arg_text) for v in vals]
+                    vals = self._slice_fields(vals, arg_text)
                 if key == "*":
                     if quoted:
                         return self._ifs_join(vals)
@@ -5219,6 +5221,41 @@ class Runtime:
         if ln == 0:
             return ""
         return value[off : off + ln]
+
+    def _slice_fields(self, values: list[str], arg_text: str) -> list[str]:
+        if arg_text == "":
+            raise RuntimeError(self._format_error("syntax error: missing '}'", line=self.current_line))
+        if ":" in arg_text:
+            off_text, len_text = arg_text.split(":", 1)
+            has_len = True
+        else:
+            off_text, len_text = arg_text, ""
+            has_len = False
+        try:
+            off = int(self._expand_arith(off_text if off_text != "" else "0", context="subscript"))
+        except Exception:
+            off = 0
+        n = len(values)
+        start = off if off >= 0 else n + off
+        if start < 0:
+            start = 0
+        if start > n:
+            start = n
+        if not has_len:
+            return values[start:]
+        try:
+            ln = int(self._expand_arith(len_text, context="subscript"))
+        except Exception:
+            ln = 0
+        if ln >= 0:
+            end = start + ln
+        else:
+            end = n + ln
+        if end < start:
+            end = start
+        if end > n:
+            end = n
+        return values[start:end]
 
     def _replace_pattern(self, value: str, spec: str) -> str:
         global_replace = False
