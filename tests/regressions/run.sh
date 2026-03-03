@@ -935,6 +935,12 @@ run_case \
   0 \
   $'<abc*def>|<>|<abc*def>|<>\n'
 
+run_case \
+  "asdl_param_replace_arg_quoted_vs_unquoted_semantics" \
+  'x="abbbc"; p="b*"; r="X*Y"; echo "<${x/"$p"/"$r"}>|<${x/${p}/${r}}>|<${x//"$p"/"$r"}>|<${x//${p}/${r}}>"' \
+  0 \
+  $'<abbbc>|<aX*Y>|<abbbc>|<aX*Y>\n'
+
 printf '[PASS] quoted argv guardrails\n'
 
 # Malformed parameter-expansion guardrails:

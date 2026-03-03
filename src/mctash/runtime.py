@@ -5317,7 +5317,22 @@ class Runtime:
                     )
                     vals = [self._remove_suffix(v, pattern, longest=(op == "%%")) for v in vals]
                 elif op == "/":
-                    vals = [self._replace_pattern(v, arg_text) for v in vals]
+                    spec_struct = self._split_replace_spec_structured(arg_fields)
+                    if spec_struct is None:
+                        vals = [self._replace_pattern(v, arg_text) for v in vals]
+                    else:
+                        g, pfx, sfx, pat_f, repl_f = spec_struct
+                        vals = [
+                            self._replace_pattern_structured(
+                                v,
+                                global_replace=g,
+                                prefix_only=pfx,
+                                suffix_only=sfx,
+                                pat_fields=pat_f,
+                                repl_fields=repl_f,
+                            )
+                            for v in vals
+                        ]
                 elif op == ":substr":
                     vals = self._slice_fields(vals, arg_text)
                 if key == "*":
@@ -5433,7 +5448,18 @@ class Runtime:
         if op == "/":
             if not is_set:
                 return ""
-            return self._replace_pattern(value, arg_text)
+            spec_struct = self._split_replace_spec_structured(arg_fields)
+            if spec_struct is None:
+                return self._replace_pattern(value, arg_text)
+            g, pfx, sfx, pat_f, repl_f = spec_struct
+            return self._replace_pattern_structured(
+                value,
+                global_replace=g,
+                prefix_only=pfx,
+                suffix_only=sfx,
+                pat_fields=pat_f,
+                repl_fields=repl_f,
+            )
         return value
 
     def _substring(self, value: str, arg_text: str) -> str:
@@ -5542,6 +5568,110 @@ class Runtime:
             return value
         i, j = m
         return value[:i] + repl + value[j:]
+
+    def _replace_pattern_structured(
+        self,
+        value: str,
+        *,
+        global_replace: bool,
+        prefix_only: bool,
+        suffix_only: bool,
+        pat_fields: list[ExpansionField],
+        repl_fields: list[ExpansionField],
+    ) -> str:
+        pattern = self._pattern_from_structured_fields(pat_fields)
+        repl = self._structured_fields_to_assignment_scalar(repl_fields)
+        if prefix_only:
+            match_end = self._match_prefix_end(value, pattern)
+            if match_end is None:
+                return value
+            return repl + value[match_end:]
+        if suffix_only:
+            match_start = self._match_suffix_start(value, pattern)
+            if match_start is None:
+                return value
+            return value[:match_start] + repl
+        if global_replace:
+            return self._replace_all_matches(value, pattern, repl)
+        m = self._find_first_match(value, pattern)
+        if m is None:
+            return value
+        i, j = m
+        return value[:i] + repl + value[j:]
+
+    def _split_replace_spec_structured(
+        self, fields: list[ExpansionField] | None
+    ) -> tuple[bool, bool, bool, list[ExpansionField], list[ExpansionField]] | None:
+        if not fields or len(fields) != 1:
+            return None
+        stream: list[tuple[str, bool]] = []
+        for seg in fields[0].segments:
+            for ch in seg.text:
+                stream.append((ch, seg.quoted))
+        if not stream:
+            return False, False, False, [ExpansionField([])], [ExpansionField([])]
+        global_replace = False
+        prefix_only = False
+        suffix_only = False
+        start = 0
+        first_ch, first_quoted = stream[0]
+        if not first_quoted and first_ch in {"/", "#", "%"}:
+            if first_ch == "/":
+                global_replace = True
+            elif first_ch == "#":
+                prefix_only = True
+            else:
+                suffix_only = True
+            start = 1
+
+        def find_delim(from_idx: int) -> int:
+            for i in range(from_idx, len(stream)):
+                ch, quoted = stream[i]
+                if ch == "/" and not quoted:
+                    return i
+            return -1
+
+        if global_replace and start < len(stream) and stream[start][0] == "/" and not stream[start][1]:
+            delim = find_delim(start + 1)
+        else:
+            delim = find_delim(start)
+
+        pat_stream = stream[start:] if delim < 0 else stream[start:delim]
+        repl_stream = [] if delim < 0 else stream[delim + 1 :]
+
+        def to_field(chars: list[tuple[str, bool]]) -> list[ExpansionField]:
+            if not chars:
+                return [ExpansionField([])]
+            segs: list[ExpansionSegment] = []
+            buf = chars[0][0]
+            q = chars[0][1]
+            for ch, quoted in chars[1:]:
+                if quoted == q:
+                    buf += ch
+                    continue
+                segs.append(
+                    ExpansionSegment(
+                        text=buf,
+                        quoted=q,
+                        glob_active=(not q),
+                        split_active=(not q),
+                        source_kind="word_part.BracedVarSubArg",
+                    )
+                )
+                buf = ch
+                q = quoted
+            segs.append(
+                ExpansionSegment(
+                    text=buf,
+                    quoted=q,
+                    glob_active=(not q),
+                    split_active=(not q),
+                    source_kind="word_part.BracedVarSubArg",
+                )
+            )
+            return [ExpansionField(segs, preserve_boundary=any(seg.quoted for seg in segs))]
+
+        return global_replace, prefix_only, suffix_only, to_field(pat_stream), to_field(repl_stream)
 
     def _split_unescaped_slash(self, text: str) -> tuple[str, str]:
         i = 0
@@ -6217,6 +6347,14 @@ class Runtime:
                 else:
                     raw_parts.append(seg.text)
         return self._pattern_from_literalized_raw("".join(raw_parts), for_case=for_case)
+
+    def _structured_fields_to_assignment_scalar(self, fields: list[ExpansionField]) -> str:
+        texts = fields_to_text_list(fields)
+        if not texts:
+            return ""
+        if len(texts) == 1:
+            return texts[0]
+        return self._ifs_join(texts)
 
     def _pattern_from_literalized_raw(self, raw: str, *, for_case: bool = False) -> str:
         rb = r"\]" if for_case else "]"
