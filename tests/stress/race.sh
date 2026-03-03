@@ -25,7 +25,7 @@ run_once() {
   local err="$tmpdir/${name}.${mode}.${iter}.err"
 
   set +e
-  PYTHONPATH="$ROOT/src" MCTASH_TEST_MODE=1 MCTASH_UNSHARE_MODE="$mode" python3 -m mctash -c "$script" >"$out" 2>"$err"
+  PYTHONPATH="$ROOT/src" MCTASH_TEST_MODE=1 MCTASH_MODE=posix MCTASH_UNSHARE_MODE="$mode" python3 -m mctash -c "$script" >"$out" 2>"$err"
   local rc=$?
   set -e
 

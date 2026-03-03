@@ -31,7 +31,7 @@ run_case() {
   local stderr_substr="${5:-}"
 
   set +e
-  PYTHONPATH="$ROOT/src" MCTASH_TEST_MODE=1 "${SHELL_CMD[@]}" -c "$script" >"$tmpdir/out" 2>"$tmpdir/err"
+  PYTHONPATH="$ROOT/src" MCTASH_TEST_MODE=1 MCTASH_MODE=posix "${SHELL_CMD[@]}" -c "$script" >"$tmpdir/out" 2>"$tmpdir/err"
   local status=$?
   set -e
   if [[ "$status" -ne "$expect_status" ]]; then

@@ -2,6 +2,19 @@
 
 `mctash` is a Python 3 shell project targeting ash-compatible behavior with an OSH-ASDL-guided parser/runtime path.
 
+## Startup Mode Selection
+
+Mode precedence is:
+
+1. explicit startup flags (`--posix`, `--bash`)
+2. invocation name (`sh`/`ash`/`dash` => POSIX mode, `mctash`/`ptash`/`bash` => bash mode)
+3. `MCTASH_MODE=posix|bash`
+4. default: bash mode
+
+In bash mode, `BASH_COMPAT` is auto-initialized to `50` if unset.
+
+For `python -m mctash` testing, `MCTASH_ARG0` can simulate invocation names.
+
 ## Local Conformance Commands
 
 Run targeted regression checks:

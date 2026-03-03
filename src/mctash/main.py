@@ -12,6 +12,7 @@ from .asdl_map import AsdlMappingError, lst_list_item_to_asdl, lst_script_to_asd
 from .runtime import BreakLoop, ContinueLoop, Runtime, RuntimeError
 
 VALID_STARTUP_OPTION_LETTERS = set("aCefnuvxIimqVEbpsl")
+DEFAULT_BASH_COMPAT = "50"
 
 
 def _set_proc_comm() -> None:
@@ -23,6 +24,43 @@ def _set_proc_comm() -> None:
         pass
 
 
+def _resolve_invocation_name(argv0: str) -> str:
+    override = os.environ.get("MCTASH_ARG0", "")
+    if override:
+        return os.path.basename(override)
+    return os.path.basename(argv0)
+
+
+def _resolve_mode_from_name(name: str) -> str:
+    low = (name or "").lower()
+    if low in {"sh", "ash", "dash"}:
+        return "posix"
+    if low in {"mctash", "ptash", "bash"}:
+        return "bash"
+    return ""
+
+
+def _resolve_invocation_mode(argv0: str, startup_changes: Dict[str, bool]) -> str:
+    if "posix" in startup_changes:
+        return "posix" if startup_changes["posix"] else "bash"
+    name_mode = _resolve_mode_from_name(_resolve_invocation_name(argv0))
+    if name_mode:
+        return name_mode
+    env_mode = os.environ.get("MCTASH_MODE", "").strip().lower()
+    if env_mode in {"posix", "bash"}:
+        return env_mode
+    return "bash"
+
+
+def _apply_invocation_mode(mode: str, startup_changes: Dict[str, bool]) -> None:
+    if mode == "posix":
+        startup_changes["posix"] = True
+        return
+    startup_changes["posix"] = False
+    if not os.environ.get("BASH_COMPAT"):
+        os.environ["BASH_COMPAT"] = DEFAULT_BASH_COMPAT
+
+
 def main(argv: List[str] | None = None) -> int:
     _set_proc_comm()
     argv = list(argv) if argv is not None else sys.argv[1:]
@@ -30,6 +68,8 @@ def main(argv: List[str] | None = None) -> int:
     if startup_err is not None:
         print(f"mctash: {startup_err}", file=sys.stderr)
         return 2
+    mode = _resolve_invocation_mode(sys.argv[0], startup_changes)
+    _apply_invocation_mode(mode, startup_changes)
     if argv and argv[0] == "-c":
         if len(argv) < 2:
             print("mctash: -c requires an argument", file=sys.stderr)
@@ -111,6 +151,8 @@ def main(argv: List[str] | None = None) -> int:
         print(f"mctash: {startup_err2}", file=sys.stderr)
         return 2
     startup_changes.update(startup_changes2)
+    mode = _resolve_invocation_mode(sys.argv[0], startup_changes)
+    _apply_invocation_mode(mode, startup_changes)
     args = argparse.Namespace(
         dump_lst=dump_lst,
         script=(full_argv[0] if full_argv and not full_argv[0].startswith("-") else None),
@@ -258,6 +300,10 @@ def _parse_startup_options(argv: List[str]) -> Tuple[Dict[str, bool], List[str],
             continue
         if arg == "--posix":
             changes["posix"] = True
+            i += 1
+            continue
+        if arg == "--bash":
+            changes["posix"] = False
             i += 1
             continue
         if arg.startswith("--"):

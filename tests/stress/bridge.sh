@@ -18,7 +18,7 @@ run_case() {
   out="$(mktemp)"
   err="$(mktemp)"
   set +e
-  PYTHONPATH="$ROOT/src" MCTASH_TEST_MODE=1 MCTASH_UNSHARE_MODE="$MODE" python3 -m mctash -c "$script" >"$out" 2>"$err"
+  PYTHONPATH="$ROOT/src" MCTASH_TEST_MODE=1 MCTASH_MODE=posix MCTASH_UNSHARE_MODE="$MODE" python3 -m mctash -c "$script" >"$out" 2>"$err"
   status=$?
   set -e
 

@@ -34,9 +34,9 @@ run_case() {
   set +e
   if [[ -n "$extra_env" ]]; then
     read -r -a _extra_env_parts <<<"$extra_env"
-    env "${_extra_env_parts[@]}" PYTHONPATH="$ROOT/src" MCTASH_TEST_MODE=1 "${SHELL_CMD[@]}" -c "$script" >"$tmpdir/out" 2>"$tmpdir/err"
+    env "${_extra_env_parts[@]}" PYTHONPATH="$ROOT/src" MCTASH_TEST_MODE=1 MCTASH_MODE=posix "${SHELL_CMD[@]}" -c "$script" >"$tmpdir/out" 2>"$tmpdir/err"
   else
-    PYTHONPATH="$ROOT/src" MCTASH_TEST_MODE=1 "${SHELL_CMD[@]}" -c "$script" >"$tmpdir/out" 2>"$tmpdir/err"
+    PYTHONPATH="$ROOT/src" MCTASH_TEST_MODE=1 MCTASH_MODE=posix "${SHELL_CMD[@]}" -c "$script" >"$tmpdir/out" 2>"$tmpdir/err"
   fi
   local status=$?
   set -e
@@ -986,6 +986,41 @@ grep -Fq '"type": "arith_expr.BinaryAssign"' "$tmpdir/out" || fail "asdl_arith_e
 printf '[PASS] asdl_arith_expr_mapping\n'
 
 # Startup option parity checks.
+set +e
+env -u BASH_COMPAT PYTHONPATH="$ROOT/src" python3 -m mctash -c 'echo "${BASH_COMPAT}"' >"$tmpdir/out" 2>"$tmpdir/err"
+status=$?
+set -e
+[[ "$status" -eq 0 ]] || fail "startup_default_bash_mode_sets_bash_compat: expected status 0, got $status"
+grep -Fxq '50' "$tmpdir/out" || fail "startup_default_bash_mode_sets_bash_compat: expected default BASH_COMPAT=50"
+printf '[PASS] startup_default_bash_mode_sets_bash_compat\n'
+
+set +e
+env -u BASH_COMPAT MCTASH_MODE=posix PYTHONPATH="$ROOT/src" python3 -m mctash -c 'set -o | sed -n "s/^posix[[:space:]]*//p"; echo "compat:${BASH_COMPAT}"' >"$tmpdir/out" 2>"$tmpdir/err"
+status=$?
+set -e
+[[ "$status" -eq 0 ]] || fail "startup_env_mode_posix: expected status 0, got $status"
+grep -Fxq 'on' "$tmpdir/out" || fail "startup_env_mode_posix: expected posix on"
+grep -Fxq 'compat:' "$tmpdir/out" || fail "startup_env_mode_posix: expected empty compat in posix mode without env override"
+printf '[PASS] startup_env_mode_posix\n'
+
+set +e
+env -u BASH_COMPAT MCTASH_ARG0=ash PYTHONPATH="$ROOT/src" python3 -m mctash -c 'set -o | sed -n "s/^posix[[:space:]]*//p"; echo "compat:${BASH_COMPAT}"' >"$tmpdir/out" 2>"$tmpdir/err"
+status=$?
+set -e
+[[ "$status" -eq 0 ]] || fail "startup_arg0_posix_mode: expected status 0, got $status"
+grep -Fxq 'on' "$tmpdir/out" || fail "startup_arg0_posix_mode: expected posix on"
+grep -Fxq 'compat:' "$tmpdir/out" || fail "startup_arg0_posix_mode: expected empty compat under ash argv0"
+printf '[PASS] startup_arg0_posix_mode\n'
+
+set +e
+env -u BASH_COMPAT MCTASH_ARG0=bash PYTHONPATH="$ROOT/src" python3 -m mctash -c 'set -o | sed -n "s/^posix[[:space:]]*//p"; echo "compat:${BASH_COMPAT}"' >"$tmpdir/out" 2>"$tmpdir/err"
+status=$?
+set -e
+[[ "$status" -eq 0 ]] || fail "startup_arg0_bash_mode: expected status 0, got $status"
+grep -Fxq 'off' "$tmpdir/out" || fail "startup_arg0_bash_mode: expected posix off"
+grep -Fxq 'compat:50' "$tmpdir/out" || fail "startup_arg0_bash_mode: expected default compat under bash argv0"
+printf '[PASS] startup_arg0_bash_mode\n'
+
 set +e
 PYTHONPATH="$ROOT/src" python3 -m mctash -eu -c 'echo "$-"' >"$tmpdir/out" 2>"$tmpdir/err"
 status=$?

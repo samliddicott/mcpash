@@ -26,6 +26,12 @@ This means Bash allows extension behavior to coexist with POSIX mode for some fe
 4. Feature enablement is per-feature, not global all-or-nothing.
 5. Unsupported or invalid `BASH_COMPAT` values should produce clear diagnostics and fall back to no extension enablement.
 
+Current startup defaults:
+- Default invocation mode is bash-mode.
+- In bash-mode, `BASH_COMPAT` is auto-set to `50` when unset.
+- Invocation names `sh`/`ash`/`dash` force POSIX mode.
+- Invocation names `mctash`/`ptash`/`bash` force bash-mode.
+
 ## Initial Feature-Gate Plan
 
 Near-term staged behavior:

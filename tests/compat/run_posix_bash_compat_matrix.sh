@@ -32,7 +32,7 @@ probe_pair_parity() {
   set +e
   env BASH_COMPAT="$PARITY_COMPAT" bash --posix -c "$script" >"$bash_out" 2>"$bash_err"
   bash_rc=$?
-  PYTHONPATH="$ROOT/src" env BASH_COMPAT="$PARITY_COMPAT" "${MCTASH[@]}" --posix -c "$script" >"$m_out" 2>"$m_err"
+  PYTHONPATH="$ROOT/src" env MCTASH_MODE=bash BASH_COMPAT="$PARITY_COMPAT" "${MCTASH[@]}" --posix -c "$script" >"$m_out" 2>"$m_err"
   m_rc=$?
   set -e
 
@@ -96,10 +96,10 @@ probe_mctash() {
   fi
   set +e
   if [[ -n "$compat" ]]; then
-    PYTHONPATH="$ROOT/src" BASH_COMPAT="$compat" "${MCTASH[@]}" "${opt_argv[@]}" -c 'set +e; set -o | sed -n "s/^posix[[:space:]]*//p"; declare -a arr; echo "arr:$?"; declare -A map; echo "assoc:$?"' >"$out" 2>&1
+    PYTHONPATH="$ROOT/src" MCTASH_MODE=bash BASH_COMPAT="$compat" "${MCTASH[@]}" "${opt_argv[@]}" -c 'set +e; set -o | sed -n "s/^posix[[:space:]]*//p"; declare -a arr; echo "arr:$?"; declare -A map; echo "assoc:$?"' >"$out" 2>&1
     rc=$?
   else
-    PYTHONPATH="$ROOT/src" "${MCTASH[@]}" "${opt_argv[@]}" -c 'set +e; set -o | sed -n "s/^posix[[:space:]]*//p"; declare -a arr; echo "arr:$?"; declare -A map; echo "assoc:$?"' >"$out" 2>&1
+    PYTHONPATH="$ROOT/src" MCTASH_MODE=bash "${MCTASH[@]}" "${opt_argv[@]}" -c 'set +e; set -o | sed -n "s/^posix[[:space:]]*//p"; declare -a arr; echo "arr:$?"; declare -A map; echo "assoc:$?"' >"$out" 2>&1
     rc=$?
   fi
   set -e
@@ -130,7 +130,7 @@ probe_bash posix bash --posix
 probe_bash posix_compat env BASH_COMPAT="${PARITY_COMPAT}" bash --posix
 
 # mctash progress matrix
-probe_mctash plain "" "" 2 2
+probe_mctash plain "" "" 0 0
 probe_mctash posix "--posix" "" 2 2
 probe_mctash posix_compat "--posix" "${PARITY_COMPAT}" 0 0
 

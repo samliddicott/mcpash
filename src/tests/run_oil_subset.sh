@@ -40,6 +40,7 @@ run_subset() {
 
   PYTHONPATH="${ROOT}/src" \
     MCTASH_TEST_MODE=1 \
+    MCTASH_MODE=posix \
     python3 "${ROOT}/src/tests/oil_subset_runner.py" \
       --spec-root "${SPEC_DIR}" \
       --workdir "${OIL_SRC}" \
