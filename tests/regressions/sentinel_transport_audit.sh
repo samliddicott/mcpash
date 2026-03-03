@@ -2,42 +2,31 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-TARGET="$ROOT/src/mctash/runtime.py"
 
-python3 - "$TARGET" <<'PY'
-import re
+python3 - "$ROOT" <<'PY'
 import sys
 from pathlib import Path
 
-p = Path(sys.argv[1])
-text = p.read_text(encoding="utf-8")
-
-structured_names = {
-    "_expand_asdl_word_fields",
-    "_asdl_word_to_expansion_fields",
-    "_asdl_literal_to_segments",
-    "_split_structured_field",
-    "_chars_to_structured_field",
-    "_glob_structured_field",
-    "_expand_asdl_assignment_fields",
+root = Path(sys.argv[1])
+src_root = root / "src" / "mctash"
+allowed_sentinel_files = {
+    src_root / "expand.py",
 }
-current = None
+
 violations = []
-for idx, line in enumerate(text.splitlines(), start=1):
-    m = re.match(r"\s*def\s+([A-Za-z0-9_]+)\s*\(", line)
-    if m:
-        current = m.group(1)
-    if "\\ue00" not in line:
+for p in src_root.rglob("*.py"):
+    text = p.read_text(encoding="utf-8")
+    if "\\ue00" not in text:
         continue
-    if current is None:
-        continue
-    if current.startswith("_asdl_") or current in structured_names:
-        violations.append((idx, current, line.strip()))
+    if p not in allowed_sentinel_files:
+        for idx, line in enumerate(text.splitlines(), start=1):
+            if "\\ue00" in line:
+                violations.append((p, idx, line.strip()))
 
 if violations:
-    print("[FAIL] sentinel_transport_audit: sentinel marker found in structured/ASDL path", file=sys.stderr)
-    for ln, fn, src in violations:
-        print(f"  {p}:{ln} ({fn}): {src}", file=sys.stderr)
+    print("[FAIL] sentinel_transport_audit: sentinel marker found outside allowlisted files", file=sys.stderr)
+    for p, ln, src in violations:
+        print(f"  {p}:{ln}: {src}", file=sys.stderr)
     raise SystemExit(1)
 
 print("[PASS] sentinel_transport_audit")
