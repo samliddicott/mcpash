@@ -41,7 +41,10 @@ Near-term staged behavior:
   - `--posix` startup option is parsed and applied.
   - `-o posix` is accepted in startup option parsing/listing.
   - `BASH_COMPAT` is currently passed through as environment-visible input for upcoming feature gates.
-- Extension behavior itself is not enabled yet (arrays/assoc still pending gate implementation).
+- Stage B partial:
+  - `declare -a NAME` is gated by `BASH_COMPAT` and now succeeds when compat is set (e.g. `BASH_COMPAT=50`), including under `--posix`.
+  - without `BASH_COMPAT`, `declare -a` fails with explicit diagnostics.
+  - `declare -A` remains deferred and currently fails with explicit diagnostics.
 
 ## Test Strategy
 

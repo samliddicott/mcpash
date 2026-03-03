@@ -26,8 +26,8 @@ probe_bash() {
   "$@" -c '
     set +e
     posix=$(set -o | sed -n "s/^posix[[:space:]]*//p")
-    declare -a arr=(x y); s_arr=$?
-    declare -A map=([k]=v); s_assoc=$?
+    declare -a arr; s_arr=$?
+    declare -A map; s_assoc=$?
     echo "posix=$posix arr=$s_arr assoc=$s_assoc compat=${BASH_COMPAT-<unset>}"
   ' >"$out" 2>&1
   record "bash:${label}" "$out"
@@ -57,10 +57,10 @@ probe_mctash() {
   fi
   set +e
   if [[ -n "$compat" ]]; then
-    PYTHONPATH="$ROOT/src" BASH_COMPAT="$compat" "${MCTASH[@]}" "${opt_argv[@]}" -c 'set +e; set -o | sed -n "s/^posix[[:space:]]*//p"; declare -a arr=(x y); echo "arr:$?"; declare -A map=([k]=v); echo "assoc:$?"' >"$out" 2>&1
+    PYTHONPATH="$ROOT/src" BASH_COMPAT="$compat" "${MCTASH[@]}" "${opt_argv[@]}" -c 'set +e; set -o | sed -n "s/^posix[[:space:]]*//p"; declare -a arr; echo "arr:$?"; declare -A map; echo "assoc:$?"' >"$out" 2>&1
     rc=$?
   else
-    PYTHONPATH="$ROOT/src" "${MCTASH[@]}" "${opt_argv[@]}" -c 'set +e; set -o | sed -n "s/^posix[[:space:]]*//p"; declare -a arr=(x y); echo "arr:$?"; declare -A map=([k]=v); echo "assoc:$?"' >"$out" 2>&1
+    PYTHONPATH="$ROOT/src" "${MCTASH[@]}" "${opt_argv[@]}" -c 'set +e; set -o | sed -n "s/^posix[[:space:]]*//p"; declare -a arr; echo "arr:$?"; declare -A map; echo "assoc:$?"' >"$out" 2>&1
     rc=$?
   fi
   set -e

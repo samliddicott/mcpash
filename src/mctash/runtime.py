@@ -629,6 +629,7 @@ class Runtime:
         self._py_import_counter: int = 0
         self._var_attrs: Dict[str, set[str]] = {k: {"exported"} for k in self.env.keys()}
         self._typed_vars: Dict[str, object] = {}
+        self._bash_compat_level: int | None = self._parse_bash_compat_level(self.env.get("BASH_COMPAT", ""))
         self._frame_stack: List[Dict[str, object]] = []
         self._call_stack: List[str] = []
         self._history: List[str] = []
@@ -655,6 +656,28 @@ class Runtime:
             except OSError:
                 pass
         self._install_signal_handlers()
+
+    @staticmethod
+    def _parse_bash_compat_level(raw: str) -> int | None:
+        s = (raw or "").strip()
+        if not s:
+            return None
+        if re.fullmatch(r"[0-9]{2}", s):
+            return int(s, 10)
+        m = re.fullmatch(r"([0-9]+)\\.([0-9]+)", s)
+        if m:
+            return int(m.group(1), 10) * 10 + int(m.group(2), 10)
+        return None
+
+    def _bash_feature_enabled(self, feature: str) -> bool:
+        # Policy: Bash-compat features are enabled only when BASH_COMPAT is set.
+        if self._bash_compat_level is None:
+            return False
+        if feature == "declare_array":
+            return True
+        if feature == "declare_assoc":
+            return False
+        return False
 
     def _get_subshell_depth(self) -> int:
         return int(getattr(self._thread_ctx, "subshell_depth", 0))
@@ -5605,15 +5628,56 @@ class Runtime:
         )
 
     def _run_declare(self, args: List[str]) -> int:
-        if args and args[0] == "-F":
-            if len(args) > 1:
-                for name in args[1:]:
+        if not args:
+            return 0
+
+        show_funcs = False
+        declare_array = False
+        declare_assoc = False
+        idx = 0
+        while idx < len(args):
+            arg = args[idx]
+            if arg == "--":
+                idx += 1
+                break
+            if not arg.startswith("-") or arg == "-":
+                break
+            for ch in arg[1:]:
+                if ch == "F":
+                    show_funcs = True
+                elif ch == "a":
+                    declare_array = True
+                elif ch == "A":
+                    declare_assoc = True
+                else:
+                    self._report_error(f"illegal option -{ch}", line=self.current_line, context="declare")
+                    return 2
+            idx += 1
+
+        names = args[idx:]
+        if show_funcs:
+            if names:
+                for name in names:
                     if self._has_function(name):
                         print(name)
                 return 0
             for name in self._function_names():
                 print(name)
             return 0
+
+        if declare_assoc:
+            self._report_error("declare -A is deferred (assoc vars not implemented yet)", line=self.current_line, context="declare")
+            return 2
+
+        if declare_array:
+            if not self._bash_feature_enabled("declare_array"):
+                self._report_error("declare -a requires BASH_COMPAT to be set", line=self.current_line, context="declare")
+                return 2
+            for spec in names:
+                name = spec.split("=", 1)[0]
+                self._declare_var(name, self._get_var(name), array=True)
+            return 0
+
         return 0
 
     def _run_set(self, args: List[str]) -> int:
@@ -6434,7 +6498,7 @@ class Runtime:
         return {key: True for key in sorted(attrs)}
 
     def _set_var_attrs(self, name: str, **flags: object) -> None:
-        known = {"exported", "integer", "readonly", "uppercase", "lowercase", "nameref", "trace"}
+        known = {"exported", "integer", "readonly", "uppercase", "lowercase", "nameref", "trace", "array", "assoc"}
         attrs = set(self._var_attrs.get(name, set()))
         for key, raw in flags.items():
             if key not in known:

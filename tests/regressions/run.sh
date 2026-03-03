@@ -29,9 +29,15 @@ run_case() {
   local expect_status="$3"
   local expect_stdout="$4"
   local stderr_substr="${5:-}"
+  local extra_env="${6:-}"
 
   set +e
-  PYTHONPATH="$ROOT/src" MCTASH_TEST_MODE=1 "${SHELL_CMD[@]}" -c "$script" >"$tmpdir/out" 2>"$tmpdir/err"
+  if [[ -n "$extra_env" ]]; then
+    read -r -a _extra_env_parts <<<"$extra_env"
+    env "${_extra_env_parts[@]}" PYTHONPATH="$ROOT/src" MCTASH_TEST_MODE=1 "${SHELL_CMD[@]}" -c "$script" >"$tmpdir/out" 2>"$tmpdir/err"
+  else
+    PYTHONPATH="$ROOT/src" MCTASH_TEST_MODE=1 "${SHELL_CMD[@]}" -c "$script" >"$tmpdir/out" 2>"$tmpdir/err"
+  fi
   local status=$?
   set -e
   if [[ "$status" -ne "$expect_status" ]]; then
@@ -485,6 +491,28 @@ run_case \
   'sleep 0.2 & bg %1 >/dev/null 2>&1; echo s:$?; wait %1 >/dev/null' \
   0 \
   $'s:2\n'
+
+run_case \
+  "declare_array_requires_bash_compat" \
+  'declare -a arr; echo s:$?' \
+  0 \
+  $'s:2\n' \
+  'declare -a requires BASH_COMPAT to be set'
+
+run_case \
+  "declare_array_enabled_with_bash_compat" \
+  'declare -a arr; echo s:$?' \
+  0 \
+  $'s:0\n' \
+  '' \
+  'BASH_COMPAT=50'
+
+run_case \
+  "declare_assoc_deferred_even_with_bash_compat" \
+  'declare -A map; echo s:$?' \
+  0 \
+  $'s:2\n' \
+  'declare -A is deferred'
 
 run_case \
   "thread_unshare_fallback_diag" \
