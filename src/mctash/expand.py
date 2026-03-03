@@ -505,6 +505,16 @@ def _find_braced_end(text: str, start: int) -> int:
 
 
 def _split_braced(inner: str) -> Tuple[str | None, str | None, str | None]:
+    def _consume_subscript(text: str, j: int) -> int:
+        if j >= len(text) or text[j] != "[":
+            return j
+        k = j + 1
+        while k < len(text) and text[k] != "]":
+            k += 1
+        if k >= len(text):
+            return j
+        return k + 1
+
     def _parse_param_name(text: str) -> Tuple[str | None, int]:
         if not text:
             return None, 0
@@ -516,6 +526,9 @@ def _split_braced(inner: str) -> Tuple[str | None, str | None, str | None]:
             j = 1
             while j < len(text) and (text[j].isalnum() or text[j] == "_"):
                 j += 1
+            j2 = _consume_subscript(text, j)
+            if j2 != j:
+                j = j2
             return text[:j], j
         return None, 0
 
@@ -539,7 +552,14 @@ def _split_braced(inner: str) -> Tuple[str | None, str | None, str | None]:
             i += 1
         if not name_chars:
             return None, None, None
-        name = "".join(name_chars)
+        if i < len(inner) and inner[i] == "[":
+            j = _consume_subscript(inner, i)
+            if j == i:
+                return None, None, None
+            name = "".join(name_chars) + inner[i:j]
+            i = j
+        else:
+            name = "".join(name_chars)
     if i >= len(inner):
         return name, None, None
     if inner[i] == ":" and (i + 1 >= len(inner) or inner[i + 1] not in "-=?+"):

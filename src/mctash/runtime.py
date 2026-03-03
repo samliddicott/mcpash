@@ -2008,6 +2008,27 @@ class Runtime:
                 return status
             return 0
 
+        argv_assigns = self._argv_assignment_words(argv)
+        if argv_assigns is not None:
+            saved_env = self.env
+            try:
+                self.env = local_env
+                for name, op, value in argv_assigns:
+                    if name in self.readonly_vars:
+                        print(self._format_error(f"{name}: is read only", line=self.current_line), file=sys.stderr)
+                        raise SystemExit(2)
+                    if op == "+=":
+                        self._assign_shell_var(name, self._get_var(name) + value)
+                    else:
+                        self._assign_shell_var(name, value)
+                    local_env[name.split("[", 1)[0]] = self._get_var(name.split("[", 1)[0])
+                saved_env.update(local_env)
+                for tied_name in self._py_ties:
+                    saved_env[tied_name] = self._get_var(tied_name)
+                return 0
+            finally:
+                self.env = saved_env
+
         name = argv[0]
         assign_names = {str(a.get("name") or "") for a in assign_pairs}
         if self._has_function(name):
@@ -3228,6 +3249,27 @@ class Runtime:
                 return 0
             if not argv:
                 return 0
+            argv_assigns = self._argv_assignment_words(argv)
+            if argv_assigns is not None:
+                saved_env2 = self.env
+                try:
+                    self.env = local_env
+                    for var_name, op, value in argv_assigns:
+                        if var_name in self.readonly_vars:
+                            print(self._format_error(f"{var_name}: is read only", line=self.current_line), file=sys.stderr)
+                            raise SystemExit(2)
+                        if op == "+=":
+                            self._assign_shell_var(var_name, self._get_var(var_name) + value)
+                        else:
+                            self._assign_shell_var(var_name, value)
+                        base = var_name.split("[", 1)[0]
+                        local_env[base] = self._get_var(base)
+                    saved_env2.update(local_env)
+                    for tied_name in self._py_ties:
+                        saved_env2[tied_name] = self._get_var(tied_name)
+                    return 0
+                finally:
+                    self.env = saved_env2
             name = argv[0]
             assign_names = {a.name for a in node.assignments}
             if self._has_function(name):
@@ -4877,7 +4919,8 @@ class Runtime:
         if op == "__invalid__":
             raise RuntimeError(self._format_error("syntax error: bad substitution", line=self.current_line))
         special_params = {"@", "*", "#", "?", "$", "!", "-", "LINENO", "PPID"}
-        if not (self._is_valid_name(name) or name.isdigit() or name in special_params):
+        subscript_ok = self._parse_subscripted_name(name) is not None
+        if not (self._is_valid_name(name) or subscript_ok or name.isdigit() or name in special_params):
             raise RuntimeError(self._format_error("syntax error: bad substitution", line=self.current_line))
         if op == "__len__":
             if name in ["@", "*"]:
@@ -5395,7 +5438,96 @@ class Runtime:
                 return scope[name]
         return self.env.get(name, "")
 
+    def _parse_subscripted_name(self, name: str) -> tuple[str, str] | None:
+        m = re.fullmatch(r"([A-Za-z_][A-Za-z0-9_]*)\[(.*)\]", name)
+        if m is None:
+            return None
+        base = m.group(1)
+        key_raw = m.group(2).strip()
+        if len(key_raw) >= 2 and key_raw[0] == key_raw[-1] and key_raw[0] in {"'", '"'}:
+            key_raw = key_raw[1:-1]
+        return base, key_raw
+
+    def _set_subscript_projection(self, base: str, value: str) -> None:
+        for scope in reversed(self.local_stack):
+            if base in scope:
+                scope[base] = value
+                return
+        self.env[base] = value
+
+    def _argv_assignment_words(self, argv: list[str]) -> list[tuple[str, str, str]] | None:
+        out: list[tuple[str, str, str]] = []
+        for tok in argv:
+            m = re.match(r"^([^=]+?)(\+?=)(.*)$", tok)
+            if m is None:
+                return None
+            name = m.group(1)
+            op = m.group(2)
+            value = m.group(3)
+            if not (self._is_valid_name(name) or self._parse_subscripted_name(name) is not None):
+                return None
+            out.append((name, op, value))
+        return out
+
+    def _assign_subscripted_var(self, name: str, value: str) -> bool:
+        parsed = self._parse_subscripted_name(name)
+        if parsed is None:
+            return False
+        if self._bash_compat_level is None:
+            raise RuntimeError(f"{name}: indexed assignment requires BASH_COMPAT")
+        base, key = parsed
+        if base in self.readonly_vars:
+            raise RuntimeError(f"{base}: is read only")
+        attrs = self._var_attrs.get(base, set())
+        if "assoc" in attrs:
+            cur = self._typed_vars.get(base)
+            if not isinstance(cur, dict):
+                cur = {}
+            cur[str(key)] = value
+            self._typed_vars[base] = cur
+            self._set_subscript_projection(base, str(cur.get("0", "")))
+            return True
+        # Default to indexed array semantics when assoc isn't declared.
+        cur_arr = self._typed_vars.get(base)
+        if not isinstance(cur_arr, list):
+            cur_arr = []
+        try:
+            idx = int(key, 10)
+        except ValueError:
+            raise RuntimeError(f"{name}: bad array subscript")
+        if idx < 0:
+            raise RuntimeError(f"{name}: bad array subscript")
+        if idx >= len(cur_arr):
+            cur_arr.extend([""] * (idx + 1 - len(cur_arr)))
+        cur_arr[idx] = value
+        self._typed_vars[base] = cur_arr
+        self._set_subscript_projection(base, str(cur_arr[0] if cur_arr else ""))
+        self._set_var_attrs(base, array=True)
+        return True
+
     def _get_var_with_state(self, name: str) -> tuple[str, bool]:
+        parsed = self._parse_subscripted_name(name)
+        if parsed is not None:
+            if self._bash_compat_level is None:
+                return "", False
+            base, key = parsed
+            attrs = self._var_attrs.get(base, set())
+            typed = self._typed_vars.get(base)
+            if "assoc" in attrs:
+                if not isinstance(typed, dict):
+                    return "", False
+                if key in typed:
+                    return str(typed[key]), True
+                return "", False
+            if not isinstance(typed, list):
+                return "", False
+            try:
+                idx = int(key, 10)
+            except ValueError:
+                return "", False
+            if idx < 0 or idx >= len(typed):
+                return "", False
+            return str(typed[idx]), True
         for scope in reversed(self.local_stack):
             if name in scope:
                 return scope[name], True
@@ -5578,6 +5710,8 @@ class Runtime:
         self.local_stack[-1][name] = value
 
     def _assign_shell_var(self, name: str, value: str) -> None:
+        if self._assign_subscripted_var(name, value):
+            return
         if name in self.readonly_vars:
             raise RuntimeError(f"{name}: is read only")
         value = self._coerce_var_value(name, value)
@@ -5922,6 +6056,8 @@ class Runtime:
         return 0
 
     def _set_var(self, name: str, value: str) -> None:
+        if self._assign_subscripted_var(name, value):
+            return
         if name in self.readonly_vars:
             raise RuntimeError(f"{name}: is read only")
         value = self._coerce_var_value(name, value)

@@ -539,6 +539,22 @@ run_case \
   'BASH_COMPAT=50'
 
 run_case \
+  "declare_array_index_assign_expand_with_bash_compat" \
+  'declare -a arr; arr[0]=a; arr[1]=b; echo "${arr[1]}|${arr}"' \
+  0 \
+  $'b|a\n' \
+  '' \
+  'BASH_COMPAT=50'
+
+run_case \
+  "declare_assoc_key_assign_expand_with_bash_compat" \
+  'declare -A map; map[k]=v; echo "${map[k]}"' \
+  0 \
+  $'v\n' \
+  '' \
+  'BASH_COMPAT=50'
+
+run_case \
   "thread_unshare_fallback_diag" \
   'export MCTASH_UNSHARE_MODE=off MCTASH_THREAD_DIAG=1; ( : ) & wait %1; echo s:$?' \
   0 \
