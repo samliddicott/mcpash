@@ -1293,7 +1293,7 @@ class Runtime:
                     self._validate_asdl_word_bad_subst(w)
                 items: list[str] = []
                 for w in (iterable.get("words") or []):
-                    items.extend(self._expand_asdl_word_fields_or_legacy(w))
+                    items.extend(self._expand_asdl_word_fields(w, split_glob=True))
             else:
                 items = list(self.positional)
             body = self._asdl_do_group_children(node.get("body") or {})
@@ -1797,88 +1797,8 @@ class Runtime:
         words = node.get("words") or []
         out: list[str] = []
         for w in words:
-            out.extend(self._expand_asdl_word_fields_or_legacy(w))
+            out.extend(self._expand_asdl_word_fields(w, split_glob=True))
         return out
-
-    def _expand_asdl_word_fields_or_legacy(self, word: dict[str, Any]) -> list[str]:
-        if self._asdl_word_can_expand_argv_natively_safe(word):
-            return self._expand_asdl_word_fields(word, split_glob=True)
-        return self._expand_argv([Word(self._asdl_word_to_text(word))])
-
-    def _asdl_word_can_expand_argv_natively_safe(self, word: dict[str, Any]) -> bool:
-        if not isinstance(word, dict) or word.get("type") != "word.Compound":
-            return False
-        parts = word.get("parts") or []
-        if not parts:
-            return True
-        for p in parts:
-            if not isinstance(p, dict):
-                return False
-            if p.get("type") == "word_part.SingleQuoted":
-                continue
-            if p.get("type") == "word_part.SimpleVarSub":
-                name = str(p.get("name", ""))
-                if self._asdl_simple_var_safe_for_native_argv(name):
-                    continue
-                return False
-            if p.get("type") == "word_part.BracedVarSub":
-                if self._asdl_braced_var_safe_for_native_argv(p):
-                    continue
-                return False
-            if p.get("type") != "word_part.Literal":
-                return False
-            lit = str(p.get("tval", ""))
-            # Literal fragments are now natively decoded/expanded.
-            if "\n" in lit:
-                return False
-        return True
-
-    def _asdl_simple_var_safe_for_native_argv(self, name: str) -> bool:
-        if not self._is_valid_name(name):
-            return False
-        value, is_set = self._get_param_state(name)
-        if not is_set:
-            return False
-        if value == "":
-            return False
-        ifs, ifs_set = self._get_var_with_state("IFS")
-        if not ifs_set:
-            ifs = " \t\n"
-        if any(ch in ifs for ch in value):
-            return False
-        if any(ch in value for ch in ["*", "?", "["]):
-            return False
-        return True
-
-    def _asdl_braced_var_safe_for_native_argv(self, part: dict[str, Any]) -> bool:
-        name = str(part.get("name", ""))
-        if not self._is_valid_name(name):
-            return False
-        op = part.get("op")
-        if op == "__invalid__":
-            return False
-        if op not in {None, "", "__len__", "-", ":-", "+", ":+", "?", ":?", "#", "##", "%", "%%", ":substr", "/"}:
-            return False
-        arg_text: str | None = None
-        arg = part.get("arg")
-        if op in {"-", ":-", "+", ":+", "?", ":?", "#", "##", "%", "%%", ":substr", "/"}:
-            if not self._asdl_word_is_safe_literal(arg):
-                return False
-            arg_text = self._asdl_word_to_text(arg)
-        value = self._expand_braced_param(name, op, arg_text, False)
-        if isinstance(value, list):
-            return False
-        text = str(value)
-        if text == "":
-            return False
-        ifs, ifs_set = self._get_var_with_state("IFS")
-        if not ifs_set:
-            ifs = " \t\n"
-        if any(ch in ifs for ch in text):
-            return False
-        if any(ch in text for ch in ["*", "?", "["]):
-            return False
-        return True
 
     def _asdl_word_can_expand_case_natively_safe(self, word: dict[str, Any]) -> bool:
         if not isinstance(word, dict) or word.get("type") != "word.Compound":
@@ -2489,7 +2409,7 @@ class Runtime:
             op = node.get("op")
             arg_node = node.get("arg")
             arg_text = (
-                self._expand_asdl_assignment_scalar(arg_node)
+                self._asdl_word_to_text(arg_node)
                 if isinstance(arg_node, dict)
                 else None
             )
@@ -2589,12 +2509,17 @@ class Runtime:
     def _expand_asdl_word_fields(self, node: dict[str, Any], split_glob: bool = True) -> list[str]:
         if not isinstance(node, dict) or node.get("type") != "word.Compound":
             return []
+        raw_text = self._asdl_word_to_text(node)
+        if self._is_process_subst(raw_text):
+            return [self._process_substitute(raw_text)]
         parts = node.get("parts") or []
         pieces: list[str] = [""]
         any_quoted = False
+        all_quoted = bool(parts)
         for part in parts:
             vals, quoted = self._expand_asdl_word_part_values(part, quoted_context=False)
             any_quoted = any_quoted or quoted
+            all_quoted = all_quoted and quoted
             if not vals:
                 vals = [""]
             next_pieces: list[str] = []
@@ -2606,7 +2531,7 @@ class Runtime:
         # are realized before field splitting/pathname expansion.
         if not any_quoted and len(pieces) == 1 and self._is_process_subst(pieces[0]):
             return [self._process_substitute(pieces[0])]
-        if any_quoted or not split_glob:
+        if all_quoted or not split_glob:
             return pieces
         out: list[str] = []
         for frag in pieces:
@@ -2628,19 +2553,21 @@ class Runtime:
                 vals, _ = self._expand_asdl_word_part_values(p, quoted_context=True)
                 if not vals:
                     vals = [""]
-                next_pieces: list[str] = []
-                for prefix in pieces:
-                    for v in vals:
-                        next_pieces.append(prefix + v)
-                pieces = next_pieces
+                if len(vals) == 1:
+                    pieces[-1] = pieces[-1] + vals[0]
+                    continue
+                pieces[-1] = pieces[-1] + vals[0]
+                pieces.extend(vals[1:])
             return pieces, True
         if t == "word_part.SimpleVarSub":
             val = self._expand_param(str(node.get("name", "")), quoted_context)
+            if isinstance(val, PresplitFields):
+                return [str(v) for v in val], True
             return self._normalize_asdl_expanded_values(val), quoted_context
         if t == "word_part.BracedVarSub":
             arg_node = node.get("arg")
             arg_text = (
-                self._expand_asdl_word_scalar(arg_node, split_glob=False)
+                self._asdl_word_to_text(arg_node)
                 if isinstance(arg_node, dict)
                 else None
             )
@@ -2650,6 +2577,8 @@ class Runtime:
                 arg_text,
                 quoted_context,
             )
+            if isinstance(val, PresplitFields):
+                return [str(v) for v in val], True
             return self._normalize_asdl_expanded_values(val), quoted_context
         if t == "word_part.CommandSub":
             child = node.get("child")
@@ -2742,7 +2671,7 @@ class Runtime:
 
     def _normalize_asdl_expanded_values(self, value: Any) -> list[str]:
         if isinstance(value, PresplitFields):
-            return [str(v) for v in value.fields]
+            return [str(v) for v in value]
         if isinstance(value, list):
             return [str(v) for v in value]
         return ["" if value is None else str(value)]

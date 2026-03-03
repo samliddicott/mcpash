@@ -30,7 +30,7 @@ Out of scope (A2):
 | A2-003 | Native assignment-word quote-removal parity | done | Assignment RHS expansion with quotes/backslashes is native ASDL for in-scope forms; no fallback to `_expand_assignment_word(_asdl_word_to_text(...))` in ASDL assignment execution. | `tests/regressions/run.sh` (`asdl_exec_shassignment_*`), BusyBox `ash-vars` + `ash-quoting` modules |
 | A2-004 | Native handling of special params in ASDL assignment context | done | ASDL assignment expansion correctly handles special params (`$@`, `$*`, `$1...`) where currently guarded. | New `tests/diff/cases/bash-compat-param-assignment-specials.sh` + regressions |
 | A2-005 | Remove case-word fallback for quote/escape-sensitive pattern forms | done | Case value/pattern expansion stays native ASDL while preserving literal-vs-pattern semantics for quoted forms. | `tests/regressions/run.sh` (`asdl_exec_case_*`), `tests/diff/cases/man-ash-prefix-suffix.sh` |
-| A2-006 | Eliminate remaining ASDL word fallback helper usage in simple argv path | open | `_expand_asdl_word_fields_or_legacy()` is removed or reduced to unreachable in normal ASDL command path. | grep check + `tests/regressions/run.sh` + `make diff-parity-matrix` |
+| A2-006 | Eliminate remaining ASDL word fallback helper usage in simple argv path | done | `_expand_asdl_word_fields_or_legacy()` is removed or reduced to unreachable in normal ASDL command path. | grep check + `tests/regressions/run.sh` + `make diff-parity-matrix` |
 | A2-007 | Add fallback-audit regression guard | open | Add regression script/check that fails if new guarded fallback branches are introduced in ASDL expansion path without explicit board item. | New regression case + CI command in docs |
 | A2-008 | Full A2 gates pass | open | All A2-targeted tests and global parity gates pass after A2-001..A2-007. | `make diff-parity-matrix`, `make compat-posix-bash-strict`, `tests/regressions/run.sh` |
 
@@ -47,5 +47,5 @@ Out of scope (A2):
 
 ## Remaining Count
 
-- Open: 3
-- Done: 5
+- Open: 2
+- Done: 6
