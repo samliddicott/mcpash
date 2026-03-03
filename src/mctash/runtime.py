@@ -5068,9 +5068,9 @@ class Runtime:
                 vals = [str(k) for k in reversed(list(typed.keys()))]
             elif isinstance(typed, list):
                 vals = [str(i) for i, v in enumerate(typed) if v is not None]
-            if quoted:
-                return self._ifs_join(vals)
             if arg == "*":
+                if quoted:
+                    return self._ifs_join(vals)
                 return vals
             return vals
         if name == "@" and op is None:
@@ -5674,16 +5674,17 @@ class Runtime:
         if self._bash_compat_level is None:
             raise RuntimeError(f"{name}: compound assignment requires BASH_COMPAT")
         cur = self._typed_vars.get(name)
-        cur_vals: list[str] = []
+        cur_vals: list[object] = []
         if isinstance(cur, list):
-            cur_vals = [str(v) for v in cur if v is not None]
+            cur_vals = list(cur)
         if op == "+=":
             cur_vals.extend(values)
         else:
-            cur_vals = list(values)
+            cur_vals = [str(v) for v in values]
         self._typed_vars[name] = cur_vals
         self._set_var_attrs(name, array=True)
-        self._set_subscript_projection(name, cur_vals[0] if cur_vals else "")
+        vis = self._array_visible_values(cur_vals)
+        self._set_subscript_projection(name, vis[0] if vis else "")
 
     def _parse_compound_assignment_rhs(self, rhs: str) -> list[str] | None:
         text = rhs.strip()

@@ -5,4 +5,5 @@ declare -A map
 map[a]=1
 map[b]=2
 echo "n:${#map[@]}"
-echo "keys:${!map[@]}"
+keys="$(printf '%s ' "${!map[@]}")"
+echo "keys:${keys% }"
