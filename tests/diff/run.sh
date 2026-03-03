@@ -8,7 +8,8 @@ ASH_BIN="${ASH_BIN:-ash}"
 read -r -a ASH_CMD <<< "${ASH_BIN}"
 BASH_BIN="${BASH_BIN:-bash --posix}"
 read -r -a BASH_CMD <<< "${BASH_BIN}"
-MCTASH_CMD="${MCTASH_CMD:-PYTHONPATH=${ROOT}/src MCTASH_MODE=posix python3 -m mctash}"
+MCTASH_CMD="${MCTASH_CMD:-PYTHONPATH=${ROOT}/src python3 -m mctash}"
+MCTASH_MODE_DEFAULT="${MCTASH_MODE_DEFAULT:-posix}"
 PARITY_BASH_COMPAT="${PARITY_BASH_COMPAT:-}"
 PARITY_MIRROR_POSIX="${PARITY_MIRROR_POSIX:-0}"
 
@@ -132,9 +133,12 @@ for case in "${CASE_FILES[@]}"; do
   if [[ ${MCTASH_ONLY} -eq 0 ]]; then
     mctash_prefix=""
     mctash_opts=""
-    if [[ -n "${PARITY_BASH_COMPAT}" ]]; then
-      mctash_prefix="MCTASH_MODE=bash BASH_COMPAT=${PARITY_BASH_COMPAT} "
+    mctash_mode="${MCTASH_MODE_DEFAULT}"
+    if [[ "${compare_name}" == "bash" && -n "${PARITY_BASH_COMPAT}" ]]; then
+      mctash_mode="bash"
+      mctash_prefix="BASH_COMPAT=${PARITY_BASH_COMPAT} "
     fi
+    mctash_prefix="MCTASH_MODE=${mctash_mode} ${mctash_prefix}"
     if [[ "${PARITY_MIRROR_POSIX}" == "1" ]]; then
       mctash_opts="--posix "
     fi

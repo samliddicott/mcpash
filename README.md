@@ -35,6 +35,15 @@ Run differential ash vs mctash cases:
 make diff-conformance
 ```
 
+Run dual-lane parity matrix and produce bash-gap report:
+
+```sh
+make diff-parity-matrix
+```
+
+Report output:
+- `docs/reports/bash-gap-latest.md`
+
 For bash-baseline differential cases, you can mirror compat settings across both shells:
 
 ```sh
