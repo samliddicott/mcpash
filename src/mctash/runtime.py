@@ -2908,15 +2908,10 @@ class Runtime:
     def _asdl_case_pattern_from_word(self, node: dict[str, Any]) -> str:
         if not isinstance(node, dict) or node.get("type") != "word.Compound":
             return ""
-        raw_parts: list[str] = []
-        for part in (node.get("parts") or []):
-            vals, quoted = self._expand_asdl_word_part_values(part, quoted_context=False)
-            text = "".join(vals) if vals else ""
-            if quoted:
-                raw_parts.append(self._escape_case_pattern_literal(text))
-            else:
-                raw_parts.append(text)
-        return self._pattern_from_literalized_raw("".join(raw_parts), for_case=True)
+        return self._pattern_from_structured_fields(
+            self._asdl_word_to_expansion_fields(node),
+            for_case=True,
+        )
 
     def _escape_case_pattern_literal(self, text: str) -> str:
         out: list[str] = []
@@ -5308,10 +5303,18 @@ class Runtime:
                     return vals
                 arg_text = arg or ""
                 if op in ["#", "##"]:
-                    pattern = self._pattern_from_word(arg_text)
+                    pattern = (
+                        self._pattern_from_structured_fields(arg_fields)
+                        if arg_fields is not None
+                        else self._pattern_from_word(arg_text)
+                    )
                     vals = [self._remove_prefix(v, pattern, longest=(op == "##")) for v in vals]
                 elif op in ["%", "%%"]:
-                    pattern = self._pattern_from_word(arg_text)
+                    pattern = (
+                        self._pattern_from_structured_fields(arg_fields)
+                        if arg_fields is not None
+                        else self._pattern_from_word(arg_text)
+                    )
                     vals = [self._remove_suffix(v, pattern, longest=(op == "%%")) for v in vals]
                 elif op == "/":
                     vals = [self._replace_pattern(v, arg_text) for v in vals]
@@ -5412,10 +5415,18 @@ class Runtime:
                 raise RuntimeError(self._format_error(f"{name}: {msg}", line=self.current_line))
             return value
         if op in ["#", "##"]:
-            pattern = self._pattern_from_word(arg_text)
+            pattern = (
+                self._pattern_from_structured_fields(arg_fields)
+                if arg_fields is not None
+                else self._pattern_from_word(arg_text)
+            )
             return self._remove_prefix(value, pattern, longest=(op == "##"))
         if op in ["%", "%%"]:
-            pattern = self._pattern_from_word(arg_text)
+            pattern = (
+                self._pattern_from_structured_fields(arg_fields)
+                if arg_fields is not None
+                else self._pattern_from_word(arg_text)
+            )
             return self._remove_suffix(value, pattern, longest=(op == "%%"))
         if op == ":substr":
             return self._substring(value, arg_text)
@@ -6192,6 +6203,20 @@ class Runtime:
     def _pattern_from_word(self, text: str, for_case: bool = False) -> str:
         raw = self._expand_assignment_word_protected(text)
         return self._pattern_from_literalized_raw(raw, for_case=for_case)
+
+    def _pattern_from_structured_fields(self, fields: list[ExpansionField], *, for_case: bool = False) -> str:
+        # Parameter-op and case-pattern helpers can pass ASDL-derived structured
+        # fields here and avoid text-marker roundtrips.
+        if not fields:
+            return ""
+        raw_parts: list[str] = []
+        for field in fields:
+            for seg in field.segments:
+                if seg.quoted:
+                    raw_parts.append(self._escape_case_pattern_literal(seg.text))
+                else:
+                    raw_parts.append(seg.text)
+        return self._pattern_from_literalized_raw("".join(raw_parts), for_case=for_case)
 
     def _pattern_from_literalized_raw(self, raw: str, *, for_case: bool = False) -> str:
         rb = r"\]" if for_case else "]"

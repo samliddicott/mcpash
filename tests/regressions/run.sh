@@ -929,6 +929,12 @@ run_case \
   0 \
   $'2|foo1|foo2\n'
 
+run_case \
+  "asdl_param_pattern_arg_quoted_vs_unquoted_semantics" \
+  'x="abc*def"; p="*"; echo "<${x##"$p"}>|<${x##${p}}>|<${x%%"$p"}>|<${x%%${p}}>"' \
+  0 \
+  $'<abc*def>|<>|<abc*def>|<>\n'
+
 printf '[PASS] quoted argv guardrails\n'
 
 # Malformed parameter-expansion guardrails:
