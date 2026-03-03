@@ -5057,16 +5057,9 @@ class Runtime:
         return argv
 
     def _expand_word(self, text: str) -> str:
-        fields = expand_word(
-            text,
-            self._expand_param,
-            self._expand_braced_param,
-            self._expand_command_subst_text,
-            self._expand_arith,
-            self._split_ifs,
-            self._glob_field,
-        )
-        return fields[0] if fields else ""
+        fields = self._legacy_word_to_expansion_fields(text, assignment=False)
+        texts = fields_to_text_list(fields)
+        return texts[0] if texts else ""
 
     def _expand_assignment_word(self, text: str) -> str:
         if self._is_process_subst(text):
