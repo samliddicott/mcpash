@@ -250,6 +250,76 @@ def _unprotect_glob_meta(s: str) -> str:
     return "".join(_GLOB_UNPROTECT.get(ch, "/" if ch == "\ue006" else ch) for ch in s)
 
 
+def contains_glob_meta(text: str) -> bool:
+    return any(c in text for c in ["*", "?", "[", "\ue001", "\ue002", "\ue003", "\ue004", "\ue005", "\ue007"])
+
+
+def glob_pattern_for_match(text: str) -> str:
+    protected = (
+        text.replace("\ue001", "[*]")
+        .replace("\ue002", "[?]")
+        .replace("\ue003", "[[]")
+        .replace("\ue004", "[]]")
+        .replace("\ue005", "[\\\\]")
+        .replace("\ue006", "/")
+        .replace("\ue008", "!")
+    )
+    out: List[str] = []
+    i = 0
+    while i < len(protected):
+        ch = protected[i]
+        if ch == "[":
+            j = i + 1
+            cls: List[str] = []
+            while j < len(protected) and protected[j] != "]":
+                cls.append(protected[j])
+                j += 1
+            if j < len(protected) and protected[j] == "]":
+                hy_count = cls.count("\ue007")
+                cls = [c for c in cls if c != "\ue007"]
+                if hy_count:
+                    cls.extend("-" for _ in range(hy_count))
+                out.append("[")
+                out.extend(cls)
+                out.append("]")
+                i = j + 1
+                continue
+        if ch == "\\" and i + 1 < len(protected):
+            nxt = protected[i + 1]
+            if nxt == "*":
+                out.append("[*]")
+            elif nxt == "?":
+                out.append("[?]")
+            elif nxt == "[":
+                out.append("[[]")
+            elif nxt == "]":
+                out.append("[]]")
+            else:
+                out.append(nxt)
+            i += 2
+            continue
+        if ch == "\ue007":
+            out.append("-")
+            i += 1
+            continue
+        out.append(ch)
+        i += 1
+    return "".join(out)
+
+
+def glob_pattern_display(text: str) -> str:
+    return (
+        text.replace("\ue001", "*")
+        .replace("\ue002", "?")
+        .replace("\ue003", "[")
+        .replace("\ue004", "]")
+        .replace("\ue005", "\\")
+        .replace("\ue006", "\\/")
+        .replace("\ue007", "-")
+        .replace("\ue008", "!")
+    )
+
+
 def _parse_dollar(text: str, i: int, quoted: bool) -> Tuple[WordPart, int]:
     if text.startswith("$((", i):
         content, end = _extract_balanced(text, i + 3, "))")

@@ -48,7 +48,17 @@ from .ast_nodes import (
     WhileCommand,
     Word,
 )
-from .expand import PresplitFields, expand_word, parse_word_parts, _extract_balanced, _find_braced_end, _split_braced
+from .expand import (
+    PresplitFields,
+    contains_glob_meta,
+    expand_word,
+    glob_pattern_display,
+    glob_pattern_for_match,
+    parse_word_parts,
+    _extract_balanced,
+    _find_braced_end,
+    _split_braced,
+)
 from .expansion_model import ExpansionField, ExpansionSegment, fields_to_text_list
 from .lexer import LexContext, TokenReader
 from .parser import ParseError, Parser
@@ -5134,78 +5144,14 @@ class Runtime:
     def _glob_field(self, text: str) -> List[str]:
         text = self._tilde_expand(text)
         if self.options.get("f", False):
-            return [self._glob_pattern_display(text)]
-        if any(c in text for c in ["*", "?", "[", "\ue001", "\ue002", "\ue003", "\ue004", "\ue005", "\ue007"]):
-            pattern_for_match = self._glob_pattern_for_match(text)
+            return [glob_pattern_display(text)]
+        if contains_glob_meta(text):
+            pattern_for_match = glob_pattern_for_match(text)
             matches = sorted(glob.glob(pattern_for_match))
             if matches:
                 return matches
-            return [self._glob_pattern_display(text)]
+            return [glob_pattern_display(text)]
         return [text]
-
-    def _glob_pattern_for_match(self, text: str) -> str:
-        protected = (
-            text.replace("\ue001", "[*]")
-            .replace("\ue002", "[?]")
-            .replace("\ue003", "[[]")
-            .replace("\ue004", "[]]")
-            .replace("\ue005", "[\\\\]")
-            .replace("\ue006", "/")
-            .replace("\ue008", "!")
-        )
-        out: List[str] = []
-        i = 0
-        while i < len(protected):
-            ch = protected[i]
-            if ch == "[":
-                j = i + 1
-                cls: List[str] = []
-                while j < len(protected) and protected[j] != "]":
-                    cls.append(protected[j])
-                    j += 1
-                if j < len(protected) and protected[j] == "]":
-                    hy_count = cls.count("\ue007")
-                    cls = [c for c in cls if c != "\ue007"]
-                    if hy_count:
-                        cls.extend("-" for _ in range(hy_count))
-                    out.append("[")
-                    out.extend(cls)
-                    out.append("]")
-                    i = j + 1
-                    continue
-            if ch == "\\" and i + 1 < len(protected):
-                nxt = protected[i + 1]
-                if nxt == "*":
-                    out.append("[*]")
-                elif nxt == "?":
-                    out.append("[?]")
-                elif nxt == "[":
-                    out.append("[[]")
-                elif nxt == "]":
-                    out.append("[]]")
-                else:
-                    out.append(nxt)
-                i += 2
-                continue
-            if ch == "\ue007":
-                out.append("-")
-                i += 1
-                continue
-            out.append(ch)
-            i += 1
-        return "".join(out)
-
-    def _glob_pattern_display(self, text: str) -> str:
-        return (
-            text.replace("\ue001", "*")
-            .replace("\ue002", "?")
-            .replace("\ue003", "[")
-            .replace("\ue004", "]")
-            .replace("\ue005", "\\")
-            .replace("\ue006", "\\/")
-            .replace("\ue007", "-")
-            .replace("\ue008", "!")
-        )
 
     def _tilde_expand(self, text: str) -> str:
         def expand_one(seg: str) -> str:
