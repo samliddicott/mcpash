@@ -41,10 +41,10 @@ Status legend:
 
 | Area | Status | What is missing |
 |---|---|---|
-| `read` option matrix across ash variants | partial | Covered for current ash target via `man-ash-read-options.sh`; cross-variant matrix remains open.
-| `fc` editor/history parity | partial | External-editor workflow (`fc -e`) and richer history-edit flows remain untested.
-| `ulimit` full flag set | partial | Query/set/error paths are covered for `-f/-n/-c/-v`, but full per-resource set/error matrix across all limits remains open.
-| `trap` signal matrix | partial | Common signal-name and action-execution coverage added; full signal-by-signal and nested-trap interaction matrix remains open.
+| `read` option matrix across ash variants | partial | Coverage now includes `man-ash-read-options.sh` and `man-ash-read-ifs-matrix.sh`; cross-variant option matrices remain open.
+| `fc` editor/history parity | partial | Added `man-ash-fc-editor-env.sh` and core `man-ash-fc.sh`; richer history-edit flows still remain.
+| `ulimit` full flag set | partial | Query/set/error coverage now includes extended set matrix in `man-ash-ulimit-set.sh` for `-n/-f/-c/-v`; full per-resource universe remains open.
+| `trap` signal matrix | partial | Added delivery coverage via `man-ash-trap-delivery.sh` plus existing matrix/full/nested cases; full signal-by-signal interaction remains open.
 | `fc` comparator availability | partial | Current ash target reports `fc` unavailable, so differential parity for `fc -e` semantics is blocked on comparator support (`docs/fc-comparator-blocker.md`).
 | `jobs` interactive monitor semantics | partial | Non-interactive semantics covered; interactive job control remains limited.
 
