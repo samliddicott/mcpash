@@ -4662,15 +4662,33 @@ class Runtime:
         use_soft = False
         use_hard = False
         list_all = False
+        selected_flag = "f"
         limit_key = resource.RLIMIT_FSIZE
         i = 0
 
-        limit_map = {
-            "c": resource.RLIMIT_CORE,
-            "f": resource.RLIMIT_FSIZE,
-            "n": resource.RLIMIT_NOFILE,
-            "v": resource.RLIMIT_AS,
-        }
+        def _maybe(flag: str, name: str) -> tuple[str, int] | None:
+            key = getattr(resource, name, None)
+            if key is None:
+                return None
+            return flag, key
+
+        limit_map: dict[str, int] = {}
+        for item in [
+            _maybe("c", "RLIMIT_CORE"),
+            _maybe("d", "RLIMIT_DATA"),
+            _maybe("f", "RLIMIT_FSIZE"),
+            _maybe("l", "RLIMIT_MEMLOCK"),
+            _maybe("m", "RLIMIT_RSS"),
+            _maybe("n", "RLIMIT_NOFILE"),
+            _maybe("p", "RLIMIT_NPROC"),
+            _maybe("s", "RLIMIT_STACK"),
+            _maybe("t", "RLIMIT_CPU"),
+            _maybe("v", "RLIMIT_AS"),
+        ]:
+            if item is None:
+                continue
+            k, v = item
+            limit_map[k] = v
 
         while i < len(args) and args[i].startswith("-") and args[i] != "-":
             opt = args[i]
@@ -4688,6 +4706,7 @@ class Runtime:
                     list_all = True
                     continue
                 if ch in limit_map:
+                    selected_flag = ch
                     limit_key = limit_map[ch]
                     continue
                 return 2
@@ -4699,36 +4718,92 @@ class Runtime:
         def _fmt(val: int) -> str:
             return "unlimited" if val == resource.RLIM_INFINITY else str(val)
 
+        unit_by_flag = {
+            "c": "blocks",
+            "d": "kbytes",
+            "f": "blocks",
+            "l": "kbytes",
+            "m": "kbytes",
+            "n": "raw",
+            "p": "raw",
+            "s": "kbytes",
+            "t": "raw",
+            "v": "kbytes",
+        }
+        unit_by_key: dict[int, str] = {}
+        for flg, key in limit_map.items():
+            unit_by_key[key] = unit_by_flag.get(flg, "raw")
+
+        def _render_for_user(key: int, val: int) -> str:
+            if val == resource.RLIM_INFINITY:
+                return "unlimited"
+            unit = unit_by_key.get(key, "raw")
+            if unit == "kbytes":
+                return str(int(val // 1024))
+            if unit == "blocks":
+                return str(int(val // 512))
+            return str(int(val))
+
+        def _parse_user_limit(key: int, text: str) -> int:
+            if text == "unlimited":
+                return resource.RLIM_INFINITY
+            try:
+                raw_num = int(text, 10)
+            except (ValueError, OverflowError):
+                raise
+            unit = unit_by_key.get(key, "raw")
+            if unit == "kbytes":
+                return raw_num * 1024
+            if unit == "blocks":
+                return raw_num * 512
+            return raw_num
+
         def _cur_value(key: int) -> int:
             soft, hard = resource.getrlimit(key)
             return hard if use_hard and not use_soft else soft
 
         if list_all:
-            rows = [
-                ("file(blocks)", resource.RLIMIT_FSIZE),
-                ("coredump(blocks)", resource.RLIMIT_CORE),
-                ("nofiles", resource.RLIMIT_NOFILE),
-                ("memory(kbytes)", resource.RLIMIT_AS),
-            ]
+            rows = []
+            if "t" in limit_map:
+                rows.append(("time(seconds)", limit_map["t"]))
+            if "f" in limit_map:
+                rows.append(("file(blocks)", limit_map["f"]))
+            if "d" in limit_map:
+                rows.append(("data(kbytes)", limit_map["d"]))
+            if "s" in limit_map:
+                rows.append(("stack(kbytes)", limit_map["s"]))
+            if "c" in limit_map:
+                rows.append(("coredump(blocks)", limit_map["c"]))
+            if "m" in limit_map:
+                rows.append(("memory(kbytes)", limit_map["m"]))
+            if "l" in limit_map:
+                rows.append(("locked memory(kbytes)", limit_map["l"]))
+            if "p" in limit_map:
+                rows.append(("process", limit_map["p"]))
+            if "n" in limit_map:
+                rows.append(("nofiles", limit_map["n"]))
+            if "v" in limit_map:
+                rows.append(("vmemory(kbytes)", limit_map["v"]))
+            if hasattr(resource, "RLIMIT_LOCKS"):
+                rows.append(("locks", resource.RLIMIT_LOCKS))
+            if hasattr(resource, "RLIMIT_RTPRIO"):
+                rows.append(("rtprio", resource.RLIMIT_RTPRIO))
             for label, key in rows:
-                print(f"{label:16} {_fmt(_cur_value(key))}")
+                print(f"{label:16} {_render_for_user(key, _cur_value(key))}")
             return 0
 
         rest = args[i:]
         if len(rest) > 1:
             return 2
         if not rest:
-            print(_fmt(_cur_value(limit_key)))
+            print(_render_for_user(limit_key, _cur_value(limit_key)))
             return 0
 
         target = rest[0]
-        if target == "unlimited":
-            new_lim = resource.RLIM_INFINITY
-        else:
-            try:
-                new_lim = int(target, 10)
-            except (ValueError, OverflowError):
-                return 2
+        try:
+            new_lim = _parse_user_limit(limit_key, target)
+        except (ValueError, OverflowError):
+            return 2
 
         soft, hard = resource.getrlimit(limit_key)
         new_soft, new_hard = soft, hard

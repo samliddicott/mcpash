@@ -4,6 +4,8 @@
 # - split and combined -S/-H query forms
 # - set path with combined flags using current hard value
 set -eu
+. "$(dirname "$0")/_ulimit_safety.inc"
+apply_ulimit_safety_caps
 
 set +e
 ulimit -S -H -n >/dev/null 2>&1

@@ -5,6 +5,8 @@
 # - too-large numeric overflow handling
 # - extra-operand rejection
 set -eu
+. "$(dirname "$0")/_ulimit_safety.inc"
+apply_ulimit_safety_caps
 
 set +e
 ulimit -Z >/dev/null 2>&1
