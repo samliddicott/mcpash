@@ -81,8 +81,8 @@ Reference summary source: `docs/posix-shall-trace.md`.
 | Area | Status | Evidence | Next step |
 |---|---|---|---|
 | Expansion engine migration plan exists | covered | `docs/plan.md` ("Expansion Engine Transition: Sentinels -> Structured Data") | Track execution progress here as items move from design to implementation. |
-| Sentinel usage inventory and guard | partial | `tests/regressions/asdl_fallback_audit.sh`, `tests/regressions/asdl_fallback_allowlist.txt` | Extend audit to sentinel-marker transport checks (not just fallback helpers). |
+| Sentinel usage inventory and guard | covered | `tests/regressions/asdl_fallback_audit.sh`, `tests/regressions/asdl_fallback_allowlist.txt`, `tests/regressions/sentinel_transport_audit.sh` | Keep deny-surface current as structured coverage expands. |
 | Typed expansion model introduction | partial | `src/mctash/expansion_model.py`, `src/mctash/runtime.py` (`_asdl_word_to_expansion_fields`) | Extend segment metadata usage beyond adapter-only scope and cover unquoted split/glob path end-to-end. |
 | Typed adapters (ASDL and legacy parser) | untested | Planned in `docs/plan.md` phase 2 | Implement adapters and run side-by-side diff checks. |
-| Split/glob/pattern stages on structured fields | untested | Planned in `docs/plan.md` phase 3 | Replace sentinel-based behavior with metadata-driven behavior. |
-| Sentinel collision proof cases | untested | Planned in `docs/plan.md` phase 5 | Add differential cases containing literal private-use chars (e.g. `U+E001`). |
+| Split/glob/pattern stages on structured fields | partial | `src/mctash/runtime.py` (`_split_structured_field`, `_glob_structured_field`, `_asdl_case_pattern_from_word`) | Complete migration for remaining legacy text-expansion paths and operator-arg pipelines. |
+| Sentinel collision proof cases | partial | `tests/diff/cases/bash-compat-unicode-pua-literals.sh` | Expand to additional quoted/unquoted operator contexts and add ash-lane counterpart where applicable. |

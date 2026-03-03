@@ -1192,6 +1192,11 @@ if ! "$ROOT/tests/regressions/asdl_fallback_audit.sh" >"$tmpdir/out" 2>"$tmpdir/
 fi
 printf '[PASS] asdl_fallback_audit\n'
 
+if ! "$ROOT/tests/regressions/sentinel_transport_audit.sh" >"$tmpdir/out" 2>"$tmpdir/err"; then
+  fail "sentinel_transport_audit"
+fi
+printf '[PASS] sentinel_transport_audit\n'
+
 printf '[PASS] all regressions (including startup options)\n'
 
 if ! PYROOT="$ROOT" python3 - <<'PY'
