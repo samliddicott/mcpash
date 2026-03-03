@@ -109,6 +109,9 @@ Local conformance gate (no external CI required):
     - `read` + mixed `IFS` edge behavior
     - pipeline status/control-flow (`pipefail`, negation, pipeline `exit`)
     - redirection/exec error mapping (`126/127`, bad fd)
+- `make read-matrix`
+  - Runs `read` differential matrix across ash-family comparators and bash comparator lane.
+  - Includes bash-mode `read` option surface (`-a -d -e -i -n -N -p -r -s -t -u`).
 - `make conformance`
   - Runs targeted regressions, then BusyBox ash corpus, then Oil subset corpus.
   - Enforces baseline thresholds to catch regressions during local development.
@@ -124,6 +127,7 @@ Local conformance gate (no external CI required):
 - In `--posix` mode, selected Bash-compatible features may be enabled only when `BASH_COMPAT` is set to a supported level.
 - Feature rollout will be per-feature (`declare -a`, then `declare -A`, then bridge list/dict and tie `array`/`assoc`).
 - Policy details and rationale are tracked in `docs/bash-compat-mode-policy.md`.
+- `mctash` extension: `shopt -s read_interruptible` allows signal-interruptible blocking `read` behavior (opt-in; non-POSIX).
 
 ## Remaining Ash Parity Gaps (man ash aligned)
 - Builtins not yet implemented to ash-man-page level:
