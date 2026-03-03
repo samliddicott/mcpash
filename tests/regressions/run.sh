@@ -677,6 +677,12 @@ run_case \
   0 \
   $'m:0\n'
 
+run_case \
+  "monitor_mode_interactive_jobs_fg" \
+  'out=$(PYTHONPATH=src script -qec "python3 -m mctash -i -c '\''set -m; sleep 0.05 & j=\$(jobs -p); if [ -n \"\$j\" ]; then echo jp; else echo j0; fi; fg %1 >/dev/null 2>&1; echo fg:\$?'\''" /dev/null | tr -d "\r"); echo "$out"' \
+  0 \
+  $'jp\nfg:0\n'
+
 printf '[PASS] all targeted regressions\n'
 
 # Reserved-word contextualization checks.

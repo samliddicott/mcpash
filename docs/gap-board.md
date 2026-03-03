@@ -46,7 +46,7 @@ Status legend:
 | `ulimit` full flag set | partial | Query/set/error coverage now includes extended set matrix in `man-ash-ulimit-set.sh` for `-n/-f/-c/-v`; full per-resource universe remains open.
 | `trap` signal matrix | partial | Added delivery/matrix coverage via `man-ash-trap-delivery.sh` and `man-ash-trap-signal-matrix.sh` plus existing matrix/full/nested cases; interactive signal semantics remain open.
 | `fc` comparator availability | partial | Current ash target reports `fc` unavailable, so differential parity for `fc -e` semantics is blocked on comparator support (`docs/fc-comparator-blocker.md`).
-| `jobs` interactive monitor semantics | partial | Non-interactive semantics covered; interactive job control remains limited.
+| `jobs` interactive monitor semantics | partial | Non-interactive semantics plus PTY smoke (`monitor_mode_interactive_pty`, `monitor_mode_interactive_jobs_fg`) are covered; full interactive job-control matrix remains open.
 
 ## POSIX Chapter 2 Areas
 
@@ -74,7 +74,7 @@ Reference summary source: `docs/posix-shall-trace.md`.
 |---|---|---|
 | Requirement-level trace completeness (all "shall" rows) | partial | Continue adding explicit case-id links for every remaining row in `docs/posix-shall-trace.md`.
 | Grammar production closure | partial | Closure-order artifacts are completed; remaining work is deeper word-level/operator combinatorics and diagnostic text parity.
-| Threaded-runtime parity checks | partial | Core cwd/fd/var isolation cases are covered (`man-ash-thread-cwd.sh`, `man-ash-thread-fd.sh`, `man-ash-thread-vars.sh`, `man-ash-thread-pipeline-cwd.sh`, `man-ash-thread-pipeline-fd.sh`) plus fallback-diag/process-subst regressions (`thread_unshare_fallback_diag`, `thread_unshare_forced_fail_diag`, `process_subst_*`, `thread_combined_bg_pipeline_process_subst`, `thread_multi_job_concurrency_isolation`, `thread_high_load_concurrency_isolation`, `monitor_mode_noninteractive_diag` in `tests/regressions/run.sh`); expand to long-running mixed workloads and interactive monitor semantics.
+| Threaded-runtime parity checks | partial | Core cwd/fd/var isolation cases are covered (`man-ash-thread-cwd.sh`, `man-ash-thread-fd.sh`, `man-ash-thread-vars.sh`, `man-ash-thread-pipeline-cwd.sh`, `man-ash-thread-pipeline-fd.sh`) plus fallback-diag/process-subst regressions (`thread_unshare_fallback_diag`, `thread_unshare_forced_fail_diag`, `process_subst_*`, `thread_combined_bg_pipeline_process_subst`, `thread_multi_job_concurrency_isolation`, `thread_high_load_concurrency_isolation`, `monitor_mode_noninteractive_diag`, `monitor_mode_interactive_pty`, `monitor_mode_interactive_jobs_fg` in `tests/regressions/run.sh`); expand to long-running mixed workloads and deeper interactive monitor semantics.
 
 ## Sentinel-To-Structured Expansion Transition
 
