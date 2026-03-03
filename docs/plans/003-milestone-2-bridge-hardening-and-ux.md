@@ -109,8 +109,27 @@ Resource guardrails:
 - memory cap policy remains enforced (no implicit cap increase)
 - fail-fast on first mismatch for reliability runs
 
+## Bash-Gap Closure Backlog (Added 2026-03-03)
+
+Source of truth report:
+- `docs/reports/bash-gap-latest.md`
+
+Dual-lane policy:
+- ash lane remains strict against ash baseline and must stay green.
+- bash lane uses `BASH_COMPAT`-mirrored parity against bash baseline (with `--posix` mirrored where set).
+
+Current bash-lane mismatches:
+1. `bash-compat-array-append`: stdout mismatch
+2. `bash-compat-array-append`: stderr mismatch
+3. `bash-compat-assoc-keys`: stdout mismatch
+
+Planned closure order:
+1. Fix `arr+=(...)` append semantics and remove diagnostic noise for bash lane.
+2. Implement `${!assoc[@]}` key expansion parity and ordering behavior compatible with bash baseline expectations.
+3. Re-run `make diff-parity-matrix` and reduce bash mismatch count to zero for current bash case set.
+4. Expand bash case corpus (`declare`, array ops, assoc ops, expansion edge cases) and iterate with strict parity.
+
 ## Delivery Model
 
 - Commit after each numbered step.
 - Keep commits scoped and message-prefixed by area (`docs`, `runtime`, `tests`, `report`).
-

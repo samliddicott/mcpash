@@ -137,6 +137,27 @@ Local conformance gate (no external CI required):
 - Parsed-vs-effective option parity gap for interactive/job-control options:
   - `-i`, `-I`, `-m`, `-b`, `-V`, `-E`
 
+## Bash Parity Gap Tracking (BASH_COMPAT Mode)
+
+Dual-lane approach:
+- keep ash parity and bash parity independent, with mode-pinned runners.
+- ash lane: `MCTASH_MODE=posix` against ash baseline.
+- bash lane: `MCTASH_MODE=bash` with mirrored `BASH_COMPAT` against bash baseline.
+
+Primary tooling:
+- `make diff-parity-matrix`
+- report output: `docs/reports/bash-gap-latest.md`
+
+Current tracked bash-lane gaps (2026-03-03):
+1. `bash-compat-array-append`: stdout mismatch
+2. `bash-compat-array-append`: stderr mismatch
+3. `bash-compat-assoc-keys`: stdout mismatch
+
+Immediate closure plan:
+1. `arr+=(...)` compatibility fixes
+2. `${!assoc[@]}` key expansion parity
+3. strict matrix rerun and report update
+
 ## Word Expansion Parity (POSIX-First, Ash-Checked)
 Goal: remove remaining ASDL-word execution divergences without regressing ash parity.
 
