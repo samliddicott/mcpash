@@ -158,6 +158,37 @@ Immediate closure plan:
 2. `${!assoc[@]}` key expansion parity
 3. strict matrix rerun and report update
 
+## Subscript Evaluation Semantics (Bash-Compat Requirement)
+
+Requirement to track explicitly:
+- Indexed arrays (`declare -a`): subscript expression is evaluated with arithmetic semantics before indexing.
+- Associative arrays (`declare -A`): subscript is treated as a string key.
+
+Current implementation note:
+- Runtime currently branches by detected type (`array` vs `assoc`) but still treats many subscripts as literal text for lookup/coercion.
+- This can diverge from bash behavior for arithmetic expressions in indexed subscripts.
+
+Planned closure:
+1. Add an explicit subscript-evaluator path for indexed arrays:
+   - evaluate index expression using arithmetic rules
+   - preserve bash-like error behavior for invalid index expressions
+2. Keep associative subscripts on string-key path:
+   - no arithmetic coercion in assoc mode
+3. Apply consistently across:
+   - assignment (`name[sub]=value`)
+   - read/expansion (`${name[sub]}`)
+   - unset (`unset 'name[sub]'`)
+4. Validate with bash-diff matrix cases that cover:
+   - literal numeric subscripts
+   - arithmetic expressions (`i+1`, `2*3`, nested vars)
+   - quoted and unquoted subscript text where behavior differs
+   - assoc keys that look numeric but must remain string keys
+
+Acceptance criteria:
+- New `tests/diff/cases/bash-compat-subscript-eval*.sh` pass against bash baseline with `BASH_COMPAT` mirrored.
+- `make diff-parity-matrix` remains green for ash lane and bash lane.
+- No regression in existing array/assoc operator cases.
+
 ## Word Expansion Parity (POSIX-First, Ash-Checked)
 Goal: remove remaining ASDL-word execution divergences without regressing ash parity.
 

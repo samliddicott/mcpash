@@ -129,6 +129,24 @@ Planned closure order:
 3. Re-run `make diff-parity-matrix` and reduce bash mismatch count to zero for current bash case set.
 4. Expand bash case corpus (`declare`, array ops, assoc ops, expansion edge cases) and iterate with strict parity.
 
+### Subscript Evaluation Semantics (Addendum)
+
+Requirement:
+- Indexed array subscripts are arithmetic-evaluated.
+- Assoc subscripts are string keys (no arithmetic evaluation).
+
+Implementation tasks:
+1. Introduce indexed-subscript arithmetic evaluation helper in runtime.
+2. Route indexed assignment/read/unset through helper.
+3. Preserve assoc string-key path for assignment/read/unset.
+4. Align diagnostics and non-zero statuses with bash-parity expectations for invalid indexed expressions.
+
+Test tasks:
+1. Add `tests/diff/cases/bash-compat-subscript-eval-indexed.sh`.
+2. Add `tests/diff/cases/bash-compat-subscript-eval-assoc.sh`.
+3. Include mixed cases where key text is numeric-like (`"01"`, `"1+1"`) to ensure mode-specific behavior.
+4. Gate with `PARITY_BASH_COMPAT=50 PARITY_MIRROR_POSIX=1 tests/diff/run.sh --case bash-compat-subscript-eval-`.
+
 ## Delivery Model
 
 - Commit after each numbered step.
