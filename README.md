@@ -95,6 +95,18 @@ Run strict bridge stress checks:
 make stress-bridge
 ```
 
+Run POSIX/`BASH_COMPAT` compatibility matrix (Bash reference + mctash progress):
+
+```sh
+make compat-posix-bash
+```
+
+Strict mode (fail on mctash parity gaps) is available for later rollout:
+
+```sh
+STRICT=1 make compat-posix-bash
+```
+
 Useful overrides:
 
 ```sh

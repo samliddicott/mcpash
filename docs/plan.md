@@ -118,6 +118,13 @@ Local conformance gate (no external CI required):
 - Final interop syntax ergonomics and error semantics.
 - Long-term plan for full Bash compatibility.
 
+## POSIX + `BASH_COMPAT` Policy (Planned)
+- `--posix` remains the baseline POSIX/ash behavior mode.
+- `BASH_COMPAT` is the explicit selector for Bash-compat extension gates.
+- In `--posix` mode, selected Bash-compatible features may be enabled only when `BASH_COMPAT` is set to a supported level.
+- Feature rollout will be per-feature (`declare -a`, then `declare -A`, then bridge list/dict and tie `array`/`assoc`).
+- Policy details and rationale are tracked in `docs/bash-compat-mode-policy.md`.
+
 ## Remaining Ash Parity Gaps (man ash aligned)
 - Builtins not yet implemented to ash-man-page level:
   - `fc` baseline list/re-exec added; full editor/history parity remains open
