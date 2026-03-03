@@ -1321,20 +1321,13 @@ class Runtime:
             value_word = to_match.get("word") if isinstance(to_match, dict) else {}
             if isinstance(value_word, dict):
                 self._validate_asdl_word_bad_subst(value_word)
-            if self._asdl_word_can_expand_case_natively_safe(value_word or {}):
-                value = self._expand_asdl_word_scalar(value_word or {}, split_glob=False)
-            else:
-                value = self._expand_assignment_word(self._asdl_word_to_text(value_word or {}))
+            value = self._expand_asdl_word_scalar(value_word or {}, split_glob=False)
             for arm in (node.get("arms") or []):
                 pat = arm.get("pattern") or {}
                 matched = False
                 for pw in (pat.get("words") or []):
                     self._validate_asdl_word_bad_subst(pw)
-                    if self._asdl_word_can_expand_case_natively_safe(pw):
-                        pattern_text = self._expand_asdl_word_scalar(pw, split_glob=False)
-                    else:
-                        pattern_text = self._asdl_word_to_text(pw)
-                    pattern = self._pattern_from_word(pattern_text, for_case=True)
+                    pattern = self._asdl_case_pattern_from_word(pw)
                     if fnmatch.fnmatchcase(value, pattern):
                         matched = True
                         break
@@ -1898,12 +1891,10 @@ class Runtime:
                 return False
             t = p.get("type")
             if t == "word_part.Literal":
-                lit = str(p.get("tval", ""))
-                # Keep quoting/escaping-sensitive literals on legacy path.
-                if any(ch in lit for ch in ["\\", "'", '"', "`"]):
-                    return False
                 continue
             if t == "word_part.SingleQuoted":
+                continue
+            if t == "word_part.DoubleQuoted":
                 continue
             if t == "word_part.SimpleVarSub":
                 name = str(p.get("name", ""))
@@ -2632,8 +2623,61 @@ class Runtime:
                     out.append("\\")
                     out.append(nxt)
             else:
-                out.append(nxt)
+                if nxt == "*":
+                    out.append("\ue001")
+                elif nxt == "?":
+                    out.append("\ue002")
+                elif nxt == "[":
+                    out.append("\ue003")
+                elif nxt == "]":
+                    out.append("\ue004")
+                elif nxt == "\\":
+                    out.append("\ue005")
+                elif nxt == "/":
+                    out.append("\ue006")
+                elif nxt == "-":
+                    out.append("\ue007")
+                elif nxt == "!":
+                    out.append("\ue008")
+                else:
+                    out.append(nxt)
             i += 2
+        return "".join(out)
+
+    def _asdl_case_pattern_from_word(self, node: dict[str, Any]) -> str:
+        if not isinstance(node, dict) or node.get("type") != "word.Compound":
+            return ""
+        raw_parts: list[str] = []
+        for part in (node.get("parts") or []):
+            vals, quoted = self._expand_asdl_word_part_values(part, quoted_context=False)
+            text = "".join(vals) if vals else ""
+            if quoted:
+                raw_parts.append(self._protect_case_pattern_literal(text))
+            else:
+                raw_parts.append(text)
+        return self._pattern_from_protected_raw("".join(raw_parts), for_case=True)
+
+    def _protect_case_pattern_literal(self, text: str) -> str:
+        out: list[str] = []
+        for ch in text:
+            if ch == "*":
+                out.append("\ue001")
+            elif ch == "?":
+                out.append("\ue002")
+            elif ch == "[":
+                out.append("\ue003")
+            elif ch == "]":
+                out.append("\ue004")
+            elif ch == "\\":
+                out.append("\ue005")
+            elif ch == "/":
+                out.append("\ue006")
+            elif ch == "-":
+                out.append("\ue007")
+            elif ch == "!":
+                out.append("\ue008")
+            else:
+                out.append(ch)
         return "".join(out)
 
     def _normalize_asdl_expanded_values(self, value: Any) -> list[str]:
@@ -5969,8 +6013,11 @@ class Runtime:
         return value
 
     def _pattern_from_word(self, text: str, for_case: bool = False) -> str:
-        backslash_marker = "\ue00d"
         raw = self._expand_assignment_word_protected(text)
+        return self._pattern_from_protected_raw(raw, for_case=for_case)
+
+    def _pattern_from_protected_raw(self, raw: str, *, for_case: bool = False) -> str:
+        backslash_marker = "\ue00d"
         rb = r"\]" if for_case else "]"
         raw = (
             raw.replace("\ue001", r"\*")
