@@ -917,6 +917,18 @@ run_case \
   0 \
   $'1|a b|\n'
 
+run_case \
+  "asdl_argv_braced_default_unquoted_split_semantics" \
+  'unset x; set -- ${x:-"a b"c d}; echo "$#|$1|$2"' \
+  0 \
+  $'2|a bc|d\n'
+
+run_case \
+  "asdl_argv_braced_default_unquoted_glob_semantics" \
+  'unset x; d=$(mktemp -d); (cd "$d" && : > foo1 && : > foo2 && set -- ${x:-foo*} && echo "$#|$1|$2"); rm -rf "$d"' \
+  0 \
+  $'2|foo1|foo2\n'
+
 printf '[PASS] quoted argv guardrails\n'
 
 # Malformed parameter-expansion guardrails:

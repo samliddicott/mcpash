@@ -2857,6 +2857,7 @@ class Runtime:
                 node.get("op"),
                 arg_text,
                 quoted_context,
+                arg_fields=_arg_fields,
             )
             if isinstance(val, PresplitFields):
                 return [str(v) for v in val], True
@@ -5213,7 +5214,13 @@ class Runtime:
         return value
 
     def _expand_braced_param(
-        self, name: str, op: str | None, arg: str | None, quoted: bool
+        self,
+        name: str,
+        op: str | None,
+        arg: str | None,
+        quoted: bool,
+        *,
+        arg_fields: list[ExpansionField] | None = None,
     ) -> str | List[str]:
         def _expand_alt_word(text: str) -> str:
             # Under outer double quotes, single quotes are literal chars.
@@ -5221,7 +5228,21 @@ class Runtime:
                 return self._expand_assignment_word_protected(text.replace("'", "\\'"))
             return self._expand_assignment_word_protected(text)
 
-        def _expand_alt_fields(text: str) -> PresplitFields:
+        def _expand_alt_fields(text: str, fields: list[ExpansionField] | None = None) -> PresplitFields:
+            if fields is not None:
+                out_fields: List[str] = []
+                split_fields: list[ExpansionField] = []
+                for field in fields:
+                    split_fields.extend(self._split_structured_field(field))
+                for field in split_fields:
+                    out_fields.extend(self._glob_structured_field(field))
+                ifs_value, ifs_set = self._get_var_with_state("IFS")
+                if not ifs_set:
+                    ifs_value = " \t\n"
+                ifs_ws = "".join(ch for ch in ifs_value if ch in " \t\n")
+                lead_boundary = bool(text) and bool(ifs_ws) and text[0] in ifs_ws
+                trail_boundary = bool(text) and bool(ifs_ws) and text[-1] in ifs_ws
+                return PresplitFields(out_fields, lead_boundary=lead_boundary, trail_boundary=trail_boundary)
             reader = TokenReader(text)
             ctx = LexContext(reserved_words=set(), allow_reserved=False, allow_newline=False)
             words: List[str] = []
@@ -5247,6 +5268,8 @@ class Runtime:
             return PresplitFields(out_fields, lead_boundary=lead_boundary, trail_boundary=trail_boundary)
 
         def _expand_alt_unquoted(text: str):
+            if arg_fields is not None:
+                return _expand_alt_fields(text, arg_fields)
             if any(mark in text for mark in ["'", '"', "`", "$(", "${"]):
                 return _expand_alt_fields(text)
             return _expand_alt_word(text)
