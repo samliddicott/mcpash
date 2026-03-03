@@ -32,6 +32,7 @@ Temporary status:
 
 - Bash is a temporary comparator for `fc` parity only.
 - Exit this temporary mode once comparator `ash` provides `fc`.
+- This temporary policy is accepted for current milestone closure.
 
 Exit criteria for removing blocker:
 
