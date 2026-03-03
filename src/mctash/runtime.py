@@ -2508,18 +2508,31 @@ class Runtime:
         return fields[0] if fields else ""
 
     def _asdl_word_to_expansion_fields(self, node: dict[str, Any]) -> list[ExpansionField]:
-        # Transitional adapter: expose typed expansion metadata without yet
-        # changing expansion semantics.
+        # Transitional adapter: carry split/glob/quote metadata in structured
+        # fields while preserving existing expansion semantics.
         if not isinstance(node, dict) or node.get("type") != "word.Compound":
             return []
         parts = node.get("parts") or []
         fields: list[ExpansionField] = [ExpansionField([])]
         for part in parts:
+            kind = str(part.get("type", "word_part.Unknown")) if isinstance(part, dict) else "word_part.Unknown"
+            if isinstance(part, dict) and part.get("type") == "word_part.Literal":
+                literal = str(part.get("tval", ""))
+                segs = self._asdl_literal_to_segments(literal, quoted_context=False, source_kind=kind)
+                next_fields = []
+                for base in fields:
+                    next_fields.append(
+                        ExpansionField(
+                            segments=base.segments + segs,
+                            preserve_boundary=base.preserve_boundary or any(s.quoted for s in segs),
+                        )
+                    )
+                fields = next_fields
+                continue
             vals, quoted = self._expand_asdl_word_part_values(part, quoted_context=False)
             if not vals:
                 vals = [""]
-            kind = str(part.get("type", "word_part.Unknown")) if isinstance(part, dict) else "word_part.Unknown"
-            next_fields: list[ExpansionField] = []
+            next_fields = []
             for base in fields:
                 for v in vals:
                     next_fields.append(
@@ -2540,47 +2553,216 @@ class Runtime:
             fields = next_fields
         return fields
 
+    def _asdl_literal_to_segments(self, text: str, *, quoted_context: bool, source_kind: str) -> list[ExpansionSegment]:
+        if "\\" not in text:
+            return [
+                ExpansionSegment(
+                    text=text,
+                    quoted=quoted_context,
+                    glob_active=(not quoted_context),
+                    split_active=(not quoted_context),
+                    source_kind=source_kind,
+                )
+            ]
+        segs: list[ExpansionSegment] = []
+        buf: list[str] = []
+
+        def flush(active: bool, quoted: bool) -> None:
+            nonlocal buf
+            if not buf:
+                return
+            segs.append(
+                ExpansionSegment(
+                    text="".join(buf),
+                    quoted=quoted,
+                    glob_active=active and (not quoted),
+                    split_active=active and (not quoted),
+                    source_kind=source_kind,
+                )
+            )
+            buf = []
+
+        i = 0
+        while i < len(text):
+            ch = text[i]
+            if ch != "\\" or i + 1 >= len(text):
+                buf.append(ch)
+                i += 1
+                continue
+            nxt = text[i + 1]
+            if quoted_context:
+                if nxt in {'$', '"', "\\", "`"}:
+                    buf.append(nxt)
+                else:
+                    buf.append("\\")
+                    buf.append(nxt)
+                i += 2
+                continue
+            flush(active=True, quoted=False)
+            segs.append(
+                ExpansionSegment(
+                    text=nxt,
+                    quoted=True,
+                    glob_active=False,
+                    split_active=False,
+                    source_kind=source_kind,
+                )
+            )
+            i += 2
+        flush(active=True, quoted=False)
+        return segs
+
     def _expand_asdl_word_fields(self, node: dict[str, Any], split_glob: bool = True) -> list[str]:
         if not isinstance(node, dict) or node.get("type") != "word.Compound":
             return []
         raw_text = self._asdl_word_to_text(node)
         if self._is_process_subst(raw_text):
             return [self._process_substitute(raw_text)]
-        parts = node.get("parts") or []
-        pieces: list[str] = [""]
-        any_quoted = False
-        for part in parts:
-            vals, quoted = self._expand_asdl_word_part_values(part, quoted_context=False)
-            any_quoted = any_quoted or quoted
-            if not vals:
-                vals = [""]
-            next_pieces: list[str] = []
-            for prefix in pieces:
-                for v in vals:
-                    next_pieces.append(prefix + v)
-            pieces = next_pieces
-        # Match legacy argv behavior: exact unquoted process substitution words
-        # are realized before field splitting/pathname expansion.
-        if not any_quoted and len(pieces) == 1 and self._is_process_subst(pieces[0]):
-            return [self._process_substitute(pieces[0])]
-        if any_quoted or not split_glob:
-            if split_glob and self._asdl_word_has_unquoted_glob(parts):
-                out: list[str] = []
-                for frag in pieces:
-                    out.extend(self._glob_field(frag))
-                return out
-            # Transitional structured path: adapter is now present, while the
-            # returned text behavior remains unchanged.
-            modeled = self._asdl_word_to_expansion_fields(node)
-            if modeled:
-                return fields_to_text_list(modeled)
-            return pieces
+        fields = self._asdl_word_to_expansion_fields(node)
+        if not fields:
+            return []
+        if not split_glob:
+            return fields_to_text_list(fields)
+        split_fields: list[ExpansionField] = []
+        for field in fields:
+            split_fields.extend(self._split_structured_field(field))
         out: list[str] = []
-        for frag in pieces:
-            split = self._split_ifs(frag)
-            for field in split:
-                out.extend(self._glob_field(field))
-        return [f for f in out if f != ""]
+        for field in split_fields:
+            out.extend(self._glob_structured_field(field))
+        return out
+
+    def _split_structured_field(self, field: ExpansionField) -> list[ExpansionField]:
+        chars: list[tuple[str, bool, bool, bool, str]] = []
+        for seg in field.segments:
+            for ch in seg.text:
+                chars.append((ch, seg.split_active, seg.glob_active, seg.quoted, seg.source_kind))
+        if not chars:
+            if field.preserve_boundary:
+                return [field]
+            return []
+        ifs, is_set = self._get_var_with_state("IFS")
+        if not is_set:
+            ifs = " \t\n"
+        if ifs == "":
+            return [field]
+        ifs_ws = "".join(ch for ch in ifs if ch in " \t\n")
+        ifs_nonws = "".join(ch for ch in ifs if ch not in " \t\n")
+
+        out: list[ExpansionField] = []
+        n = len(chars)
+        i = 0
+
+        while i < n and chars[i][1] and chars[i][0] in ifs_ws:
+            i += 1
+
+        while i < n:
+            current: list[tuple[str, bool, bool, bool, str]] = []
+            j = i
+            delim_ws = False
+            delim_nonws = False
+            while j < n:
+                ch, split_active, _, _, _ = chars[j]
+                if split_active and ch in ifs_nonws:
+                    delim_nonws = True
+                    break
+                if split_active and ch in ifs_ws:
+                    delim_ws = True
+                    break
+                current.append(chars[j])
+                j += 1
+
+            if current:
+                out.append(self._chars_to_structured_field(current))
+
+            if j >= n:
+                break
+
+            if delim_nonws:
+                j += 1
+                while j < n and chars[j][1] and chars[j][0] in ifs_ws:
+                    j += 1
+            elif delim_ws:
+                while j < n and chars[j][1] and chars[j][0] in ifs_ws:
+                    j += 1
+            i = j
+
+        if out:
+            return out
+        if field.preserve_boundary:
+            return [ExpansionField([ExpansionSegment("", quoted=True, glob_active=False, split_active=False, source_kind="split")], preserve_boundary=True)]
+        return []
+
+    def _chars_to_structured_field(self, chars: list[tuple[str, bool, bool, bool, str]]) -> ExpansionField:
+        if not chars:
+            return ExpansionField([])
+        segs: list[ExpansionSegment] = []
+        cur_text = chars[0][0]
+        cur_split = chars[0][1]
+        cur_glob = chars[0][2]
+        cur_quoted = chars[0][3]
+        cur_kind = chars[0][4]
+        preserve = cur_quoted
+        for ch, split_active, glob_active, quoted, kind in chars[1:]:
+            preserve = preserve or quoted
+            if split_active == cur_split and glob_active == cur_glob and quoted == cur_quoted and kind == cur_kind:
+                cur_text += ch
+                continue
+            segs.append(
+                ExpansionSegment(
+                    text=cur_text,
+                    quoted=cur_quoted,
+                    glob_active=cur_glob,
+                    split_active=cur_split,
+                    source_kind=cur_kind,
+                )
+            )
+            cur_text = ch
+            cur_split = split_active
+            cur_glob = glob_active
+            cur_quoted = quoted
+            cur_kind = kind
+        segs.append(
+            ExpansionSegment(
+                text=cur_text,
+                quoted=cur_quoted,
+                glob_active=cur_glob,
+                split_active=cur_split,
+                source_kind=cur_kind,
+            )
+        )
+        return ExpansionField(segs, preserve_boundary=preserve)
+
+    def _glob_structured_field(self, field: ExpansionField) -> list[str]:
+        text = self._tilde_expand(field.text())
+        if self.options.get("f", False):
+            return [text]
+        has_active_glob = False
+        pat: list[str] = []
+        for seg in field.segments:
+            for ch in seg.text:
+                if seg.glob_active and ch in {"*", "?", "["}:
+                    has_active_glob = True
+                    pat.append(ch)
+                    continue
+                if ch == "*":
+                    pat.append("[*]")
+                elif ch == "?":
+                    pat.append("[?]")
+                elif ch == "[":
+                    pat.append("[[]")
+                elif ch == "]":
+                    pat.append("[]]")
+                elif ch == "\\":
+                    pat.append("[\\\\]")
+                else:
+                    pat.append(ch)
+        if not has_active_glob:
+            return [text]
+        pattern = self._tilde_expand("".join(pat))
+        matches = sorted(glob.glob(pattern))
+        if matches:
+            return matches
+        return [text]
 
     def _asdl_word_has_unquoted_glob(self, parts: list[Any]) -> bool:
         for part in parts:
@@ -2666,24 +2848,7 @@ class Runtime:
                     out.append("\\")
                     out.append(nxt)
             else:
-                if nxt == "*":
-                    out.append("\ue001")
-                elif nxt == "?":
-                    out.append("\ue002")
-                elif nxt == "[":
-                    out.append("\ue003")
-                elif nxt == "]":
-                    out.append("\ue004")
-                elif nxt == "\\":
-                    out.append("\ue005")
-                elif nxt == "/":
-                    out.append("\ue006")
-                elif nxt == "-":
-                    out.append("\ue007")
-                elif nxt == "!":
-                    out.append("\ue008")
-                else:
-                    out.append(nxt)
+                out.append(nxt)
             i += 2
         return "".join(out)
 
@@ -2695,30 +2860,24 @@ class Runtime:
             vals, quoted = self._expand_asdl_word_part_values(part, quoted_context=False)
             text = "".join(vals) if vals else ""
             if quoted:
-                raw_parts.append(self._protect_case_pattern_literal(text))
+                raw_parts.append(self._escape_case_pattern_literal(text))
             else:
                 raw_parts.append(text)
-        return self._pattern_from_protected_raw("".join(raw_parts), for_case=True)
+        return self._pattern_from_literalized_raw("".join(raw_parts), for_case=True)
 
-    def _protect_case_pattern_literal(self, text: str) -> str:
+    def _escape_case_pattern_literal(self, text: str) -> str:
         out: list[str] = []
         for ch in text:
             if ch == "*":
-                out.append("\ue001")
+                out.append("[*]")
             elif ch == "?":
-                out.append("\ue002")
+                out.append("[?]")
             elif ch == "[":
-                out.append("\ue003")
+                out.append("[[]")
             elif ch == "]":
-                out.append("\ue004")
+                out.append("[]]")
             elif ch == "\\":
-                out.append("\ue005")
-            elif ch == "/":
-                out.append("\ue006")
-            elif ch == "-":
-                out.append("\ue007")
-            elif ch == "!":
-                out.append("\ue008")
+                out.append("[\\\\]")
             else:
                 out.append(ch)
         return "".join(out)
@@ -6057,21 +6216,12 @@ class Runtime:
 
     def _pattern_from_word(self, text: str, for_case: bool = False) -> str:
         raw = self._expand_assignment_word_protected(text)
-        return self._pattern_from_protected_raw(raw, for_case=for_case)
+        return self._pattern_from_literalized_raw(raw, for_case=for_case)
 
-    def _pattern_from_protected_raw(self, raw: str, *, for_case: bool = False) -> str:
+    def _pattern_from_literalized_raw(self, raw: str, *, for_case: bool = False) -> str:
         backslash_marker = "\ue00d"
         rb = r"\]" if for_case else "]"
-        raw = (
-            raw.replace("\ue001", r"\*")
-            .replace("\ue002", r"\?")
-            .replace("\ue003", r"\[")
-            .replace("\ue004", rb)
-            .replace("\ue005", r"\\")
-            .replace("\ue006", "/")
-            .replace("\ue007", r"\-")
-            .replace("\ue008", r"\!")
-        )
+        raw = raw.replace(r"\]", rb)
         out: List[str] = []
         i = 0
         in_class = False
