@@ -11,14 +11,14 @@ set -o history
 echo one >/dev/null
 echo two >/dev/null
 
-FCEDIT=true EDITOR=false fc -1 >/dev/null 2>&1
+FCEDIT=true EDITOR=false fc 'echo one' 'echo one' >/dev/null 2>&1
 s_fcedit=$?
 
 unset FCEDIT
-EDITOR=true fc -1 >/dev/null 2>&1
+EDITOR=true fc 'echo two' 'echo two' >/dev/null 2>&1
 s_editor=$?
 
-FCEDIT=false EDITOR=false fc -e true -1 >/dev/null 2>&1
+FCEDIT=false EDITOR=false fc -e true 'echo two' 'echo two' >/dev/null 2>&1
 s_flag=$?
 
 printf 'fc-editor=%s,%s,%s\n' "$s_fcedit" "$s_editor" "$s_flag"

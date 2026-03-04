@@ -4599,12 +4599,14 @@ class Runtime:
         return None
 
     def _run_fc(self, args: List[str]) -> int:
-        list_mode = True
+        mode = "edit"  # edit | list | subst
         reverse = False
         no_numbers = False
-        substitute: str | None = None
+        editor: str | None = None
         i = 0
         while i < len(args) and args[i].startswith("-") and args[i] != "-":
+            if args[i][1:].isdigit():
+                break
             a = args[i]
             if a == "--":
                 i += 1
@@ -4615,36 +4617,47 @@ class Runtime:
             while j < len(a):
                 ch = a[j]
                 if ch == "l":
-                    list_mode = True
+                    mode = "list"
                 elif ch == "r":
                     reverse = True
                 elif ch == "n":
                     no_numbers = True
                 elif ch == "s":
-                    list_mode = False
+                    mode = "subst"
                 elif ch == "e":
-                    # Editor workflow is deferred; keep accepted surface.
+                    mode = "edit"
                     if j + 1 < len(a):
-                        pass
-                    else:
-                        i += 1
+                        editor = a[j + 1 :]
+                        j = len(a)
+                        continue
+                    i += 1
+                    if i >= len(args):
+                        return 1
+                    editor = args[i]
                     j = len(a)
                     continue
                 else:
-                    break
+                    return 1
                 j += 1
-            if j != len(a):
-                break
             i += 1
         rest = args[i:]
-        if list_mode:
-            first_idx = self._history_resolve(rest[0]) if len(rest) >= 1 else max(0, len(self._history) - 15)
-            last_idx = self._history_resolve(rest[1]) if len(rest) >= 2 else len(self._history) - 1
-            if first_idx is None or last_idx is None or not self._history:
+        if not self._history:
+            return 1
+        current_is_fc = bool(self._history) and self._history[-1].lstrip().startswith("fc")
+        default_ref = "-2" if current_is_fc else "-1"
+
+        def _resolve_ref(tok: str | None) -> int | None:
+            idx = self._history_resolve(tok if tok is not None else default_ref)
+            if idx is not None and current_is_fc and idx == len(self._history) - 1 and len(self._history) >= 2:
+                idx -= 1
+            return idx
+
+        if mode == "list":
+            first_idx = _resolve_ref(rest[0]) if len(rest) >= 1 else max(0, len(self._history) - 15)
+            last_idx = _resolve_ref(rest[1]) if len(rest) >= 2 else _resolve_ref(default_ref)
+            if first_idx is None or last_idx is None:
                 return 1
-            lo = min(first_idx, last_idx)
-            hi = max(first_idx, last_idx)
-            seq = list(range(lo, hi + 1))
+            seq = list(range(first_idx, last_idx + 1)) if first_idx <= last_idx else list(range(first_idx, last_idx - 1, -1))
             if reverse:
                 seq = list(reversed(seq))
             for n in seq:
@@ -4654,23 +4667,67 @@ class Runtime:
                     print(f"{n + 1}\t{self._history[n]}")
             return 0
 
-        if rest and "=" in rest[0]:
-            substitute = rest[0]
-            rest = rest[1:]
-        current_is_fc = bool(self._history) and self._history[-1].lstrip().startswith("fc")
-        default_ref = "-2" if current_is_fc else "-1"
-        idx = self._history_resolve(rest[0] if rest else default_ref)
-        if idx is not None and current_is_fc and idx == len(self._history) - 1 and len(self._history) >= 2:
-            idx -= 1
-        if idx is None:
+        if mode == "subst":
+            substitute: str | None = None
+            if rest and "=" in rest[0]:
+                substitute = rest[0]
+                rest = rest[1:]
+            idx = _resolve_ref(rest[0] if rest else default_ref)
+            if idx is None:
+                return 1
+            cmd = self._history[idx]
+            if substitute is not None:
+                old, new = substitute.split("=", 1)
+                cmd = cmd.replace(old, new, 1)
+            print(cmd)
+            self.add_history_entry(cmd)
+            return self._eval_source(cmd)
+
+        first_tok = rest[0] if len(rest) >= 1 else default_ref
+        last_tok = rest[1] if len(rest) >= 2 else first_tok
+        first_idx = _resolve_ref(first_tok)
+        last_idx = _resolve_ref(last_tok)
+        if first_idx is None or last_idx is None:
             return 1
-        cmd = self._history[idx]
-        if substitute is not None:
-            old, new = substitute.split("=", 1)
-            cmd = cmd.replace(old, new, 1)
-        print(cmd)
-        self.add_history_entry(cmd)
-        return self._eval_source(cmd)
+        seq = list(range(first_idx, last_idx + 1)) if first_idx <= last_idx else list(range(first_idx, last_idx - 1, -1))
+        if reverse:
+            seq = list(reversed(seq))
+        selected = [self._history[n] for n in seq]
+        editor_cmd = editor if editor is not None else (self.env.get("FCEDIT") or self.env.get("EDITOR") or "ed")
+
+        path = ""
+        try:
+            with tempfile.NamedTemporaryFile("w", delete=False, encoding="utf-8") as tf:
+                path = tf.name
+                for line in selected:
+                    tf.write(line + "\n")
+            if editor_cmd != "-":
+                try:
+                    parts = shlex.split(editor_cmd)
+                except ValueError:
+                    return 1
+                if not parts:
+                    return 1
+                proc = subprocess.run(parts + [path], text=True, check=False)
+                if proc.returncode != 0:
+                    return proc.returncode
+            with open(path, "r", encoding="utf-8") as f:
+                lines = [ln.rstrip("\n") for ln in f]
+        finally:
+            if path:
+                try:
+                    os.unlink(path)
+                except OSError:
+                    pass
+
+        status = 0
+        for line in lines:
+            if not line.strip():
+                continue
+            print(line)
+            self.add_history_entry(line)
+            status = self._eval_source(line)
+        return status
 
     def _run_external(
         self,
