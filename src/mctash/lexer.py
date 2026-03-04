@@ -204,7 +204,12 @@ class TokenReader:
                             self._advance_to(new_i)
                             continue
                         if self._peek() == "$" and self._peek(1) == "(":
-                            chunk, new_i = _scan_command_sub(self.source, self.i)
+                            if self._peek(2) == "(":
+                                chunk, new_i = _scan_arith_sub(self.source, self.i)
+                                if _prefer_command_sub_over_arith(chunk):
+                                    chunk, new_i = _scan_command_sub(self.source, self.i)
+                            else:
+                                chunk, new_i = _scan_command_sub(self.source, self.i)
                             buf.append(chunk)
                             self._advance_to(new_i)
                             continue
@@ -273,6 +278,8 @@ class TokenReader:
                 if ch == "$" and self._peek(1) == "(":
                     if self._peek(2) == "(":
                         chunk, new_i = _scan_arith_sub(self.source, self.i)
+                        if _prefer_command_sub_over_arith(chunk):
+                            chunk, new_i = _scan_command_sub(self.source, self.i)
                     else:
                         chunk, new_i = _scan_command_sub(self.source, self.i)
                     buf.append(chunk)
@@ -501,6 +508,7 @@ def _scan_command_sub(source: str, start: int) -> tuple[str, int]:
     i += 2
     depth = 1
     paren_depth = 0
+    case_depth = 0
     in_single = False
     in_double = False
     while i < len(source):
@@ -536,12 +544,32 @@ def _scan_command_sub(source: str, start: int) -> tuple[str, int]:
             chunk, new_i = _scan_backtick_sub(source, i)
             i = new_i
             continue
+        if ch == "#" and (i == start + 2 or source[i - 1] in " \t\r\n;("):
+            while i < len(source) and source[i] != "\n":
+                i += 1
+            continue
+        if source.startswith("<<-", i) or source.startswith("<<", i):
+            new_i = _skip_heredoc_in_command_sub(source, i)
+            if new_i > i:
+                i = new_i
+                continue
         if ch == "\\" and i + 1 < len(source):
             i += 2
             continue
         if source.startswith("$(", i):
             depth += 1
             i += 2
+            continue
+        if ch.isalpha() or ch == "_":
+            j = i + 1
+            while j < len(source) and (source[j].isalnum() or source[j] == "_"):
+                j += 1
+            word = source[i:j]
+            if word == "case":
+                case_depth += 1
+            elif word == "esac" and case_depth > 0:
+                case_depth -= 1
+            i = j
             continue
         if ch == "(":
             paren_depth += 1
@@ -550,6 +578,9 @@ def _scan_command_sub(source: str, start: int) -> tuple[str, int]:
         if ch == ")":
             if paren_depth > 0:
                 paren_depth -= 1
+                i += 1
+                continue
+            if depth == 1 and case_depth > 0:
                 i += 1
                 continue
             depth -= 1
@@ -566,6 +597,7 @@ def _scan_command_sub_from_lparen(source: str, lparen_idx: int) -> tuple[str, in
         return "$(", lparen_idx
     i = lparen_idx + 1
     depth = 1
+    case_depth = 0
     in_single = False
     in_double = False
     while i < len(source):
@@ -601,6 +633,15 @@ def _scan_command_sub_from_lparen(source: str, lparen_idx: int) -> tuple[str, in
             _, new_i = _scan_backtick_sub(source, i)
             i = new_i
             continue
+        if ch == "#" and (i == lparen_idx + 1 or source[i - 1] in " \t\r\n;("):
+            while i < len(source) and source[i] != "\n":
+                i += 1
+            continue
+        if source.startswith("<<-", i) or source.startswith("<<", i):
+            new_i = _skip_heredoc_in_command_sub(source, i)
+            if new_i > i:
+                i = new_i
+                continue
         if ch == "\\" and i + 1 < len(source):
             i += 2
             continue
@@ -608,11 +649,25 @@ def _scan_command_sub_from_lparen(source: str, lparen_idx: int) -> tuple[str, in
             _, new_i = _scan_command_sub(source, i)
             i = new_i
             continue
+        if ch.isalpha() or ch == "_":
+            j = i + 1
+            while j < len(source) and (source[j].isalnum() or source[j] == "_"):
+                j += 1
+            word = source[i:j]
+            if word == "case":
+                case_depth += 1
+            elif word == "esac" and case_depth > 0:
+                case_depth -= 1
+            i = j
+            continue
         if ch == "(":
             depth += 1
             i += 1
             continue
         if ch == ")":
+            if depth == 1 and case_depth > 0:
+                i += 1
+                continue
             depth -= 1
             i += 1
             if depth == 0:
@@ -729,6 +784,80 @@ def _scan_arith_sub(source: str, start: int) -> tuple[str, int]:
                 continue
         i += 1
     return source[start:i], i
+
+
+def _prefer_command_sub_over_arith(chunk: str) -> bool:
+    if not chunk.startswith("$(("):
+        return False
+    if not chunk.endswith("))"):
+        return True
+    inner = chunk[3:-2]
+    if ";" in inner:
+        return True
+    lead = inner.lstrip()
+    cmd_starts = (
+        "echo ",
+        "case ",
+        "for ",
+        "if ",
+        "while ",
+        "until ",
+        "(",
+    )
+    return lead.startswith(cmd_starts)
+
+
+def _skip_heredoc_in_command_sub(source: str, op_idx: int) -> int:
+    strip_tabs = source.startswith("<<-", op_idx)
+    op_len = 3 if strip_tabs else 2
+    i = op_idx + op_len
+    while i < len(source) and source[i] in " \t":
+        i += 1
+    if i >= len(source) or source[i] == "\n":
+        return op_idx
+    dstart = i
+    while i < len(source) and source[i] not in " \t\r\n":
+        i += 1
+    dtoken = source[dstart:i]
+    delim = _normalize_heredoc_delim(dtoken)
+    if not delim:
+        return op_idx
+    while i < len(source) and source[i] != "\n":
+        i += 1
+    if i < len(source) and source[i] == "\n":
+        i += 1
+    while i < len(source):
+        j = source.find("\n", i)
+        if j == -1:
+            line = source[i:]
+            body_i = len(source)
+        else:
+            line = source[i:j]
+            body_i = j + 1
+        cmp_line = line.lstrip("\t") if strip_tabs else line
+        if cmp_line == delim:
+            return body_i
+        i = body_i
+    return len(source)
+
+
+def _normalize_heredoc_delim(token: str) -> str:
+    out: list[str] = []
+    i = 0
+    while i < len(token):
+        ch = token[i]
+        if ch in {"'", '"'}:
+            i += 1
+            continue
+        if ch == "\\" and i + 1 < len(token):
+            out.append(token[i + 1])
+            i += 2
+            continue
+        out.append(ch)
+        i += 1
+    return "".join(out)
+
+
 
 
 def _scan_backtick_sub(source: str, start: int) -> tuple[str, int]:

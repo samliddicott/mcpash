@@ -9,6 +9,11 @@ set-e-andor-func-subshell-left	posix-required	POSIX-2.8.1-errexit	set -e; f() (f
 set-e-negated-brace-pipeline	posix-required	POSIX-2.8.1-errexit	set -e; ! { false; echo A $?; } | cat; echo B $?; echo C $?
 set-e-negation-true-continues	posix-required	POSIX-2.8.1-errexit	set -e; ! true; echo after:$?
 startup-grouped-ce-posix	posix-required	POSIX-shell-invocation	${THIS_SH} -ce 'echo grouped'
+comsub-commented-close-paren	posix-unspecified	BASH-UPSTREAM-comsub	echo $(echo sh_352.27 ')' ")" \); # ) comment
+comsub-heredoc-close-paren	posix-required	POSIX-2.6.3-command-substitution	echo $( cat <<eof\nhere doc with )\neof\n)
+comsub-heredoc-quoted-delim	posix-required	POSIX-2.6.3-command-substitution	echo $(cat <<\\eof\n'\neof\n)
+comsub-double-lparen-command-sub	posix-unspecified	BASH-UPSTREAM-comsub	echo $((echo sh_352.25a);(echo sh_352.25b))
+posixpipe-lone-bang	posix-unspecified	BASH-UPSTREAM-posixpipe	!
 param-default-forms	posix-required	POSIX-2.6.2-parameter-expansion	unset f; echo "<${f-word}>|<${f:-word}>"
 param-plus-forms	posix-required	POSIX-2.6.2-parameter-expansion	f=''; echo "<${f+word}>|<${f:+word}>"
 param-assign-forms	posix-required	POSIX-2.6.2-parameter-expansion	unset f; echo "<${f=word}>|<${f:=word}>|$f"

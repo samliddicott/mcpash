@@ -422,6 +422,18 @@ class Parser:
         if self._is_word(tok) and tok.value == "!":
             self._advance()
             negate = True
+            ntok = self._peek()
+            if ntok is None or (ntok.kind == "OP" and ntok.value in ["\n", ";", "&", "|"]):
+                # Accept lone `!` as negation of a no-op command, matching bash behavior.
+                null_cmd = SimpleCommand(argv=[Word(":")], assignments=[], redirects=[])
+                lst_null_cmd = LstSimpleCommand(
+                    argv=[self._resolve_word(parse_word(":"))],
+                    assignments=[],
+                    redirects=[],
+                )
+                return Pipeline(commands=[null_cmd], negate=True), LstPipeline(
+                    commands=[lst_null_cmd], negate=True, op_positions=[]
+                )
         command, lst_command = self.parse_command()
         commands: List[Command] = [command]
         lst_commands: List[LstCommand] = [lst_command]

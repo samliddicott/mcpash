@@ -123,7 +123,7 @@ def _parse_parts(text: str, in_double: bool) -> list[LstWordPart]:
                     continue
             if text.startswith("$((", i):
                 sub, consumed = _parse_arith_sub(text, i)
-                if sub is not None:
+                if sub is not None and _looks_like_arith_expr(sub):
                     flush_literal()
                     parts.append(LstArithSubPart(sub))
                     i += consumed
@@ -234,16 +234,61 @@ def _parse_command_sub(text: str, start: int) -> tuple[str | None, int]:
         return None, 1
     i = start + 2
     depth = 1
+    case_depth = 0
     while i < len(text):
+        if text[i] == "\\":
+            i += 2
+            continue
+        if text.startswith("<<-", i) or text.startswith("<<", i):
+            new_i = _skip_heredoc_in_command_sub(text, i)
+            if new_i > i:
+                i = new_i
+                continue
+        if text[i] == "#" and (i == 0 or text[i - 1] in " \t\r\n;("):
+            while i < len(text) and text[i] != "\n":
+                i += 1
+            continue
+        if text[i] == "'":
+            end = text.find("'", i + 1)
+            if end == -1:
+                return None, 1
+            i = end + 1
+            continue
+        if text[i] == '"':
+            end = _find_matching_quote(text, i + 1)
+            if end == -1:
+                return None, 1
+            i = end + 1
+            continue
+        if text[i] == "`":
+            end = _find_backtick(text, i + 1)
+            if end == -1:
+                return None, 1
+            i = end + 1
+            continue
         if text.startswith("$(", i):
             depth += 1
             i += 2
+            continue
+        if text[i].isalpha() or text[i] == "_":
+            j = i + 1
+            while j < len(text) and (text[j].isalnum() or text[j] == "_"):
+                j += 1
+            word = text[i:j]
+            if word == "case":
+                case_depth += 1
+            elif word == "esac" and case_depth > 0:
+                case_depth -= 1
+            i = j
             continue
         if text[i] == "(":
             depth += 1
             i += 1
             continue
         if text[i] == ")":
+            if depth == 1 and case_depth > 0:
+                i += 1
+                continue
             depth -= 1
             i += 1
             if depth == 0:
@@ -252,6 +297,67 @@ def _parse_command_sub(text: str, start: int) -> tuple[str | None, int]:
             continue
         i += 1
     return None, 1
+
+
+def _looks_like_arith_expr(expr: str) -> bool:
+    # Disambiguate `$(( ... ))` vs `$( ( ... ) )` command-substitution forms.
+    # A semicolon is valid in shell command lists but not in arithmetic terms.
+    if ";" in expr:
+        return False
+    return True
+
+
+def _skip_heredoc_in_command_sub(text: str, op_idx: int) -> int:
+    strip_tabs = text.startswith("<<-", op_idx)
+    op_len = 3 if strip_tabs else 2
+    i = op_idx + op_len
+    while i < len(text) and text[i] in " \t":
+        i += 1
+    if i >= len(text) or text[i] == "\n":
+        return op_idx
+    dstart = i
+    while i < len(text) and text[i] not in " \t\r\n":
+        i += 1
+    dtoken = text[dstart:i]
+    delim = _normalize_heredoc_delim(dtoken)
+    if not delim:
+        return op_idx
+    while i < len(text) and text[i] != "\n":
+        i += 1
+    if i < len(text) and text[i] == "\n":
+        i += 1
+    while i < len(text):
+        j = text.find("\n", i)
+        if j == -1:
+            line = text[i:]
+            next_i = len(text)
+        else:
+            line = text[i:j]
+            next_i = j + 1
+        cmp_line = line.lstrip("\t") if strip_tabs else line
+        if cmp_line == delim:
+            return next_i
+        i = next_i
+    return len(text)
+
+
+def _normalize_heredoc_delim(token: str) -> str:
+    out: list[str] = []
+    i = 0
+    while i < len(token):
+        ch = token[i]
+        if ch in {"'", '"'}:
+            i += 1
+            continue
+        if ch == "\\" and i + 1 < len(token):
+            out.append(token[i + 1])
+            i += 2
+            continue
+        out.append(ch)
+        i += 1
+    return "".join(out)
+
+
 
 
 def _parse_arith_sub(text: str, start: int) -> tuple[str | None, int]:

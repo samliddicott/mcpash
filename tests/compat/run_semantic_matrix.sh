@@ -158,7 +158,7 @@ while IFS=$'\t' read -r id class spec script; do
       "$mb_out" "$mb_err" mb_rc
   else
     script_file="$tmpdir/${row_idx}-${id}.sh"
-    printf '%s\n' "$script" >"$script_file"
+    printf '%b\n' "$script" >"$script_file"
     run_simple_row "$script_file" \
       "$ash_out" "$ash_err" ash_rc \
       "$bp_out" "$bp_err" bp_rc \

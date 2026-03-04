@@ -1,16 +1,16 @@
 # Semantic Matrix Report
 
-Generated: 2026-03-04 09:45:54Z
+Generated: 2026-03-04 10:06:19Z
 
 Matrix source: `tests/compat/semantic_matrix.tsv`
 
 ## Summary
 
-- total rows: 22
-- pass: 14
+- total rows: 27
+- pass: 16
 - fail: 0
 - conflict: 0
-- info: 8
+- info: 11
 
 ## Rows
 
@@ -26,6 +26,11 @@ Matrix source: `tests/compat/semantic_matrix.tsv`
 | `set-e-negated-brace-pipeline` | posix-required | `POSIX-2.8.1-errexit` | 0 | 0 | 0 | 0 | 0 | yes | yes | yes | pass | - |
 | `set-e-negation-true-continues` | posix-required | `POSIX-2.8.1-errexit` | 0 | 0 | 0 | 0 | 0 | yes | yes | yes | pass | - |
 | `startup-grouped-ce-posix` | posix-required | `POSIX-shell-invocation` | 0 | 0 | 0 | 0 | 0 | yes | yes | yes | pass | - |
+| `comsub-commented-close-paren` | posix-unspecified | `BASH-UPSTREAM-comsub` | 0 | 0 | 0 | 0 | 0 | no | no | no | info | unspecified/extension behavior |
+| `comsub-heredoc-close-paren` | posix-required | `POSIX-2.6.3-command-substitution` | 0 | 0 | 0 | 0 | 0 | yes | yes | yes | pass | - |
+| `comsub-heredoc-quoted-delim` | posix-required | `POSIX-2.6.3-command-substitution` | 0 | 0 | 0 | 0 | 0 | yes | yes | yes | pass | - |
+| `comsub-double-lparen-command-sub` | posix-unspecified | `BASH-UPSTREAM-comsub` | 0 | 0 | 0 | 0 | 0 | no | yes | yes | info | unspecified/extension behavior |
+| `posixpipe-lone-bang` | posix-unspecified | `BASH-UPSTREAM-posixpipe` | 0 | 0 | 0 | 0 | 0 | no | yes | yes | info | unspecified/extension behavior |
 | `param-default-forms` | posix-required | `POSIX-2.6.2-parameter-expansion` | 0 | 0 | 0 | 0 | 0 | yes | yes | yes | pass | - |
 | `param-plus-forms` | posix-required | `POSIX-2.6.2-parameter-expansion` | 0 | 0 | 0 | 0 | 0 | yes | yes | yes | pass | - |
 | `param-assign-forms` | posix-required | `POSIX-2.6.2-parameter-expansion` | 0 | 0 | 0 | 0 | 0 | yes | yes | yes | pass | - |
