@@ -2785,6 +2785,7 @@ class Runtime:
         out: list[ExpansionField] = []
         n = len(chars)
         i = 0
+        last_sep_nonws = False
 
         while i < n and chars[i][1] and chars[i][0] in ifs_ws:
             i += 1
@@ -2807,15 +2808,37 @@ class Runtime:
 
             if current:
                 out.append(self._chars_to_structured_field(current))
+                last_sep_nonws = False
+            elif delim_nonws:
+                # POSIX field splitting: preserve empty fields for leading and
+                # adjacent non-whitespace delimiters, but avoid adding an
+                # extra trailing empty for a single terminal delimiter.
+                if not out or last_sep_nonws:
+                    out.append(
+                        ExpansionField(
+                            [
+                                ExpansionSegment(
+                                    text="",
+                                    quoted=False,
+                                    glob_active=False,
+                                    split_active=False,
+                                    source_kind="split",
+                                )
+                            ],
+                            preserve_boundary=False,
+                        )
+                    )
 
             if j >= n:
                 break
 
             if delim_nonws:
+                last_sep_nonws = True
                 j += 1
                 while j < n and chars[j][1] and chars[j][0] in ifs_ws:
                     j += 1
             elif delim_ws:
+                last_sep_nonws = False
                 while j < n and chars[j][1] and chars[j][0] in ifs_ws:
                     j += 1
             i = j
@@ -6036,7 +6059,7 @@ class Runtime:
                 payload = line[len("__MCTASH_VAR__") :]
                 if "=" in payload:
                     name, value = payload.split("=", 1)
-                    self._set_local(name, value)
+                    self._assign_shell_var(name, value)
         err_text = (proc.stderr or "")
         if proc.returncode != 0 or (err_text.strip() != "") or not saw_result:
             err = err_text.lower()
