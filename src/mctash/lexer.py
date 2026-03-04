@@ -881,6 +881,13 @@ def _scan_braced_sub(source: str, start: int) -> tuple[str, int]:
         if in_single:
             if ch == "'":
                 in_single = False
+                i += 1
+                continue
+            if ch == "}" and not _quote_terminator_ahead(source, i, "'"):
+                # Unmatched quote in ${...}: treat quote char as literal and let
+                # this brace terminate expansion if appropriate (bash-compatible).
+                in_single = False
+                continue
             i += 1
             continue
         if in_double:
@@ -894,6 +901,9 @@ def _scan_braced_sub(source: str, start: int) -> tuple[str, int]:
             if ch == '"':
                 in_double = False
                 i += 1
+                continue
+            if ch == "}" and not _quote_terminator_ahead(source, i, '"'):
+                in_double = False
                 continue
             i += 1
             continue
@@ -932,6 +942,24 @@ def _scan_braced_sub(source: str, start: int) -> tuple[str, int]:
             continue
         i += 1
     return source[start:i], i
+
+
+def _quote_terminator_ahead(source: str, start: int, quote: str) -> bool:
+    i = start + 1
+    while i < len(source):
+        ch = source[i]
+        if ch == "\\" and i + 1 < len(source) and source[i + 1] == "\n":
+            i += 2
+            continue
+        if ch == "\n":
+            return False
+        if quote == '"' and ch == "\\" and i + 1 < len(source):
+            i += 2
+            continue
+        if ch == quote:
+            return True
+        i += 1
+    return False
 
 
 def _scan_process_sub(source: str, start: int) -> tuple[str, int]:

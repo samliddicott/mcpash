@@ -674,6 +674,9 @@ class Runtime:
         self._shopts: Dict[str, bool] = {"read_interruptible": False, "xpg_echo": False}
         self._last_read_interrupt_status: int | None = None
         self._last_read_timed_out: bool = False
+        # POSIX shells initialize IFS by default; many parameter-expansion
+        # operator-word edge cases depend on IFS being set.
+        self.env.setdefault("IFS", " \t\n")
         self.env.setdefault("OPTIND", "1")
         mode = self.env.get("MCTASH_MODE", "").strip().lower()
         diag_style = self.env.get("MCTASH_DIAG_STYLE", "").strip().lower()
@@ -2487,7 +2490,7 @@ class Runtime:
 
     def _scalarize_assignment_expansion(self, value: Any) -> str:
         if isinstance(value, PresplitFields):
-            return self._ifs_join([str(v) for v in value.fields])
+            return self._ifs_join([str(v) for v in value])
         if isinstance(value, list):
             return self._ifs_join([str(v) for v in value])
         return "" if value is None else str(value)
@@ -6335,12 +6338,18 @@ class Runtime:
                     nxt = text[i + 1]
                     if nxt in "#@*?$!-":
                         val = self._expand_param(nxt, False)
-                        out.append(" ".join(val) if isinstance(val, list) else val)
+                        if isinstance(val, (list, PresplitFields)):
+                            out.append(" ".join(str(v) for v in val))
+                        else:
+                            out.append("" if val is None else str(val))
                         i += 2
                         continue
                     if nxt.isdigit():
                         val = self._expand_param(nxt, False)
-                        out.append(" ".join(val) if isinstance(val, list) else val)
+                        if isinstance(val, (list, PresplitFields)):
+                            out.append(" ".join(str(v) for v in val))
+                        else:
+                            out.append("" if val is None else str(val))
                         i += 2
                         continue
                     if nxt.isalpha() or nxt == "_":
@@ -6349,7 +6358,10 @@ class Runtime:
                             j += 1
                         name = text[i + 1 : j]
                         val = self._expand_param(name, False)
-                        out.append(" ".join(val) if isinstance(val, list) else val)
+                        if isinstance(val, (list, PresplitFields)):
+                            out.append(" ".join(str(v) for v in val))
+                        else:
+                            out.append("" if val is None else str(val))
                         i = j
                         continue
                 out.append("$")
