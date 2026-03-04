@@ -622,6 +622,7 @@ class Runtime:
         self.positional: List[str] = []
         self.functions: Dict[str, ListNode] = {}
         self.functions_asdl: Dict[str, Dict[str, Any]] = {}
+        self.functions_source: Dict[str, str] = {}
         self.aliases: Dict[str, str] = {}
         self.local_stack: List[Dict[str, str]] = []
         self.script_name: str = ""
@@ -2192,7 +2193,14 @@ class Runtime:
                 for k, v in scope.items():
                     if k in self.env:
                         exec_env[k] = v
-            return self._run_external(argv, exec_env, redirects)
+            saved_line = self.current_line
+            end_line = self._asdl_simple_command_end_line(node)
+            if end_line is not None:
+                self.current_line = end_line
+            try:
+                return self._run_external(argv, exec_env, redirects)
+            finally:
+                self.current_line = saved_line
         except RuntimeError as e:
             msg = str(e)
             print(msg, file=sys.stderr)
@@ -3141,6 +3149,22 @@ class Runtime:
                 if isinstance(line, int):
                     return line
         return None
+
+    def _asdl_simple_command_end_line(self, node: dict[str, Any]) -> int | None:
+        end_line: int | None = None
+        for w in (node.get("words") or []):
+            if not isinstance(w, dict):
+                continue
+            pos = w.get("pos")
+            if not isinstance(pos, dict):
+                continue
+            line = pos.get("line")
+            if not isinstance(line, int):
+                continue
+            cand = line + self._asdl_word_to_text(w).count("\n")
+            if end_line is None or cand > end_line:
+                end_line = cand
+        return end_line
 
     def _asdl_token_text(self, tok: Any) -> str:
         if isinstance(tok, dict):
@@ -8568,6 +8592,13 @@ class Runtime:
                 print(f"{name} is an alias for {self.aliases[name]}", flush=True)
             elif self._has_function(name):
                 print(f"{name} is a function", flush=True)
+                body = self.functions_asdl.get(name)
+                if isinstance(body, dict):
+                    try:
+                        ast_body = self._asdl_to_ast_list(body)
+                        print(self._format_ast_function(name, ast_body), flush=True)
+                    except Exception:
+                        print(self._format_asdl_function(name, body), flush=True)
             elif name in self.BUILTINS:
                 print(f"{name} is a shell builtin", flush=True)
             else:
@@ -8578,6 +8609,213 @@ class Runtime:
                     self._report_error(self._diag_msg(DiagnosticKey.TYPE_NOT_FOUND, name=name), line=self.current_line)
                     status = 1
         return status
+
+    def _format_ast_function(self, name: str, body: ListNode) -> str:
+        lines: list[str] = [f"{name} () ", "{ "]
+        work = body
+        if (
+            len(body.items) == 1
+            and len(body.items[0].node.pipelines) == 1
+            and len(body.items[0].node.pipelines[0].commands) == 1
+            and isinstance(body.items[0].node.pipelines[0].commands[0], GroupCommand)
+        ):
+            work = body.items[0].node.pipelines[0].commands[0].body
+        lines.extend(self._format_ast_list_for_type(work, indent=4))
+        lines.append("}")
+        return "\n".join(lines)
+
+    def _format_ast_list_for_type(self, node: ListNode, indent: int) -> list[str]:
+        out: list[str] = []
+        for item in node.items:
+            out.extend(self._format_ast_andor_for_type(item.node, indent))
+        if not out:
+            out.append(" " * indent + ":;")
+        return out
+
+    def _format_ast_andor_for_type(self, node: AndOr, indent: int) -> list[str]:
+        if len(node.pipelines) == 1 and not node.operators:
+            return self._format_ast_pipeline_for_type(node.pipelines[0], indent)
+        text_parts: list[str] = []
+        for i, pl in enumerate(node.pipelines):
+            text_parts.append(self._format_ast_pipeline_inline_for_type(pl))
+            if i < len(node.operators):
+                text_parts.append(node.operators[i])
+        return [" " * indent + " ".join(text_parts) + ";"]
+
+    def _format_ast_pipeline_for_type(self, node: Pipeline, indent: int) -> list[str]:
+        if len(node.commands) == 1:
+            return self._format_ast_command_for_type(node.commands[0], indent)
+        prefix = "! " if node.negate else ""
+        text = " | ".join(self._format_ast_command_inline_for_type(c) for c in node.commands)
+        return [" " * indent + prefix + text + ";"]
+
+    def _format_ast_pipeline_inline_for_type(self, node: Pipeline) -> str:
+        prefix = "! " if node.negate else ""
+        if len(node.commands) == 1:
+            return prefix + self._format_ast_command_inline_for_type(node.commands[0])
+        return prefix + " | ".join(self._format_ast_command_inline_for_type(c) for c in node.commands)
+
+    def _format_ast_command_inline_for_type(self, node: Command) -> str:
+        lines = self._format_ast_command_for_type(node, 0)
+        text = " ".join(line.strip().rstrip(";") for line in lines if line.strip())
+        return text if text else ":"
+
+    def _format_ast_command_for_type(self, node: Command, indent: int) -> list[str]:
+        pad = " " * indent
+        if isinstance(node, SimpleCommand):
+            items = [f"{a.name}{a.op}{a.value}" for a in node.assignments] + [w.text for w in node.argv]
+            return [pad + (" ".join(items) if items else ":") + ";"]
+        if isinstance(node, ForCommand):
+            head = f"for {node.name}"
+            if node.explicit_in:
+                head += " in " + " ".join(w.text for w in node.items)
+            lines = [pad + head + ";", pad + "do"]
+            lines.extend(self._format_ast_list_for_type(node.body, indent + 4))
+            lines.append(pad + "done")
+            return lines
+        if isinstance(node, WhileCommand):
+            kw = "until" if node.until else "while"
+            lines = [pad + kw]
+            lines.extend(self._format_ast_list_for_type(node.cond, indent + 4))
+            lines.append(pad + "do")
+            lines.extend(self._format_ast_list_for_type(node.body, indent + 4))
+            lines.append(pad + "done")
+            return lines
+        if isinstance(node, IfCommand):
+            lines = [pad + "if"]
+            lines.extend(self._format_ast_list_for_type(node.cond, indent + 4))
+            lines.append(pad + "then")
+            lines.extend(self._format_ast_list_for_type(node.then_body, indent + 4))
+            for cond, body in node.elifs:
+                lines.append(pad + "elif")
+                lines.extend(self._format_ast_list_for_type(cond, indent + 4))
+                lines.append(pad + "then")
+                lines.extend(self._format_ast_list_for_type(body, indent + 4))
+            if node.else_body is not None:
+                lines.append(pad + "else")
+                lines.extend(self._format_ast_list_for_type(node.else_body, indent + 4))
+            lines.append(pad + "fi")
+            return lines
+        if isinstance(node, GroupCommand):
+            lines = [pad + "{ "]
+            lines.extend(self._format_ast_list_for_type(node.body, indent + 4))
+            lines.append(pad + "}")
+            return lines
+        if isinstance(node, RedirectCommand):
+            return self._format_ast_command_for_type(node.child, indent)
+        if isinstance(node, SubshellCommand):
+            lines = [pad + "( "]
+            lines.extend(self._format_ast_list_for_type(node.body, indent + 4))
+            lines.append(pad + ")")
+            return lines
+        return [pad + ":;"]
+
+    def _format_asdl_function(self, name: str, body: dict[str, Any]) -> str:
+        lines: list[str] = [f"{name} () ", "{ "]
+        lines.extend(self._format_asdl_command_list(body.get("children") or [], indent=4))
+        lines.append("}")
+        return "\n".join(lines)
+
+    def _format_asdl_command_list(self, children: list[dict[str, Any]], indent: int) -> list[str]:
+        out: list[str] = []
+        pad = " " * indent
+        for child in children:
+            if not isinstance(child, dict):
+                continue
+            if child.get("type") == "command.Sentence":
+                cmd = child.get("child") or {}
+                lines = self._format_asdl_command_for_type(cmd, indent)
+                term = self._asdl_token_text(child.get("terminator"))
+                if term == "&" and lines:
+                    lines[-1] = lines[-1] + " &"
+                out.extend(lines)
+                continue
+            out.extend(self._format_asdl_command_for_type(child, indent))
+        if not out:
+            out.append(pad + ":;")
+        return out
+
+    def _format_asdl_command_for_type(self, node: dict[str, Any], indent: int) -> list[str]:
+        pad = " " * indent
+        t = node.get("type")
+        if t == "command.Simple":
+            words = [self._asdl_word_to_text(w) for w in (node.get("words") or [])]
+            assigns: list[str] = []
+            for pair in (node.get("more_env") or []):
+                name = str(pair.get("name") or "")
+                op = str(pair.get("op") or "=")
+                rhs = self._asdl_rhs_word_to_text(pair.get("val") or {})
+                assigns.append(f"{name}{op}{rhs}")
+            text = " ".join(assigns + words).strip()
+            return [pad + (text if text else ":") + ";"]
+        if t == "command.ForEach":
+            iter_names = node.get("iter_names") or []
+            iter_name = str(iter_names[0]) if iter_names else "i"
+            iterable = ((node.get("iterable") or {}).get("words") or [])
+            items = " ".join(self._asdl_word_to_text(w) for w in iterable)
+            head = f"for {iter_name}"
+            if node.get("explicit_in", True):
+                head += f" in {items}"
+            lines = [pad + head + ";", pad + "do"]
+            body = node.get("body") or {}
+            lines.extend(self._format_asdl_command_list(body.get("children") or [], indent + 4))
+            lines.append(pad + "done")
+            return lines
+        if t == "command.WhileUntil":
+            kw = self._asdl_token_text(node.get("keyword")) or "while"
+            cond = node.get("cond") or {}
+            body = node.get("body") or {}
+            lines = [pad + kw]
+            lines.extend(self._format_asdl_command_list(cond.get("children") or [], indent + 4))
+            lines.append(pad + "do")
+            lines.extend(self._format_asdl_command_list(body.get("children") or [], indent + 4))
+            lines.append(pad + "done")
+            return lines
+        if t == "command.If":
+            lines = [pad + "if"]
+            arms = node.get("arms") or []
+            if arms:
+                cond = arms[0].get("cond") or {}
+                act = arms[0].get("action") or {}
+                lines.extend(self._format_asdl_command_list(cond.get("children") or [], indent + 4))
+                lines.append(pad + "then")
+                lines.extend(self._format_asdl_command_list(act.get("children") or [], indent + 4))
+                for arm in arms[1:]:
+                    cond = arm.get("cond") or {}
+                    act = arm.get("action") or {}
+                    lines.append(pad + "elif")
+                    lines.extend(self._format_asdl_command_list(cond.get("children") or [], indent + 4))
+                    lines.append(pad + "then")
+                    lines.extend(self._format_asdl_command_list(act.get("children") or [], indent + 4))
+            else_action = node.get("else_action") or {}
+            if else_action.get("children"):
+                lines.append(pad + "else")
+                lines.extend(self._format_asdl_command_list(else_action.get("children") or [], indent + 4))
+            lines.append(pad + "fi")
+            return lines
+        if t == "command.BraceGroup":
+            lines = [pad + "{ "]
+            lines.extend(self._format_asdl_command_list(node.get("children") or [], indent + 4))
+            lines.append(pad + "}")
+            return lines
+        if t == "command.Redirect":
+            child = node.get("child") or {}
+            return self._format_asdl_command_for_type(child, indent)
+        if t == "command.Pipeline":
+            children = node.get("children") or []
+            ops = node.get("ops") or []
+            parts: list[str] = []
+            for i, c in enumerate(children):
+                part_lines = self._format_asdl_command_for_type(c, 0)
+                ptxt = " ".join(line.strip().rstrip(";") for line in part_lines if line.strip())
+                if ptxt:
+                    parts.append(ptxt)
+                if i < len(ops):
+                    parts.append(str(ops[i]))
+            neg = bool(node.get("negated"))
+            lead = "! " if neg else ""
+            return [pad + lead + " ".join(parts) + ";"]
+        return [pad + ":" + ";"]
 
     def _run_let(self, args: List[str]) -> int:
         if not args:
@@ -8724,8 +8962,14 @@ class Runtime:
             if line_hint is not None:
                 report_line = line_hint + line_offset
                 self._report_error(text, line=report_line, context=parse_context)
-                if parse_context == "eval":
-                    print(self._format_error(f"`{source}'", line=report_line, context=parse_context), file=sys.stderr)
+                if parse_context in {"eval", "command substitution"}:
+                    src_for_diag = source
+                    if (
+                        parse_context == "command substitution"
+                        and not src_for_diag.rstrip().endswith(")")
+                    ):
+                        src_for_diag = src_for_diag + ")"
+                    print(self._format_error(f"`{src_for_diag}'", line=report_line, context=parse_context), file=sys.stderr)
             else:
                 print(f"parse error: {text}", file=sys.stderr)
             status = 2
@@ -8777,7 +9021,7 @@ class Runtime:
             self.options["e"] = False
         try:
             with self._push_frame(kind=frame_kind):
-                status = self._eval_source(source, parse_context="command substitution")
+                status = self._eval_source(source, parse_context="command substitution", line_offset=1)
         finally:
             try:
                 sys.stdout.flush()
@@ -8896,7 +9140,7 @@ class Runtime:
         if msg.startswith("expected fi at "):
             where = msg[len("expected fi at ") :]
             line_s = where.split(":", 1)[0]
-            return 'syntax error near unexpected token `)`', int(line_s) if line_s.isdigit() else self.current_line
+            return "syntax error near unexpected token `)'", int(line_s) if line_s.isdigit() else self.current_line
         if ("syntax error:" in msg or "syntax error near unexpected token" in msg) and " at " in msg:
             text, where = msg.rsplit(" at ", 1)
             line_s = where.split(":", 1)[0]
