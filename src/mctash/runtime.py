@@ -670,6 +670,7 @@ class Runtime:
         self._shopts: Dict[str, bool] = {"read_interruptible": False}
         self._last_read_interrupt_status: int | None = None
         self._last_read_timed_out: bool = False
+        self.env.setdefault("OPTIND", "1")
         mode = self.env.get("MCTASH_MODE", "").strip().lower()
         diag_style = self.env.get("MCTASH_DIAG_STYLE", "").strip().lower()
         if diag_style not in {"ash", "bash"}:
@@ -2594,11 +2595,17 @@ class Runtime:
         def _raise_bad_subst() -> None:
             raise RuntimeError(self._format_error("syntax error: bad substitution", line=line or self.current_line))
 
+        saw_structured_braced = False
         for part in (word.get("parts") or []):
             if not isinstance(part, dict):
                 continue
-            if part.get("type") == "word_part.BracedVarSub" and part.get("op") == "__invalid__":
+            if part.get("type") != "word_part.BracedVarSub":
+                continue
+            saw_structured_braced = True
+            if part.get("op") == "__invalid__":
                 _raise_bad_subst()
+        if saw_structured_braced:
+            return
         # Catch malformed forms still represented as literal-only word parts.
         text = self._asdl_word_to_text(word)
         for parsed in parse_word_parts(text):
@@ -2632,8 +2639,6 @@ class Runtime:
                 fields = next_fields
                 continue
             vals, quoted = self._expand_asdl_word_part_values(part, quoted_context=False)
-            if not vals:
-                vals = [""]
             next_fields = []
             for base in fields:
                 for v in vals:
@@ -2942,15 +2947,31 @@ class Runtime:
         if t == "word_part.DoubleQuoted":
             parts = node.get("parts") or []
             pieces: list[str] = [""]
+            had_any_part = False
+            had_effective_part = False
             for p in parts:
+                had_any_part = True
                 vals, _ = self._expand_asdl_word_part_values(p, quoted_context=True)
                 if not vals:
+                    p_type = p.get("type") if isinstance(p, dict) else None
+                    if (
+                        (p_type == "word_part.SimpleVarSub" and p.get("name") == "@")
+                        or (
+                            p_type == "word_part.BracedVarSub"
+                            and p.get("name") == "@"
+                            and p.get("op") is None
+                        )
+                    ):
+                        continue
                     vals = [""]
+                had_effective_part = True
                 if len(vals) == 1:
                     pieces[-1] = pieces[-1] + vals[0]
                     continue
                 pieces[-1] = pieces[-1] + vals[0]
                 pieces.extend(vals[1:])
+            if had_any_part and not had_effective_part:
+                return [], True
             return pieces, True
         if t == "word_part.SimpleVarSub":
             val = self._expand_param(str(node.get("name", "")), quoted_context)
@@ -6914,6 +6935,11 @@ class Runtime:
     def _quote_set_value(self, value: str) -> str:
         if value == "":
             return "''"
+        if value == "'":
+            return "\\'"
+        # Keep values unquoted where shell-safe and comment-safe.
+        if re.fullmatch(r"[A-Za-z0-9_./+-][A-Za-z0-9_./+#-]*", value):
+            return value
         return "'" + value.replace("'", "'\"'\"'") + "'"
 
     def _run_export(self, args: List[str]) -> int:
@@ -8598,6 +8624,8 @@ class Runtime:
             result = os.path.isfile(tokens[1])
         elif len(tokens) >= 2 and tokens[0] == "-d":
             result = os.path.isdir(tokens[1])
+        elif len(tokens) >= 2 and tokens[0] == "-x":
+            result = os.access(tokens[1], os.X_OK)
         elif len(tokens) >= 3 and tokens[1] in ["=", "!="]:
             left = tokens[0]
             right = tokens[2]
