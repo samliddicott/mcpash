@@ -477,6 +477,7 @@ class _PyBridge:
 
 
 class Runtime:
+    OPTION_FLAG_ORDER = "abefhkmnptuvxBCEHPT"
     _thread_diag_lock = threading.Lock()
     _thread_diag_emitted: set[str] = set()
     SET_O_LIST_ORDER: List[str] = [
@@ -623,7 +624,7 @@ class Runtime:
         self.aliases: Dict[str, str] = {}
         self.local_stack: List[Dict[str, str]] = []
         self.script_name: str = ""
-        self.options: Dict[str, bool] = {}
+        self.options: Dict[str, bool] = {"h": True, "B": True}
         self.readonly_vars: set[str] = set()
         self._cmd_sub_used: bool = False
         self._cmd_sub_status: int = 0
@@ -2090,6 +2091,11 @@ class Runtime:
                 return 0
             finally:
                 self.env = saved_env
+
+        # Command substitution status is only command status for assignment-only
+        # simple commands. For command invocations, clear pending sub-status.
+        if self._cmd_sub_used:
+            self._cmd_sub_used = False
 
         name = argv[0]
         assign_names = {str(a.get("name") or "") for a in assign_pairs}
@@ -3865,6 +3871,8 @@ class Runtime:
                     return 0
                 finally:
                     self.env = saved_env2
+            if self._cmd_sub_used:
+                self._cmd_sub_used = False
             name = argv[0]
             assign_names = {a.name for a in node.assignments}
             if self._has_function(name):
@@ -5454,7 +5462,7 @@ class Runtime:
         if name == "!":
             return str(self._last_bg_pid) if self._last_bg_pid is not None else ""
         if name == "-":
-            return "".join(sorted(k for k, v in self.options.items() if v and len(k) == 1))
+            return self._option_flags()
         if name == "LINENO":
             line = self.current_line if self.current_line is not None else 0
             if self.script_name == "":
@@ -6544,7 +6552,7 @@ class Runtime:
         if name == "!":
             return str(self._last_bg_job) if self._last_bg_job is not None else "", True
         if name == "-":
-            return "".join(sorted(k for k, v in self.options.items() if v and len(k) == 1)), True
+            return self._option_flags(), True
         if name == "LINENO":
             line = self.current_line if self.current_line is not None else 0
             if self.script_name == "":
@@ -6566,6 +6574,13 @@ class Runtime:
         ifs = self.env.get("IFS", " \t\n")
         sep = ifs[0] if ifs else ""
         return sep.join(items)
+
+    def _option_flags(self) -> str:
+        out: list[str] = []
+        for ch in self.OPTION_FLAG_ORDER:
+            if self.options.get(ch, False):
+                out.append(ch)
+        return "".join(out)
 
     def _remove_prefix(self, value: str, pattern: str, longest: bool) -> str:
         if pattern == "":
@@ -7369,7 +7384,6 @@ class Runtime:
             return 0
         except OSError as e:
             if getattr(e, "errno", None) == 32:
-                print("ash: write error: Broken pipe", file=sys.stderr)
                 return 1
             print(f"ash: write error: {e.strerror}", file=sys.stderr)
             return 1
@@ -7970,7 +7984,6 @@ class Runtime:
         if newline:
             data += "\n"
         if self._force_broken_pipe and self._fd_redirect_depth == 0:
-            print("ash: write error: Broken pipe", file=sys.stderr)
             return 1
         if isinstance(sys.stdout, io.StringIO) and self._fd_redirect_depth == 0:
             sys.stdout.write(data)
@@ -7980,7 +7993,6 @@ class Runtime:
             return 0
         except OSError as e:
             if getattr(e, "errno", None) == 32:
-                print("ash: write error: Broken pipe", file=sys.stderr)
                 return 1
             print(f"ash: write error: {e.strerror}", file=sys.stderr)
             return 1
