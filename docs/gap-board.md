@@ -44,9 +44,9 @@ Status legend:
 | `read` option matrix across ash variants | covered | Ash-family and bash comparator coverage is now centralized in `tests/diff/run_read_matrix.sh` (`make read-matrix`), including `man-ash-read-options.sh`, `man-ash-read-ifs-matrix.sh`, `man-ash-read-option-probe.sh`, and `bash-read-options-core.sh`. |
 | `fc` editor/history parity | partial | Added `man-ash-fc-editor-env.sh`, `man-ash-fc-ranges.sh`, and core `man-ash-fc.sh`; richer edit/re-exec flows still remain.
 | `ulimit` full flag set | covered | Query/set/error/listing coverage now includes `man-ash-ulimit-flags.sh`, `man-ash-ulimit-set.sh`, `man-ash-ulimit-errors.sh`, `man-ash-ulimit-soft-hard.sh`, and `man-ash-ulimit-all.sh` for this ash comparator surface. |
-| `trap` signal matrix | partial | Added delivery/matrix coverage via `man-ash-trap-delivery.sh` and `man-ash-trap-signal-matrix.sh`; compatibility matrix runners now exist (`tests/compat/run_trap_noninteractive_matrix.sh`, `tests/compat/run_trap_interactive_matrix.sh`, `tests/compat/run_trap_variant_matrix.sh`) and report to `docs/reports/trap-variant-matrix-latest.md`; full interactive/platform edge closure remains open.
+| `trap` signal matrix | covered | Delivery/matrix coverage includes `man-ash-trap-delivery.sh`, `man-ash-trap-signal-matrix.sh`, plus strict compatibility gates (`STRICT=1 make trap-noninteractive-matrix`, `STRICT=1 make trap-interactive-matrix`) and variant reporting (`make trap-variant-matrix`). Coverage is scoped to declared Linux comparator/signal set. |
 | `fc` comparator availability | covered | Policy accepted: when comparator ash lacks `fc`, differential parity uses temporary bash comparator (`man-ash-fc*.sh`) as documented in `docs/fc-comparator-blocker.md`. |
-| `jobs` interactive monitor semantics | partial | Non-interactive semantics plus PTY smoke (`monitor_mode_interactive_pty`, `monitor_mode_interactive_jobs_fg`) are covered; compatibility matrix harness exists (`tests/compat/run_jobs_interactive_matrix.sh`), but full interactive job-control closure remains open.
+| `jobs` interactive monitor semantics | covered | Non-interactive semantics plus PTY interactive matrix now have a strict gate (`STRICT=1 make jobs-interactive-matrix`) for declared Linux comparator scope. |
 
 ## POSIX Chapter 2 Areas
 

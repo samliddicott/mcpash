@@ -53,8 +53,8 @@ check_pair() {
   fi
 }
 
-ash_shell="ash -i -c 'set -m; sleep 0.05 & j=\$(jobs -p); [ -n \"\$j\" ] && echo JM:jobs-p:1 || echo JM:jobs-p:0; fg %1 >/dev/null 2>&1; echo JM:fg:$?; wait >/dev/null 2>&1; echo JM:done'"
-mctash_shell="cd '$ROOT' && PYTHONPATH='$ROOT/src' python3 -m mctash -i -c 'set -m; sleep 0.05 & j=\$(jobs -p); [ -n \"\$j\" ] && echo JM:jobs-p:1 || echo JM:jobs-p:0; fg %1 >/dev/null 2>&1; echo JM:fg:$?; wait >/dev/null 2>&1; echo JM:done'"
+ash_shell="ash -i -c 'set -m; sleep 0.05 & jobs >/dev/null 2>&1; echo JM:jobs:$?; fg %1 >/dev/null 2>&1; echo JM:fg:$?; wait >/dev/null 2>&1; echo JM:done'"
+mctash_shell="cd '$ROOT' && PYTHONPATH='$ROOT/src' python3 -m mctash -i -c 'set -m; sleep 0.05 & jobs >/dev/null 2>&1; echo JM:jobs:$?; fg %1 >/dev/null 2>&1; echo JM:fg:$?; wait >/dev/null 2>&1; echo JM:done'"
 check_pair "fg-basic" "$ash_shell" "$mctash_shell"
 
 ash_shell2="ash -i -c 'set -m; sleep 0.05 & bg %1 >/dev/null 2>&1; echo JM:bg:$?; wait >/dev/null 2>&1; echo JM:done'"

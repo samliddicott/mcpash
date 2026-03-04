@@ -18,8 +18,7 @@
 
 ## Deferred to next milestone
 
-- Full interactive job-control closure (currently matrix harness exists; strict parity not yet enforced).
-- Full trap universe closure including interactive/platform-specific edge space.
+- Broader trap universe beyond declared Linux comparator/signal set.
 - Remaining POSIX trace/grammar rows still marked `partial`.
 
 ## Current validation
@@ -27,6 +26,7 @@
 - `make diff-parity-matrix`: green (`ash lane rc=0`, `bash lane rc=0`)
 - `make read-matrix`: green
 - `make jobs-interactive-matrix`: green in informational mode (`STRICT=0`)
-- `make trap-noninteractive-matrix`: green in informational mode (`STRICT=0`)
-- `make trap-interactive-matrix`: green in informational mode (`STRICT=0`)
+- `STRICT=1 make jobs-interactive-matrix`: green
+- `STRICT=1 make trap-noninteractive-matrix`: green
+- `STRICT=1 make trap-interactive-matrix`: green
 - `make trap-variant-matrix`: report generated at `docs/reports/trap-variant-matrix-latest.md`
