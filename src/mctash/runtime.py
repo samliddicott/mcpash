@@ -877,10 +877,10 @@ class Runtime:
             if self._diag.style != "bash" and self.c_string_mode and line > 0 and len(self.source_stack) <= 1:
                 line = line - 1
         if self._diag.style == "bash":
-            if line is not None:
-                prefix = f"{prefix}: line {line}"
             if context:
                 prefix = f"{prefix}: {context}"
+            if line is not None:
+                prefix = f"{prefix}: line {line}"
         else:
             if context:
                 prefix = f"{prefix}: {context}"
