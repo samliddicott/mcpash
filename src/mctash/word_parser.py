@@ -199,7 +199,20 @@ def _find_matching_quote(text: str, start: int) -> int:
 def _find_matching_brace(text: str, start: int) -> int:
     depth = 1
     i = start
+    in_double = False
     while i < len(text):
+        if in_double:
+            if text[i] == "\\":
+                i += 2
+                continue
+            if text[i] == '"':
+                in_double = False
+            i += 1
+            continue
+        if text[i] == '"':
+            in_double = True
+            i += 1
+            continue
         if text[i] == "'":
             prev = text[i - 1] if i - 1 >= start else ""
             if prev in {"+", "-", ":", "=", "?", "%", "#", "/", "{", "[", " ", "\t", "\n"}:

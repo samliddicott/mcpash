@@ -2548,7 +2548,14 @@ class Runtime:
             arg_text, _arg_fields = self._asdl_operator_arg_text_and_fields(arg_node)
             if name in {"@", "*"} and (op is None or op == ""):
                 return self._ifs_join(self.positional)
-            value = self._expand_braced_param(name, op, arg_text, quoted_context)
+            value = self._expand_braced_param(
+                name,
+                op,
+                arg_text,
+                quoted_context,
+                arg_fields=_arg_fields,
+                arg_node=arg_node if isinstance(arg_node, dict) else None,
+            )
             return self._scalarize_assignment_expansion(value)
         if t == "word_part.CommandSub":
             child = node.get("child")
@@ -3016,6 +3023,7 @@ class Runtime:
                 arg_text,
                 quoted_context,
                 arg_fields=_arg_fields,
+                arg_node=arg_node if isinstance(arg_node, dict) else None,
             )
             if isinstance(val, PresplitFields):
                 return [str(v) for v in val], True
@@ -5616,8 +5624,162 @@ class Runtime:
         quoted: bool,
         *,
         arg_fields: list[ExpansionField] | None = None,
+        arg_node: dict[str, Any] | None = None,
     ) -> str | List[str]:
+        def _expand_param_op_raw_text_quoted(text: str) -> str:
+            out: list[str] = []
+            i = 0
+            while i < len(text):
+                ch = text[i]
+                if ch == "\\" and i + 1 < len(text):
+                    nxt = text[i + 1]
+                    if nxt == "\n":
+                        i += 2
+                        continue
+                    out.append("\\")
+                    out.append(nxt)
+                    i += 2
+                    continue
+                if ch == "$":
+                    if i + 1 >= len(text):
+                        out.append("$")
+                        i += 1
+                        continue
+                    nxt = text[i + 1]
+                    if nxt == "{":
+                        end = _find_braced_end(text, i + 2)
+                        if end == -1:
+                            out.append("$")
+                            i += 1
+                            continue
+                        inner = text[i + 2 : end]
+                        p_name, p_op, p_arg = _split_braced(inner)
+                        if p_name is None:
+                            raise RuntimeError(self._format_error("syntax error: bad substitution", line=self.current_line))
+                        value = self._expand_braced_param(
+                            p_name,
+                            p_op,
+                            p_arg,
+                            True,
+                            arg_fields=None,
+                            arg_node=None,
+                        )
+                        out.append(self._scalarize_assignment_expansion(value))
+                        i = end + 1
+                        continue
+                    if nxt.isdigit():
+                        out.append(self._expand_param(nxt, True))
+                        i += 2
+                        continue
+                    if nxt in "@*#?$!-":
+                        out.append(self._scalarize_assignment_expansion(self._expand_param(nxt, True)))
+                        i += 2
+                        continue
+                    if nxt == "_" or nxt.isalpha():
+                        j = i + 2
+                        while j < len(text) and (text[j] == "_" or text[j].isalnum()):
+                            j += 1
+                        var = text[i + 1 : j]
+                        out.append(self._scalarize_assignment_expansion(self._expand_param(var, True)))
+                        i = j
+                        continue
+                out.append(ch)
+                i += 1
+            return "".join(out)
+
+        def _expand_param_op_word_quoted(text: str, node: dict[str, Any] | None) -> str:
+            def _decode_param_op_quoted_literal(raw: str) -> str:
+                out_lit: list[str] = []
+                i_lit = 0
+                while i_lit < len(raw):
+                    ch_lit = raw[i_lit]
+                    if ch_lit == "\\" and i_lit + 1 < len(raw):
+                        nxt_lit = raw[i_lit + 1]
+                        if nxt_lit == "\n":
+                            i_lit += 2
+                            continue
+                        if nxt_lit in {" ", "\t"}:
+                            out_lit.append("\\")
+                            out_lit.append(nxt_lit)
+                        else:
+                            out_lit.append(nxt_lit)
+                        i_lit += 2
+                        continue
+                    out_lit.append(ch_lit)
+                    i_lit += 1
+                return "".join(out_lit)
+
+            if not isinstance(node, dict) or node.get("type") != "word.Compound":
+                return _expand_param_op_raw_text_quoted(text)
+            out: list[str] = []
+            deferred_suffix: list[str] = []
+            for part in (node.get("parts") or []):
+                if not isinstance(part, dict):
+                    continue
+                t = part.get("type")
+                if t == "word_part.Literal":
+                    lit = _decode_param_op_quoted_literal(str(part.get("tval", "")))
+                    out.append(_expand_param_op_raw_text_quoted(lit))
+                    continue
+                if t == "word_part.SingleQuoted":
+                    sval = str(part.get("sval", ""))
+                    if sval == "}":
+                        # Bash/POSIX edge: in ${name+'}'z} style forms under
+                        # double quotes the quoted '}' behaves as an empty
+                        # quoted atom while the brace appears at word tail.
+                        out.append("''")
+                        deferred_suffix.append("}")
+                        continue
+                    out.append("'")
+                    out.append(_expand_param_op_raw_text_quoted(sval))
+                    out.append("'")
+                    continue
+                if t == "word_part.DoubleQuoted":
+                    # Preserve baseline behavior for nested double quotes in
+                    # parameter-op words (do not keep the quote delimiters).
+                    for inner in (part.get("parts") or []):
+                        if isinstance(inner, dict):
+                            out.append(self._expand_asdl_assignment_part_scalar(inner, quoted_context=True))
+                    continue
+                if t == "word_part.SimpleVarSub":
+                    out.append(self._scalarize_assignment_expansion(self._expand_param(str(part.get("name", "")), True)))
+                    continue
+                if t == "word_part.BracedVarSub":
+                    child_arg = part.get("arg")
+                    child_text = self._asdl_word_to_text(child_arg) if isinstance(child_arg, dict) else None
+                    out.append(
+                        self._scalarize_assignment_expansion(
+                            self._expand_braced_param(
+                                str(part.get("name", "")),
+                                part.get("op"),
+                                child_text,
+                                True,
+                                arg_fields=None,
+                                arg_node=child_arg if isinstance(child_arg, dict) else None,
+                            )
+                        )
+                    )
+                    continue
+                if t == "word_part.CommandSub":
+                    child = part.get("child")
+                    syntax = str(part.get("syntax") or "dollar")
+                    backtick = syntax == "backtick"
+                    if isinstance(child, dict) and child.get("type") == "command.CommandList":
+                        out.append(self._expand_command_subst_asdl(child, backtick=backtick))
+                    else:
+                        src = str(part.get("child_source") or "")
+                        out.append(self._expand_command_subst_text(src, backtick=backtick))
+                    continue
+                if t == "word_part.ArithSub":
+                    expr = str(part.get("expr_source") or part.get("code") or "")
+                    out.append(self._expand_arith(expr))
+                    continue
+                out.append(_expand_param_op_raw_text_quoted(self._asdl_word_part_to_text(part)))
+            return "".join(out + deferred_suffix)
+
         def _expand_alt_word(text: str) -> str:
+            if quoted:
+                return _expand_param_op_word_quoted(text, arg_node)
             return self._expand_assignment_word_protected(text)
 
         def _expand_alt_fields(text: str, fields: list[ExpansionField] | None = None) -> PresplitFields:
