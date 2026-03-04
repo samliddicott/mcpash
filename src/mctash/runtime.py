@@ -4,6 +4,7 @@ import glob
 import importlib
 import importlib.util
 import ctypes
+import copy
 import io
 import json
 import os
@@ -8758,6 +8759,15 @@ class Runtime:
         saved_line = self.current_line
         saved_offset = self._line_offset
         saved_options = dict(self.options)
+        saved_env = dict(self.env)
+        saved_typed_vars = copy.deepcopy(self._typed_vars)
+        saved_local_stack = [dict(scope) for scope in self.local_stack]
+        saved_positional = list(self.positional)
+        saved_script_name = self.script_name
+        try:
+            saved_cwd: str | None = os.getcwd()
+        except OSError:
+            saved_cwd = None
         base = (self.current_line or 1) + line_bias
         self._line_offset = saved_offset + (base - 1)
         # In bash/ash POSIX behavior, command substitution under `set -e`
@@ -8767,7 +8777,7 @@ class Runtime:
             self.options["e"] = False
         try:
             with self._push_frame(kind=frame_kind):
-                status = self._eval_source(source)
+                status = self._eval_source(source, parse_context="command substitution")
         finally:
             try:
                 sys.stdout.flush()
@@ -8781,6 +8791,16 @@ class Runtime:
             self.current_line = saved_line
             self._line_offset = saved_offset
             self.options = saved_options
+            self.env = saved_env
+            self._typed_vars = saved_typed_vars
+            self.local_stack = saved_local_stack
+            self.positional = saved_positional
+            self.script_name = saved_script_name
+            if saved_cwd is not None:
+                try:
+                    os.chdir(saved_cwd)
+                except OSError:
+                    pass
             os.dup2(saved_stdout, 1)
             os.close(saved_stdout)
         tmp.seek(0)
@@ -8807,6 +8827,15 @@ class Runtime:
         saved_line = self.current_line
         saved_offset = self._line_offset
         saved_options = dict(self.options)
+        saved_env = dict(self.env)
+        saved_typed_vars = copy.deepcopy(self._typed_vars)
+        saved_local_stack = [dict(scope) for scope in self.local_stack]
+        saved_positional = list(self.positional)
+        saved_script_name = self.script_name
+        try:
+            saved_cwd: str | None = os.getcwd()
+        except OSError:
+            saved_cwd = None
         base = (self.current_line or 1) + line_bias
         self._line_offset = saved_offset + (base - 1)
         if not saved_options.get("posix", False):
@@ -8835,6 +8864,16 @@ class Runtime:
             self.current_line = saved_line
             self._line_offset = saved_offset
             self.options = saved_options
+            self.env = saved_env
+            self._typed_vars = saved_typed_vars
+            self.local_stack = saved_local_stack
+            self.positional = saved_positional
+            self.script_name = saved_script_name
+            if saved_cwd is not None:
+                try:
+                    os.chdir(saved_cwd)
+                except OSError:
+                    pass
             os.dup2(saved_stdout, 1)
             os.close(saved_stdout)
         tmp.seek(0)
@@ -8854,6 +8893,10 @@ class Runtime:
                 'syntax error: unexpected end of file (expecting "done")',
                 int(line_s) if line_s.isdigit() else self.current_line,
             )
+        if msg.startswith("expected fi at "):
+            where = msg[len("expected fi at ") :]
+            line_s = where.split(":", 1)[0]
+            return 'syntax error near unexpected token `)`', int(line_s) if line_s.isdigit() else self.current_line
         if ("syntax error:" in msg or "syntax error near unexpected token" in msg) and " at " in msg:
             text, where = msg.rsplit(" at ", 1)
             line_s = where.split(":", 1)[0]

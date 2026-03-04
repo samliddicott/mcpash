@@ -802,7 +802,6 @@ def _prefer_command_sub_over_arith(chunk: str) -> bool:
         "if ",
         "while ",
         "until ",
-        "(",
     )
     return lead.startswith(cmd_starts)
 
