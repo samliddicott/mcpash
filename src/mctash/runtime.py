@@ -4027,7 +4027,7 @@ class Runtime:
             items.append(self._trace_quote(arg, force=force_quote[i] if i < len(force_quote) else False))
         ps4 = self._get_var("PS4")
         prefix = ps4 if ps4 != "" else "+ "
-        print(prefix + " ".join(items), file=sys.stderr)
+        self._print_stderr(prefix + " ".join(items))
 
     def _trace_quote(self, s: str, force: bool = False) -> str:
         if s == "":
