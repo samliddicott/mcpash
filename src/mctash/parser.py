@@ -418,22 +418,24 @@ class Parser:
 
     def parse_pipeline(self) -> tuple[Pipeline, LstPipeline]:
         negate = False
-        tok = self._peek()
-        if self._is_word(tok) and tok.value == "!":
+        while True:
+            tok = self._peek()
+            if not (self._is_word(tok) and tok.value == "!"):
+                break
             self._advance()
-            negate = True
-            ntok = self._peek()
-            if ntok is None or (ntok.kind == "OP" and ntok.value in ["\n", ";", "&", "|"]):
-                # Accept lone `!` as negation of a no-op command, matching bash behavior.
-                null_cmd = SimpleCommand(argv=[Word(":")], assignments=[], redirects=[])
-                lst_null_cmd = LstSimpleCommand(
-                    argv=[self._resolve_word(parse_word(":"))],
-                    assignments=[],
-                    redirects=[],
-                )
-                return Pipeline(commands=[null_cmd], negate=True), LstPipeline(
-                    commands=[lst_null_cmd], negate=True, op_positions=[]
-                )
+            negate = not negate
+        ntok = self._peek()
+        if ntok is None or (ntok.kind == "OP" and ntok.value in ["\n", ";", "&", "|"]):
+            # Accept lone `!`/`! !` as negation of a no-op command.
+            null_cmd = SimpleCommand(argv=[Word(":")], assignments=[], redirects=[])
+            lst_null_cmd = LstSimpleCommand(
+                argv=[self._resolve_word(parse_word(":"))],
+                assignments=[],
+                redirects=[],
+            )
+            return Pipeline(commands=[null_cmd], negate=negate), LstPipeline(
+                commands=[lst_null_cmd], negate=negate, op_positions=[]
+            )
         command, lst_command = self.parse_command()
         commands: List[Command] = [command]
         lst_commands: List[LstCommand] = [lst_command]

@@ -596,6 +596,7 @@ class Runtime:
         "kill",
         "fc",
         "hash",
+        "time",
         "times",
         "ulimit",
         "umask",
@@ -4197,6 +4198,8 @@ class Runtime:
             return self._run_fc(argv[1:])
         if name == "hash":
             return self._run_hash(argv[1:])
+        if name == "time":
+            return self._run_time(argv[1:])
         if name == "times":
             return self._run_times(argv[1:])
         if name == "ulimit":
@@ -4852,6 +4855,102 @@ class Runtime:
         print(f"{_fmt(t.user)} {_fmt(t.system)}")
         print(f"{_fmt(t.children_user)} {_fmt(t.children_system)}")
         return 0
+
+    def _run_time(self, args: List[str]) -> int:
+        posix_format = False
+        i = 0
+        while i < len(args):
+            a = args[i]
+            if a == "--":
+                i += 1
+                break
+            if a == "-p":
+                posix_format = True
+                i += 1
+                continue
+            break
+        cmd = args[i:]
+        if not cmd:
+            return self._run_times([])
+
+        start_real = time.monotonic()
+        t0 = os.times()
+        if cmd and cmd[0] == "time" and (len(cmd) == 1 or cmd[1] != "-p"):
+            if posix_format:
+                # Match bash POSIX behavior for `time -p time ...`: the inner
+                # `time` is resolved as utility command.
+                source = "command " + " ".join(cmd)
+            else:
+                # Match bash POSIX behavior for `time time ...`: only outer
+                # timing is emitted.
+                source = " ".join(cmd[1:])
+        else:
+            source = " ".join(cmd)
+        with self._suppress_errexit():
+            status = self._eval_source(source, parse_context="time")
+        t1 = os.times()
+        real = max(0.0, time.monotonic() - start_real)
+        user = max(0.0, (t1.user + t1.children_user) - (t0.user + t0.children_user))
+        sys_t = max(0.0, (t1.system + t1.children_system) - (t0.system + t0.children_system))
+
+        if posix_format:
+            print(f"real {real:.2f}", file=sys.stderr)
+            print(f"user {user:.2f}", file=sys.stderr)
+            print(f"sys {sys_t:.2f}", file=sys.stderr)
+            return status
+
+        fmt = self.env.get("TIMEFORMAT", "")
+        if not fmt:
+            fmt = "real %3R\nuser %3U\nsys %3S"
+        elif fmt.startswith("$'") and fmt.endswith("'"):
+            fmt = self._decode_backslash_escapes(fmt[2:-1])
+        elif fmt.startswith("$"):
+            fmt = self._decode_backslash_escapes(fmt[1:])
+        rendered = self._render_timeformat(fmt, real, user, sys_t)
+        if rendered:
+            if not rendered.endswith("\n"):
+                rendered += "\n"
+            sys.stderr.write(rendered)
+        return status
+
+    def _render_timeformat(self, fmt: str, real: float, user: float, sys_t: float) -> str:
+        out: list[str] = []
+        i = 0
+        n = len(fmt)
+        while i < n:
+            ch = fmt[i]
+            if ch != "%":
+                out.append(ch)
+                i += 1
+                continue
+            i += 1
+            if i >= n:
+                out.append("%")
+                break
+            precision = None
+            if fmt[i].isdigit():
+                precision = int(fmt[i])
+                i += 1
+                if i >= n:
+                    out.append("%")
+                    break
+            code = fmt[i]
+            i += 1
+            if code == "%":
+                out.append("%")
+                continue
+            p = 3 if precision is None else precision
+            if code == "R":
+                out.append(f"{real:.{p}f}")
+                continue
+            if code == "U":
+                out.append(f"{user:.{p}f}")
+                continue
+            if code == "S":
+                out.append(f"{sys_t:.{p}f}")
+                continue
+            out.append("%" + (str(precision) if precision is not None else "") + code)
+        return "".join(out)
 
     def _run_umask(self, args: List[str]) -> int:
         if not args:
@@ -8664,7 +8763,10 @@ class Runtime:
         pad = " " * indent
         if isinstance(node, SimpleCommand):
             items = [f"{a.name}{a.op}{a.value}" for a in node.assignments] + [w.text for w in node.argv]
-            return [pad + (" ".join(items) if items else ":") + ";"]
+            text = " ".join(items) if items else ":"
+            if text == "time":
+                return [pad + "time "]
+            return [pad + text + ";"]
         if isinstance(node, ForCommand):
             head = f"for {node.name}"
             if node.explicit_in:
