@@ -324,3 +324,33 @@ Exit criteria:
 - POSIX requirement-to-test trace table: `docs/posix-trace-table.md`
 - Threaded-runtime deviation register: `docs/threaded-runtime-deviations.md`
 - OSH ASDL adoption and migration history: `docs/ASDL-adoption-history.md`
+
+## Semantic Master Matrix (Cross-Baseline)
+Goal: use one canonical matrix to prevent ash-vs-bash drift and avoid mode-specific patch churn.
+
+Canonical artifacts:
+1. Matrix data: `tests/compat/semantic_matrix.tsv`
+2. Runner: `tests/compat/run_semantic_matrix.sh`
+3. Report: `docs/reports/semantic-matrix-latest.md`
+
+Execution baselines per row:
+1. `ash` (POSIX-oriented ash behavior)
+2. `bash --posix` (POSIX behavior under bash)
+3. `bash` (full bash behavior)
+4. `mctash --posix`
+5. `mctash` (default/bash mode)
+
+Row classification:
+1. `posix-required`:
+   - `ash` and `bash --posix` must agree (otherwise `conflict`)
+   - `mctash --posix` must match POSIX baselines
+2. `extension-bash`:
+   - `mctash` default mode must match `bash` default mode
+3. `extension-ash`:
+   - `mctash --posix` must match `ash` for ash-specific extensions
+4. `posix-unspecified`:
+   - tracked informationally until policy is pinned
+
+Policy:
+1. This semantic matrix is the master/sole behavior matrix for new parity closure.
+2. Existing lane-specific harnesses (BusyBox, upstream bash lanes, diff suites) remain feeder corpora and diagnostics, not competing truth tables.

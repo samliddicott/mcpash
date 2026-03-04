@@ -159,6 +159,17 @@ make bash-posix-upstream-matrix
 Report output:
 - `docs/reports/bash-posix-upstream-gap-latest.md`
 
+Run the cross-baseline semantic matrix (ash POSIX, bash POSIX, bash full, mctash POSIX, mctash bash):
+
+```sh
+make semantic-matrix
+```
+
+Report output:
+- `docs/reports/semantic-matrix-latest.md`
+
+This is the canonical behavior matrix for new parity work; older lane-specific matrices remain useful as feeder corpora/harnesses.
+
 Fetch upstream GNU bash tests metadata (Savannah) for corpus planning:
 
 ```sh

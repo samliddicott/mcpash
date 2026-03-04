@@ -1,0 +1,8 @@
+# id	class	spec_anchor	script
+set-e-andor-nonfinal	posix-required	POSIX-2.8.1-errexit	set -e; false && echo bad; echo ok
+set-e-andor-final	posix-required	POSIX-2.8.1-errexit	set -e; true && false; echo bad
+set-e-negated-eval	posix-required	POSIX-2.8.1-errexit	set -e; ! eval false; echo ok
+param-default-forms	posix-required	POSIX-2.6.2-parameter-expansion	unset f; echo "<${f-word}>|<${f:-word}>"
+param-plus-forms	posix-required	POSIX-2.6.2-parameter-expansion	f=''; echo "<${f+word}>|<${f:+word}>"
+param-assign-forms	posix-required	POSIX-2.6.2-parameter-expansion	unset f; echo "<${f=word}>|<${f:=word}>|$f"
+bash-array-basic	extension-bash	BASH-Arrays	declare -a arr; arr[0]=a; arr[1]=b; echo "${arr[1]}"
