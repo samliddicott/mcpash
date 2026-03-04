@@ -37,8 +37,8 @@ CASES: list[dict[str, str]] = [
     },
     {
         "id": "E005",
-        "desc": "mixed quote toggles around closing brace",
-        "code": "printf '<%s>\\n' \"${IFS+\"'\"x ~ x'}'x\"'}\"x}\"",
+        "desc": "exact upstream mixed quote toggles with comment tail",
+        "code": "(echo -n '28 '; printf '%s\\n' \"${IFS+\"'\"x ~ x'}'x\"'}\"x}\" #')",
     },
     {
         "id": "E006",

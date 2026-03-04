@@ -1,6 +1,6 @@
 # Parameter Brace/Quote Edge Matrix
 
-Generated: 2026-03-04 13:37:12Z
+Generated: 2026-03-04 13:39:54Z
 Comparator: `bash --posix`
 Target: `mctash --posix`
 
@@ -14,7 +14,7 @@ This is a focused parser/expansion edge corpus for `${...}` with mixed quote/bra
 | `E002` | single quote chars in operator word | `0` | `0` | `<''z}>\n` | `<''z}>\n` | `` | `` | ok |
 | `E003` | unmatched single quote inside operator word | `0` | `0` | `<'bar baz>\n` | `<'bar baz>\n` | `` | `` | ok |
 | `E004` | double-quoted operator word containing escaped quote | `0` | `0` | `<"}"z>\n` | `<"}"z>\n` | `` | `` | ok |
-| `E005` | mixed quote toggles around closing brace | `2` | `0` | `` | `<\\'x ~ x''x'}"x}">\n` | `bash: -c: line 1: unexpected EOF while looking for matching `''\nbash: -c: line 2: syntax error: unexpected end of fi...` | `` | mismatch |
+| `E005` | exact upstream mixed quote toggles with comment tail | `0` | `2` | `28 'x ~ x''x}"x}" #\n` | `` | `` | `parse error: expected ')' at 1:61\n` | mismatch |
 | `E006` | operator word with command substitution | `0` | `0` | `<hi there>\n` | `<hi there>\n` | `` | `` | ok |
 | `E007` | operator word with backticks and nested ${...} | `0` | `0` | `<hi there>\n` | `<hi there>\n` | `` | `` | ok |
 | `E008` | operator word with nested brace expansion | `0` | `0` | `<foo bar baz>\n` | `<foo bar baz>\n` | `` | `` | ok |
