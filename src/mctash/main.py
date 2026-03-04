@@ -53,6 +53,8 @@ def _resolve_invocation_mode(argv0: str, startup_changes: Dict[str, bool]) -> st
 
 
 def _apply_invocation_mode(mode: str, startup_changes: Dict[str, bool]) -> None:
+    # Keep active mode explicit for runtime diagnostics/policy routing.
+    os.environ["MCTASH_MODE"] = mode
     if mode == "posix":
         startup_changes["posix"] = True
         return

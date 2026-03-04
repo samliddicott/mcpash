@@ -163,6 +163,16 @@ Local conformance gate (no external CI required):
 - Policy details and rationale are tracked in `docs/bash-compat-mode-policy.md`.
 - `mctash` extension: `shopt -s read_interruptible` allows signal-interruptible blocking `read` behavior (opt-in; non-POSIX).
 
+## Diagnostics/I18N Precursor
+
+- Introduced diagnostic key routing as a prerequisite for ash-vs-bash stderr parity work:
+  - `src/mctash/diagnostics.py`
+  - `src/mctash/i18n.py`
+- Runtime now emits several common diagnostics through keyed templates instead of inline literal strings.
+- Active mode is now exported as `MCTASH_MODE` during startup mode resolution, so diagnostics can be selected by mode policy.
+- Current templates are intentionally behavior-preserving; follow-up parity work will adjust bash-mode templates without rewriting runtime logic.
+- Localization path is standard gettext-based (`locale/` catalog support via `get_translator()`), staged for later translation catalogs.
+
 ## Remaining Ash Parity Gaps (man ash aligned)
 - Builtins not yet implemented to ash-man-page level:
   - `fc` baseline list/re-exec added; full editor/history parity remains open

@@ -60,6 +60,8 @@ from .lexer import LexContext, TokenReader
 from .parser import ParseError, Parser
 from .asdl_map import AsdlMappingError, lst_list_item_to_asdl, word as lst_word_to_asdl_word
 from .word_parser import parse_word as parse_legacy_word
+from .diagnostics import DiagnosticCatalog, DiagnosticKey
+from .i18n import get_translator
 
 try:
     import fcntl
@@ -666,6 +668,9 @@ class Runtime:
         self._shopts: Dict[str, bool] = {"read_interruptible": False}
         self._last_read_interrupt_status: int | None = None
         self._last_read_timed_out: bool = False
+        mode = self.env.get("MCTASH_MODE", "").strip().lower()
+        diag_style = "bash" if mode == "bash" else "ash"
+        self._diag = DiagnosticCatalog(style=diag_style, gettext=get_translator())
         shared_path = self.env.get(
             "MCTASH_SHARED_FILE",
             os.path.join(tempfile.gettempdir(), f"mctash-shared-{os.getuid()}.json"),
@@ -867,6 +872,9 @@ class Runtime:
 
     def _report_error(self, msg: str, line: int | None = None, context: str | None = None) -> None:
         print(self._format_error(msg, line=line, context=context), file=sys.stderr)
+
+    def _diag_msg(self, key: DiagnosticKey, **kwargs: str) -> str:
+        return self._diag.render(key, **kwargs)
 
     def _runtime_error_status(self, msg: str) -> int:
         if "bad substitution" in msg or "unbound variable:" in msg:
@@ -1198,7 +1206,7 @@ class Runtime:
                     preexec_fn=self._preexec_reset_signals,
                 )
             except FileNotFoundError:
-                print(f"{argv[0]}: not found", file=sys.stderr)
+                print(self._diag_msg(DiagnosticKey.COMMAND_NOT_FOUND, name=argv[0]), file=sys.stderr)
                 return 127
             except OSError as e:
                 print(f"{argv[0]}: {e.strerror}", file=sys.stderr)
@@ -1378,7 +1386,8 @@ class Runtime:
                         raise SystemExit(e.code)
                     assigned_names.add(name)
                     if name in self.readonly_vars:
-                        print(self._format_error(f"{name}: is read only", line=self.current_line), file=sys.stderr)
+                        msg = self._diag_msg(DiagnosticKey.READONLY_VAR, name=name)
+                        print(self._format_error(msg, line=self.current_line), file=sys.stderr)
                         raise SystemExit(2)
                     comp_vals = self._parse_compound_assignment_rhs(self._asdl_rhs_word_to_text(rhs))
                     if comp_vals is not None and self._bash_compat_level is None:
@@ -1888,7 +1897,8 @@ class Runtime:
                     name = str(assign.get("name") or "")
                     assigned_names.add(name)
                     if name in self.readonly_vars:
-                        print(self._format_error(f"{name}: is read only", line=self.current_line), file=sys.stderr)
+                        msg = self._diag_msg(DiagnosticKey.READONLY_VAR, name=name)
+                        print(self._format_error(msg, line=self.current_line), file=sys.stderr)
                         raise SystemExit(2)
                     is_compound = False
                     comp_vals: list[str] | None = None
@@ -1940,7 +1950,8 @@ class Runtime:
                 name = str(assign.get("name") or "")
                 assigned_names.add(name)
                 if name in self.readonly_vars:
-                    print(self._format_error(f"{name}: is read only", line=self.current_line), file=sys.stderr)
+                    msg = self._diag_msg(DiagnosticKey.READONLY_VAR, name=name)
+                    print(self._format_error(msg, line=self.current_line), file=sys.stderr)
                     raise SystemExit(2)
                 is_compound = False
                 comp_vals: list[str] | None = None
@@ -2000,7 +2011,8 @@ class Runtime:
                 self.env = local_env
                 for name, op, value, is_compound in argv_assigns:
                     if name in self.readonly_vars:
-                        print(self._format_error(f"{name}: is read only", line=self.current_line), file=sys.stderr)
+                        msg = self._diag_msg(DiagnosticKey.READONLY_VAR, name=name)
+                        print(self._format_error(msg, line=self.current_line), file=sys.stderr)
                         raise SystemExit(2)
                     if is_compound:
                         self._assign_compound_var(name, op, list(value) if isinstance(value, list) else [])
@@ -3169,7 +3181,7 @@ class Runtime:
                     preexec_fn=self._preexec_reset_signals,
                 )
             except FileNotFoundError:
-                print(f"{argv[0]}: not found", file=sys.stderr)
+                print(self._diag_msg(DiagnosticKey.COMMAND_NOT_FOUND, name=argv[0]), file=sys.stderr)
                 return 127
             except OSError as e:
                 if getattr(e, "errno", None) == 8 and os.path.isfile(argv[0]) and len(node.commands) == 1:
@@ -3463,7 +3475,7 @@ class Runtime:
                     except Exception:
                         pass
         except FileNotFoundError:
-            print(f"{argv[0]}: not found", file=sys.stderr)
+            print(self._diag_msg(DiagnosticKey.COMMAND_NOT_FOUND, name=argv[0]), file=sys.stderr)
             return 127, b"", (time.monotonic() - start) if start is not None else None
 
     def _stdout_redirected_away(self, redirects: List[Redirect]) -> bool:
@@ -3577,7 +3589,8 @@ class Runtime:
                         op = assign.op
                         assigned_names.add(name)
                         if name in self.readonly_vars:
-                            print(self._format_error(f"{name}: is read only", line=self.current_line), file=sys.stderr)
+                            msg = self._diag_msg(DiagnosticKey.READONLY_VAR, name=name)
+                            print(self._format_error(msg, line=self.current_line), file=sys.stderr)
                             raise SystemExit(2)
                         comp_vals = self._parse_compound_assignment_rhs(assign.value) if self._bash_compat_level is not None else None
                         if name in self._py_ties:
@@ -3630,7 +3643,8 @@ class Runtime:
                     op = assign.op
                     assigned_names.add(name)
                     if name in self.readonly_vars:
-                        print(self._format_error(f"{name}: is read only", line=self.current_line), file=sys.stderr)
+                        msg = self._diag_msg(DiagnosticKey.READONLY_VAR, name=name)
+                        print(self._format_error(msg, line=self.current_line), file=sys.stderr)
                         raise SystemExit(2)
                     comp_vals = self._parse_compound_assignment_rhs(assign.value) if self._bash_compat_level is not None else None
                     if name in self._py_ties:
@@ -3686,7 +3700,8 @@ class Runtime:
                     self.env = local_env
                     for var_name, op, value, is_compound in argv_assigns:
                         if var_name in self.readonly_vars:
-                            print(self._format_error(f"{var_name}: is read only", line=self.current_line), file=sys.stderr)
+                            msg = self._diag_msg(DiagnosticKey.READONLY_VAR, name=var_name)
+                            print(self._format_error(msg, line=self.current_line), file=sys.stderr)
                             raise SystemExit(2)
                         if is_compound:
                             self._assign_compound_var(
@@ -4273,7 +4288,8 @@ class Runtime:
         else:
             resolved = self._resolve_external_path(argv[0], env)
             if resolved is None:
-                self._report_error(f"{argv[0]}: not found", line=self.current_line, context=context)
+                msg = self._diag_msg(DiagnosticKey.COMMAND_NOT_FOUND, name=argv[0])
+                self._report_error(msg, line=self.current_line, context=context)
                 return 127
             exec_argv = [resolved] + argv[1:]
         child_env = dict(env)
@@ -4312,7 +4328,8 @@ class Runtime:
                                 raise SystemExit(0)
                     return status
                 except FileNotFoundError:
-                    self._report_error(f"{argv[0]}: not found", line=self.current_line, context=context)
+                    msg = self._diag_msg(DiagnosticKey.COMMAND_NOT_FOUND, name=argv[0])
+                    self._report_error(msg, line=self.current_line, context=context)
                     return 127
                 except PermissionError:
                     self._report_error(f"{argv[0]}: Permission denied", line=self.current_line, context=context)
@@ -4377,7 +4394,7 @@ class Runtime:
         for name in names:
             path = self._resolve_external_path(name, self.env)
             if path is None:
-                print(f"hash: {name}: not found", file=sys.stderr)
+                print(self._diag_msg(DiagnosticKey.HASH_NOT_FOUND, name=name), file=sys.stderr)
                 status = 1
                 continue
             if verbose:
@@ -4398,7 +4415,7 @@ class Runtime:
             if arg in self.aliases:
                 print(f"alias {arg}='{self.aliases[arg]}'")
             else:
-                print(f"alias: {arg}: not found", file=sys.stderr)
+                print(self._diag_msg(DiagnosticKey.ALIAS_NOT_FOUND, name=arg), file=sys.stderr)
                 status = 1
         return status
 
@@ -4414,7 +4431,7 @@ class Runtime:
             if name in self.aliases:
                 del self.aliases[name]
             else:
-                print(f"unalias: {name}: not found", file=sys.stderr)
+                print(self._diag_msg(DiagnosticKey.UNALIAS_NOT_FOUND, name=name), file=sys.stderr)
                 status = 1
         return status
 
@@ -6248,7 +6265,7 @@ class Runtime:
             raise RuntimeError(f"{name}: indexed assignment requires BASH_COMPAT")
         base, key = parsed
         if base in self.readonly_vars:
-            raise RuntimeError(f"{base}: is read only")
+            raise RuntimeError(self._diag_msg(DiagnosticKey.READONLY_VAR, name=base))
         attrs = self._var_attrs.get(base, set())
         if "assoc" in attrs:
             cur = self._typed_vars.get(base)
@@ -6552,7 +6569,7 @@ class Runtime:
         if self._assign_subscripted_var(name, value):
             return
         if name in self.readonly_vars:
-            raise RuntimeError(f"{name}: is read only")
+            raise RuntimeError(self._diag_msg(DiagnosticKey.READONLY_VAR, name=name))
         value = self._coerce_var_value(name, value)
         self._typed_vars.pop(name, None)
         tied = self._py_ties.get(name)
@@ -6790,7 +6807,8 @@ class Runtime:
                     self.env.pop(name, None)
                     continue
                 if name in self.readonly_vars:
-                    self._report_error(f"{name}: is read only", line=self.current_line, context="export")
+                    msg = self._diag_msg(DiagnosticKey.READONLY_VAR, name=name)
+                    self._report_error(msg, line=self.current_line, context="export")
                     status = 2
                     continue
                 if op == "+=":
@@ -6814,7 +6832,8 @@ class Runtime:
             if "=" in arg:
                 name, value = arg.split("=", 1)
                 if name in self.readonly_vars:
-                    self._report_error(f"{name}: is read only", line=self.current_line, context="readonly")
+                    msg = self._diag_msg(DiagnosticKey.READONLY_VAR, name=name)
+                    self._report_error(msg, line=self.current_line, context="readonly")
                     status = 2
                     continue
                 self._set_var(name, value)
@@ -6854,7 +6873,8 @@ class Runtime:
         status = 0
         for name in args[idx:]:
             if mode_vars and name in self.readonly_vars:
-                self._report_error(f"{name}: is read only", line=self.current_line, context="unset")
+                msg = self._diag_msg(DiagnosticKey.READONLY_VAR, name=name)
+                self._report_error(msg, line=self.current_line, context="unset")
                 if not self.options.get("i", False):
                     raise SystemExit(2)
                 status = 2
@@ -6920,7 +6940,7 @@ class Runtime:
         if self._assign_subscripted_var(name, value):
             return
         if name in self.readonly_vars:
-            raise RuntimeError(f"{name}: is read only")
+            raise RuntimeError(self._diag_msg(DiagnosticKey.READONLY_VAR, name=name))
         value = self._coerce_var_value(name, value)
         self._typed_vars.pop(name, None)
         tied = self._py_ties.get(name)
@@ -8280,7 +8300,7 @@ class Runtime:
                 if path:
                     print(path)
                     return 0
-                print(f"{name}: not found", file=sys.stderr)
+                print(self._diag_msg(DiagnosticKey.COMMAND_NOT_FOUND, name=name), file=sys.stderr)
                 return 1
             break
         cmd = args[i:]
@@ -8347,7 +8367,7 @@ class Runtime:
                 if path:
                     print(f"{name} is {path}", flush=True)
                 else:
-                    print(f"type: {name}: not found", file=sys.stderr)
+                    print(self._diag_msg(DiagnosticKey.TYPE_NOT_FOUND, name=name), file=sys.stderr)
                     status = 127
         return status
 
