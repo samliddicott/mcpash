@@ -989,6 +989,8 @@ class Parser:
                 if (tok.kind == "OP" and tok.value == ")") or (self._is_word(tok) and tok.value == ")"):
                     self._advance()
                     break
+                if self._is_word(tok) and tok.value == "esac" and not patterns:
+                    raise ParseError(f"syntax error near unexpected token `esac' at {self._where(tok)}")
                 if self._is_word(tok):
                     part = tok.value
                     self._advance()

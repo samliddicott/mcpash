@@ -6767,13 +6767,17 @@ class Runtime:
 
     def _run_eval(self, args: List[str]) -> int:
         source = " ".join(args)
-        return self._eval_source(
+        line_offset = ((self.current_line or 1) - 1) if self.current_line is not None else 1
+        status = self._eval_source(
             source,
             propagate_exit=True,
             propagate_return=True,
             parse_context="eval",
-            line_offset=1,
+            line_offset=line_offset,
         )
+        if self._last_eval_hard_error and not self.options.get("i", False):
+            raise SystemExit(status if status != 0 else 2)
+        return status
 
     def _run_declare(self, args: List[str]) -> int:
         if not args:
@@ -8705,7 +8709,10 @@ class Runtime:
         except ParseError as e:
             text, line_hint = self._normalize_parse_error(str(e))
             if line_hint is not None:
-                self._report_error(text, line=line_hint + line_offset, context=parse_context)
+                report_line = line_hint + line_offset
+                self._report_error(text, line=report_line, context=parse_context)
+                if parse_context == "eval":
+                    print(self._format_error(f"`{source}'", line=report_line, context=parse_context), file=sys.stderr)
             else:
                 print(f"parse error: {text}", file=sys.stderr)
             status = 2
@@ -8835,7 +8842,7 @@ class Runtime:
                 'syntax error: unexpected end of file (expecting "done")',
                 int(line_s) if line_s.isdigit() else self.current_line,
             )
-        if "syntax error:" in msg and " at " in msg:
+        if ("syntax error:" in msg or "syntax error near unexpected token" in msg) and " at " in msg:
             text, where = msg.rsplit(" at ", 1)
             line_s = where.split(":", 1)[0]
             return text, int(line_s) if line_s.isdigit() else self.current_line
