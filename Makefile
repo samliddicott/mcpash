@@ -5,7 +5,7 @@ OIL_MIN_PASS ?= 245
 OIL_MAX_FAIL ?= 0
 SUMMARY_FILE ?= docs/reports/parity-summary.json
 
-.PHONY: regressions bridge-conformance diff-conformance diff-parity-matrix read-matrix jobs-interactive-matrix trap-noninteractive-matrix trap-interactive-matrix trap-variant-matrix busybox-conformance parity-summary parity-summary-validate perf-baseline perf-compare perf-variation stress-race stress-bridge compat-posix-bash compat-posix-bash-strict bash-posix-man-matrix bash-tests-fetch conformance conformance-full conformance-quick test-all
+.PHONY: regressions bridge-conformance diff-conformance diff-parity-matrix read-matrix jobs-interactive-matrix trap-noninteractive-matrix trap-interactive-matrix trap-variant-matrix busybox-conformance parity-summary parity-summary-validate perf-baseline perf-compare perf-variation stress-race stress-bridge compat-posix-bash compat-posix-bash-strict bash-posix-man-matrix bash-posix-upstream-matrix bash-tests-fetch conformance conformance-full conformance-quick test-all
 
 regressions:
 	@./tests/regressions/run.sh
@@ -66,6 +66,9 @@ compat-posix-bash-strict:
 
 bash-posix-man-matrix:
 	@./tests/compat/run_bash_posix_man_matrix.sh
+
+bash-posix-upstream-matrix:
+	@./tests/compat/run_bash_posix_upstream_matrix.sh
 
 bash-tests-fetch:
 	@./tests/bash/fetch_upstream_tests.sh

@@ -150,6 +150,15 @@ make bash-posix-man-matrix
 Report output:
 - `docs/reports/bash-posix-man-matrix-latest.md`
 
+Run upstream bash POSIX-core matrix lanes (core strict + info lane):
+
+```sh
+make bash-posix-upstream-matrix
+```
+
+Report output:
+- `docs/reports/bash-posix-upstream-gap-latest.md`
+
 Fetch upstream GNU bash tests metadata (Savannah) for corpus planning:
 
 ```sh
