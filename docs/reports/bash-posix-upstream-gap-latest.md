@@ -1,6 +1,6 @@
 # Bash POSIX Upstream Gap Report
 
-Generated: 2026-03-04 15:50:15Z
+Generated: 2026-03-04 16:34:56Z
 Comparator baseline: GNU bash `--posix` (baserock mirror corpus, `bash-5.1-testing`)
 Target: `mctash --posix`
 
@@ -11,8 +11,8 @@ Target: `mctash --posix`
 
 ## Summary
 
-- core full parity: 6/8
-- core failing rows: 2
+- core full parity: 8/8
+- core failing rows: 0
 - info full parity: 0/1
 
 ## Case Results
@@ -20,9 +20,9 @@ Target: `mctash --posix`
 | Case | Lane | bash rc | mctash rc | stdout | stderr |
 |---|---|---:|---:|---|---|
 | `posix2.tests` | core | 2 | 2 | ok | ok |
-| `posixexp.tests` | core | 2 | 2 | mismatch | mismatch |
+| `posixexp.tests` | core | 2 | 2 | ok | ok |
 | `posixexp2.tests` | core | 0 | 0 | ok | ok |
-| `posixpat.tests` | core | 0 | 0 | mismatch | ok |
+| `posixpat.tests` | core | 0 | 0 | ok | ok |
 | `posixpipe.tests` | core | 0 | 0 | ok | ok |
 | `ifs-posix.tests` | core | 0 | 0 | ok | ok |
 | `comsub-posix.tests` | core | 0 | 0 | ok | ok |

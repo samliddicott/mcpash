@@ -514,20 +514,6 @@ def _split_braced(inner: str) -> Tuple[str | None, str | None, str | None]:
 
     if not inner:
         return None, None, None
-    if inner.startswith("!"):
-        rest_inner = inner[1:]
-        if not rest_inner or not (rest_inner[0].isalpha() or rest_inner[0] == "_"):
-            return None, None, None
-        j = 1
-        while j < len(rest_inner) and (rest_inner[j].isalnum() or rest_inner[j] == "_"):
-            j += 1
-        base = rest_inner[:j]
-        rest = rest_inner[j:]
-        if rest == "[@]":
-            return base, "__keys__", "@"
-        if rest == "[*]":
-            return base, "__keys__", "*"
-        return None, None, None
     if inner.startswith("#") and len(inner) > 1:
         len_name, used = _parse_param_name(inner[1:])
         if len_name is not None and used == len(inner) - 1:
@@ -567,7 +553,21 @@ def _split_braced(inner: str) -> Tuple[str | None, str | None, str | None]:
     if inner[i] in ["-", "=", "?", "#", "%", "+"]:
         op = inner[i]
         return name, op, inner[i + 1 :]
-    return None, None, None
+    if inner.startswith("!"):
+        rest_inner = inner[1:]
+        if not rest_inner or not (rest_inner[0].isalpha() or rest_inner[0] == "_"):
+            return None, None, None
+        j = 1
+        while j < len(rest_inner) and (rest_inner[j].isalnum() or rest_inner[j] == "_"):
+            j += 1
+        base = rest_inner[:j]
+        rest = rest_inner[j:]
+        if rest == "[@]":
+            return base, "__keys__", "@"
+        if rest == "[*]":
+            return base, "__keys__", "*"
+        return None, None, None
+    return name, "__invalid__", None
 
 
 def expand_word(

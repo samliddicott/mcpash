@@ -1427,7 +1427,7 @@ class Runtime:
                 for pw in (pat.get("words") or []):
                     self._validate_asdl_word_bad_subst(pw)
                     pattern = self._asdl_case_pattern_from_word(pw)
-                    if fnmatch.fnmatchcase(value, pattern):
+                    if self._case_pattern_matches(value, pattern):
                         matched = True
                         break
                 if matched:
@@ -2555,6 +2555,7 @@ class Runtime:
                 quoted_context,
                 arg_fields=_arg_fields,
                 arg_node=arg_node if isinstance(arg_node, dict) else None,
+                assignment_context=True,
             )
             return self._scalarize_assignment_expansion(value)
         if t == "word_part.CommandSub":
@@ -2659,8 +2660,51 @@ class Runtime:
             return []
         parts = node.get("parts") or []
         fields: list[ExpansionField] = [ExpansionField([])]
-        for part in parts:
+        i = 0
+        while i < len(parts):
+            part = parts[i]
             kind = str(part.get("type", "word_part.Unknown")) if isinstance(part, dict) else "word_part.Unknown"
+            # Parse ANSI-C $'...' form represented by lexer/parser as
+            # literal '$' + single-quoted part.
+            if (
+                isinstance(part, dict)
+                and part.get("type") == "word_part.Literal"
+                and i + 1 < len(parts)
+                and isinstance(parts[i + 1], dict)
+                and parts[i + 1].get("type") == "word_part.SingleQuoted"
+            ):
+                lit = str(part.get("tval", ""))
+                if lit.endswith("$"):
+                    prefix = lit[:-1]
+                    decoded = self._decode_ansi_c_quoted_literal_at(
+                        "$'" + str(parts[i + 1].get("sval", "")) + "'",
+                        0,
+                    )
+                    if decoded is not None:
+                        text_decoded, _ = decoded
+                        next_fields = []
+                        for base in fields:
+                            segs = []
+                            if prefix:
+                                segs.extend(self._asdl_literal_to_segments(prefix, quoted_context=False, source_kind=kind))
+                            segs.append(
+                                ExpansionSegment(
+                                    text=text_decoded,
+                                    quoted=True,
+                                    glob_active=False,
+                                    split_active=False,
+                                    source_kind="word_part.AnsiCQuoted",
+                                )
+                            )
+                            next_fields.append(
+                                ExpansionField(
+                                    segments=base.segments + segs,
+                                    preserve_boundary=True,
+                                )
+                            )
+                        fields = next_fields
+                        i += 2
+                        continue
             if isinstance(part, dict) and part.get("type") == "word_part.Literal":
                 literal = str(part.get("tval", ""))
                 segs = self._asdl_literal_to_segments(literal, quoted_context=False, source_kind=kind)
@@ -2673,6 +2717,7 @@ class Runtime:
                         )
                     )
                 fields = next_fields
+                i += 1
                 continue
             vals, quoted = self._expand_asdl_word_part_values(part, quoted_context=False)
             next_fields = []
@@ -2694,6 +2739,7 @@ class Runtime:
                         )
                     )
             fields = next_fields
+            i += 1
         return fields
 
     def _legacy_word_to_expansion_fields(self, text: str, *, assignment: bool = False) -> list[ExpansionField]:
@@ -2730,15 +2776,58 @@ class Runtime:
 
     def _asdl_literal_to_segments(self, text: str, *, quoted_context: bool, source_kind: str) -> list[ExpansionSegment]:
         if "\\" not in text:
-            return [
-                ExpansionSegment(
-                    text=text,
-                    quoted=quoted_context,
-                    glob_active=(not quoted_context),
-                    split_active=(not quoted_context),
-                    source_kind=source_kind,
+            if "$'" not in text:
+                return [
+                    ExpansionSegment(
+                        text=text,
+                        quoted=quoted_context,
+                        glob_active=(not quoted_context),
+                        split_active=(not quoted_context),
+                        source_kind=source_kind,
+                    )
+                ]
+            out: list[ExpansionSegment] = []
+            i = 0
+            buf: list[str] = []
+            while i < len(text):
+                parsed = self._decode_ansi_c_quoted_literal_at(text, i)
+                if parsed is None:
+                    buf.append(text[i])
+                    i += 1
+                    continue
+                decoded, new_i = parsed
+                if buf:
+                    out.append(
+                        ExpansionSegment(
+                            text="".join(buf),
+                            quoted=quoted_context,
+                            glob_active=(not quoted_context),
+                            split_active=(not quoted_context),
+                            source_kind=source_kind,
+                        )
+                    )
+                    buf = []
+                out.append(
+                    ExpansionSegment(
+                        text=decoded,
+                        quoted=True,
+                        glob_active=False,
+                        split_active=False,
+                        source_kind=source_kind,
+                    )
                 )
-            ]
+                i = new_i
+            if buf:
+                out.append(
+                    ExpansionSegment(
+                        text="".join(buf),
+                        quoted=quoted_context,
+                        glob_active=(not quoted_context),
+                        split_active=(not quoted_context),
+                        source_kind=source_kind,
+                    )
+                )
+            return out
         segs: list[ExpansionSegment] = []
         buf: list[str] = []
 
@@ -2759,6 +2848,21 @@ class Runtime:
 
         i = 0
         while i < len(text):
+            parsed = self._decode_ansi_c_quoted_literal_at(text, i)
+            if parsed is not None:
+                decoded, new_i = parsed
+                flush(active=True, quoted=quoted_context)
+                segs.append(
+                    ExpansionSegment(
+                        text=decoded,
+                        quoted=True,
+                        glob_active=False,
+                        split_active=False,
+                        source_kind=source_kind,
+                    )
+                )
+                i = new_i
+                continue
             ch = text[i]
             if ch != "\\" or i + 1 >= len(text):
                 buf.append(ch)
@@ -2786,6 +2890,71 @@ class Runtime:
             i += 2
         flush(active=True, quoted=False)
         return segs
+
+    def _decode_ansi_c_quoted_literal_at(self, text: str, i: int) -> tuple[str, int] | None:
+        if not text.startswith("$'", i):
+            return None
+        j = i + 2
+        out: list[str] = []
+        while j < len(text):
+            ch = text[j]
+            if ch == "'":
+                return "".join(out), j + 1
+            if ch != "\\":
+                out.append(ch)
+                j += 1
+                continue
+            if j + 1 >= len(text):
+                out.append("\\")
+                j += 1
+                continue
+            esc = text[j + 1]
+            mapping = {
+                "a": "\a",
+                "b": "\b",
+                "e": "\x1b",
+                "E": "\x1b",
+                "f": "\f",
+                "n": "\n",
+                "r": "\r",
+                "t": "\t",
+                "v": "\v",
+                "\\": "\\",
+                "'": "'",
+                '"': '"',
+            }
+            if esc in mapping:
+                out.append(mapping[esc])
+                j += 2
+                continue
+            if esc in "01234567":
+                k = j + 1
+                digits = []
+                while k < len(text) and len(digits) < 3 and text[k] in "01234567":
+                    digits.append(text[k])
+                    k += 1
+                try:
+                    out.append(chr(int("".join(digits), 8)))
+                except Exception:
+                    out.append("".join(digits))
+                j = k
+                continue
+            if esc == "x":
+                k = j + 2
+                digits = []
+                while k < len(text) and len(digits) < 2 and text[k] in "0123456789abcdefABCDEF":
+                    digits.append(text[k])
+                    k += 1
+                if digits:
+                    try:
+                        out.append(chr(int("".join(digits), 16)))
+                    except Exception:
+                        out.append("".join(digits))
+                    j = k
+                    continue
+            out.append(esc)
+            j += 2
+        return None
 
     def _expand_asdl_word_fields(self, node: dict[str, Any], split_glob: bool = True) -> list[str]:
         if not isinstance(node, dict) or node.get("type") != "word.Compound":
@@ -4138,9 +4307,33 @@ class Runtime:
         for item in node.items:
             for pat in item.patterns:
                 expanded_pat = self._pattern_from_word(pat, for_case=True)
-                if fnmatch.fnmatchcase(value, expanded_pat):
+                if self._case_pattern_matches(value, expanded_pat):
                     return self._exec_list(item.body)
         return 0
+
+    def _case_pattern_matches(self, value: str, pattern: str) -> bool:
+        if "[[." not in pattern and "[[=" not in pattern and "[[:" not in pattern and "[:" not in pattern and "[." not in pattern and "[=" not in pattern:
+            return fnmatch.fnmatchcase(value, pattern)
+        # Use bash --posix for case-pattern matching semantics so POSIX
+        # character classes/collating forms follow shell behavior rather than
+        # Python fnmatch limitations.
+        script = (
+            'v=$1; p=$2; '
+            'eval "case \\"$v\\" in ($p) exit 0 ;; (*) exit 1 ;; esac"'
+        )
+        try:
+            proc = subprocess.run(
+                ["bash", "--posix", "-c", script, "mctash", value, pattern],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                text=True,
+                check=False,
+            )
+            if proc.returncode in (0, 1):
+                return proc.returncode == 0
+        except Exception:
+            pass
+        return fnmatch.fnmatchcase(value, pattern)
 
     def _run_builtin(self, name: str, argv: List[str]) -> int:
         if name == "cd":
@@ -5603,6 +5796,8 @@ class Runtime:
         if name == "PPID":
             return str(os.getppid())
         if name == "!":
+            if self.options.get("u", False) and self._last_bg_pid is None and self._last_bg_job is None:
+                raise RuntimeError("unbound variable: !")
             return str(self._last_bg_pid) if self._last_bg_pid is not None else ""
         if name == "-":
             return self._option_flags()
@@ -5612,7 +5807,7 @@ class Runtime:
                 line = max(0, line - 1)
             return str(line)
         value, is_set = self._get_param_state(name)
-        if (not is_set or value == "") and self.options.get("u", False) and name not in ["@", "*", "#"]:
+        if (not is_set) and self.options.get("u", False) and name not in ["@", "*", "#"]:
             raise RuntimeError(f"unbound variable: {name}")
         return value
 
@@ -5625,6 +5820,7 @@ class Runtime:
         *,
         arg_fields: list[ExpansionField] | None = None,
         arg_node: dict[str, Any] | None = None,
+        assignment_context: bool = False,
     ) -> str | List[str]:
         def _expand_param_op_raw_text_quoted(text: str) -> str:
             out: list[str] = []
@@ -5663,6 +5859,7 @@ class Runtime:
                             True,
                             arg_fields=None,
                             arg_node=None,
+                            assignment_context=True,
                         )
                         out.append(self._scalarize_assignment_expansion(value))
                         i = end + 1
@@ -5756,6 +5953,7 @@ class Runtime:
                                 True,
                                 arg_fields=None,
                                 arg_node=child_arg if isinstance(child_arg, dict) else None,
+                                assignment_context=True,
                             )
                         )
                     )
@@ -5822,6 +6020,8 @@ class Runtime:
             return PresplitFields(out_fields, lead_boundary=lead_boundary, trail_boundary=trail_boundary)
 
         def _expand_alt_unquoted(text: str):
+            if assignment_context:
+                return _expand_alt_word(text)
             if arg_fields is not None:
                 return _expand_alt_fields(text, arg_fields)
             if any(mark in text for mark in ["'", '"', "`", "$(", "${"]):
@@ -5905,7 +6105,9 @@ class Runtime:
             if name in ["#", "?", "$", "!", "-", "LINENO", "PPID"] or name.isdigit():
                 v = self._expand_param(name, quoted)
                 return str(len(v))
-            value, _ = self._get_param_state(name)
+            value, is_set = self._get_param_state(name)
+            if self.options.get("u", False) and not is_set:
+                raise RuntimeError(f"unbound variable: {name}")
             return str(len(value))
         if op == "__keys__":
             typed = self._typed_vars.get(name)
@@ -5929,6 +6131,8 @@ class Runtime:
         if name.isdigit():
             value, is_set = self._get_param_state(name)
             if op is None:
+                if not is_set and self.options.get("u", False):
+                    raise RuntimeError(f"unbound variable: {name}")
                 return value
             arg_text = arg or ""
             if op in ["=", ":="]:
@@ -5946,6 +6150,8 @@ class Runtime:
                     raise RuntimeError(self._format_error(f"{name}: {msg}", line=self.current_line))
                 return value
             if op == ":substr":
+                if not is_set and self.options.get("u", False):
+                    raise RuntimeError(f"unbound variable: {name}")
                 return self._substring(value, arg_text)
             if op in ["-", ":-"]:
                 if not is_set or (op == ":-" and value == ""):
@@ -5959,7 +6165,19 @@ class Runtime:
         value, is_set = self._get_param_state(name)
         arg_text = arg or ""
         if op is None:
+            if (
+                not is_set
+                and self.options.get("u", False)
+                and name not in {"@", "*", "#", "?", "$", "-", "LINENO", "PPID"}
+            ):
+                raise RuntimeError(f"unbound variable: {name}")
             return value
+        if (
+            self.options.get("u", False)
+            and not is_set
+            and op in {"__len__", "#", "##", "%", "%%", ":substr", "/"}
+        ):
+            raise RuntimeError(f"unbound variable: {name}")
         if op in ["-", ":-"]:
             if not is_set or (op == ":-" and value == ""):
                 return _expand_alt_word(arg_text) if quoted else _expand_alt_unquoted(arg_text)
@@ -6854,7 +7072,10 @@ class Runtime:
         if name == "$":
             return str(os.getpid()), True
         if name == "!":
-            return str(self._last_bg_job) if self._last_bg_job is not None else "", True
+            return (
+                str(self._last_bg_job) if self._last_bg_job is not None else "",
+                self._last_bg_job is not None,
+            )
         if name == "-":
             return self._option_flags(), True
         if name == "LINENO":
@@ -6863,9 +7084,9 @@ class Runtime:
                 line = max(0, line - 1)
             return str(line), True
         if name == "@":
-            return " ".join(self.positional), True
+            return " ".join(self.positional), len(self.positional) > 0
         if name == "*":
-            return self._ifs_join(self.positional), True
+            return self._ifs_join(self.positional), len(self.positional) > 0
         if name.isdigit():
             value = self._get_positional(name)
             idx = int(name)
