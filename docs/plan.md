@@ -121,6 +121,10 @@ Online corpus source for expansion:
 - GNU bash upstream tests index: `https://git.savannah.gnu.org/cgit/bash.git/tree/tests`
 - Fetch helper: `tests/bash/fetch_upstream_tests.sh` (`make bash-tests-fetch`)
 - Fetched artifacts (ignored by git): `tests/bash/upstream/`
+- Reproducibility:
+  - pin ref with `BASH_UPSTREAM_REF=<tag|branch|commit>`
+  - cache by ref under `tests/bash/upstream/<safe_ref>/`
+  - lock metadata in `fetch-lock.json` (ref/time/count/source URLs)
 
 License note:
 - Upstream bash tests are GPL-licensed; we keep fetched corpus as external test input and avoid copying test bodies into tracked project sources unless explicitly approved.

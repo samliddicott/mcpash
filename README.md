@@ -156,6 +156,13 @@ Fetch upstream GNU bash tests metadata (Savannah) for corpus planning:
 make bash-tests-fetch
 ```
 
+Pin or refresh fetch cache:
+
+```sh
+BASH_UPSTREAM_REF=master make bash-tests-fetch
+FORCE_REFRESH=1 make bash-tests-fetch
+```
+
 Fetched metadata location:
 - `tests/bash/upstream/`
 
