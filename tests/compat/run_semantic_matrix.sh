@@ -34,6 +34,18 @@ EOF
   chmod +x "$path"
 }
 
+# Shared wrappers so simple-row scripts can call `${THIS_SH}` recursively.
+w_ash="$tmpdir/w-ash.sh"
+w_bp="$tmpdir/w-bash-posix.sh"
+w_bf="$tmpdir/w-bash-full.sh"
+w_mp="$tmpdir/w-mctash-posix.sh"
+w_mb="$tmpdir/w-mctash-bash.sh"
+mk_wrapper "$w_ash" "exec ash \"\$@\""
+mk_wrapper "$w_bp" "exec bash --posix \"\$@\""
+mk_wrapper "$w_bf" "exec bash \"\$@\""
+mk_wrapper "$w_mp" "exec env PYTHONPATH=\"$ROOT/src\" MCTASH_MODE=posix MCTASH_MAX_VMEM_KB=\"$MCTASH_MAX_VMEM_KB\" python3 -m mctash --posix \"\$@\""
+mk_wrapper "$w_mb" "exec env PYTHONPATH=\"$ROOT/src\" MCTASH_MODE=bash MCTASH_MAX_VMEM_KB=\"$MCTASH_MAX_VMEM_KB\" python3 -m mctash \"\$@\""
+
 run_simple_row() {
   local script_file="$1"
   local ash_out="$2" ash_err="$3" ash_rc_var="$4"
@@ -44,11 +56,11 @@ run_simple_row() {
 
   local ash_rc=0 bp_rc=0 bf_rc=0 mp_rc=0 mb_rc=0
   set +e
-  timeout -k 5 "$ROW_TIMEOUT_SIMPLE" ash "$script_file" >"$ash_out" 2>"$ash_err"; ash_rc=$?
-  timeout -k 5 "$ROW_TIMEOUT_SIMPLE" bash --posix "$script_file" >"$bp_out" 2>"$bp_err"; bp_rc=$?
-  timeout -k 5 "$ROW_TIMEOUT_SIMPLE" bash "$script_file" >"$bf_out" 2>"$bf_err"; bf_rc=$?
-  timeout -k 5 "$ROW_TIMEOUT_SIMPLE" env PYTHONPATH="$ROOT/src" MCTASH_MODE=posix MCTASH_MAX_VMEM_KB="$MCTASH_MAX_VMEM_KB" python3 -m mctash --posix "$script_file" >"$mp_out" 2>"$mp_err"; mp_rc=$?
-  timeout -k 5 "$ROW_TIMEOUT_SIMPLE" env PYTHONPATH="$ROOT/src" MCTASH_MODE=bash MCTASH_MAX_VMEM_KB="$MCTASH_MAX_VMEM_KB" python3 -m mctash "$script_file" >"$mb_out" 2>"$mb_err"; mb_rc=$?
+  timeout -k 5 "$ROW_TIMEOUT_SIMPLE" env THIS_SH="$w_ash" ash "$script_file" >"$ash_out" 2>"$ash_err"; ash_rc=$?
+  timeout -k 5 "$ROW_TIMEOUT_SIMPLE" env THIS_SH="$w_bp" bash --posix "$script_file" >"$bp_out" 2>"$bp_err"; bp_rc=$?
+  timeout -k 5 "$ROW_TIMEOUT_SIMPLE" env THIS_SH="$w_bf" bash "$script_file" >"$bf_out" 2>"$bf_err"; bf_rc=$?
+  timeout -k 5 "$ROW_TIMEOUT_SIMPLE" env THIS_SH="$w_mp" PYTHONPATH="$ROOT/src" MCTASH_MODE=posix MCTASH_MAX_VMEM_KB="$MCTASH_MAX_VMEM_KB" python3 -m mctash --posix "$script_file" >"$mp_out" 2>"$mp_err"; mp_rc=$?
+  timeout -k 5 "$ROW_TIMEOUT_SIMPLE" env THIS_SH="$w_mb" PYTHONPATH="$ROOT/src" MCTASH_MODE=bash MCTASH_MAX_VMEM_KB="$MCTASH_MAX_VMEM_KB" python3 -m mctash "$script_file" >"$mb_out" 2>"$mb_err"; mb_rc=$?
   set -e
 
   printf -v "$ash_rc_var" '%s' "$ash_rc"
@@ -75,17 +87,6 @@ run_upstream_row() {
     echo "missing upstream case: $UPSTREAM_TROOT/$case_name" >&2
     exit 2
   fi
-
-  local w_ash="$tmpdir/w-ash.sh"
-  local w_bp="$tmpdir/w-bash-posix.sh"
-  local w_bf="$tmpdir/w-bash-full.sh"
-  local w_mp="$tmpdir/w-mctash-posix.sh"
-  local w_mb="$tmpdir/w-mctash-bash.sh"
-  mk_wrapper "$w_ash" "exec ash \"\$@\""
-  mk_wrapper "$w_bp" "exec bash --posix \"\$@\""
-  mk_wrapper "$w_bf" "exec bash \"\$@\""
-  mk_wrapper "$w_mp" "exec env PYTHONPATH=\"$ROOT/src\" MCTASH_MODE=posix MCTASH_MAX_VMEM_KB=\"$MCTASH_MAX_VMEM_KB\" python3 -m mctash --posix \"\$@\""
-  mk_wrapper "$w_mb" "exec env PYTHONPATH=\"$ROOT/src\" MCTASH_MODE=bash MCTASH_MAX_VMEM_KB=\"$MCTASH_MAX_VMEM_KB\" python3 -m mctash \"\$@\""
 
   local ash_rc=0 bp_rc=0 bf_rc=0 mp_rc=0 mb_rc=0
   set +e

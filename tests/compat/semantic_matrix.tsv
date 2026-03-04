@@ -4,6 +4,11 @@ set-e-andor-final	posix-required	POSIX-2.8.1-errexit	set -e; true && false; echo
 set-e-negated-eval	posix-required	POSIX-2.8.1-errexit	set -e; ! eval false; echo ok
 set-e-cmdsub-posix-abort	posix-required	POSIX-2.8.1-errexit	set -e; z=$(false; echo foo); echo "$z"
 set-e-cmdsub-bash-nonposix	extension-bash	BASH-set-e-cmdsub	set -e; z=$(false; echo foo); echo "$z"
+set-e-andor-subshell-left	posix-required	POSIX-2.8.1-errexit	set -e; (false; echo A $? ) && echo B $?; echo C $?
+set-e-andor-func-subshell-left	posix-required	POSIX-2.8.1-errexit	set -e; f() (false; echo A $?); f && echo B $?; echo C $?
+set-e-negated-brace-pipeline	posix-required	POSIX-2.8.1-errexit	set -e; ! { false; echo A $?; } | cat; echo B $?; echo C $?
+set-e-negation-true-continues	posix-required	POSIX-2.8.1-errexit	set -e; ! true; echo after:$?
+startup-grouped-ce-posix	posix-required	POSIX-shell-invocation	${THIS_SH} -ce 'echo grouped'
 param-default-forms	posix-required	POSIX-2.6.2-parameter-expansion	unset f; echo "<${f-word}>|<${f:-word}>"
 param-plus-forms	posix-required	POSIX-2.6.2-parameter-expansion	f=''; echo "<${f+word}>|<${f:+word}>"
 param-assign-forms	posix-required	POSIX-2.6.2-parameter-expansion	unset f; echo "<${f=word}>|<${f:=word}>|$f"

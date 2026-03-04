@@ -1146,7 +1146,11 @@ class Runtime:
         pipes = node.get("children") or []
         if not pipes:
             return 0
-        status = self._exec_asdl_pipeline(pipes[0])
+        if len(pipes) > 1:
+            with self._suppress_errexit():
+                status = self._exec_asdl_pipeline(pipes[0])
+        else:
+            status = self._exec_asdl_pipeline(pipes[0])
         last_exec_idx = 0
         if track_status:
             self.last_status = status
@@ -1158,18 +1162,33 @@ class Runtime:
             op_s = self._asdl_token_text(op)
             if op_s == "&&":
                 if status == 0:
-                    status = self._exec_asdl_pipeline(pipeline)
+                    if i < (len(pipes) - 1):
+                        with self._suppress_errexit():
+                            status = self._exec_asdl_pipeline(pipeline)
+                    else:
+                        status = self._exec_asdl_pipeline(pipeline)
                     last_exec_idx = i
             elif op_s == "||":
                 if status != 0:
-                    status = self._exec_asdl_pipeline(pipeline)
+                    if i < (len(pipes) - 1):
+                        with self._suppress_errexit():
+                            status = self._exec_asdl_pipeline(pipeline)
+                    else:
+                        status = self._exec_asdl_pipeline(pipeline)
                     last_exec_idx = i
             if track_status:
                 self.last_status = status
                 if status != 0:
                     self.last_nonzero_status = status
                 self._trap_status_hint = status
-        self._errexit_item_exempt = status != 0 and last_exec_idx < (len(pipes) - 1)
+        neg_exempt = False
+        if status != 0 and 0 <= last_exec_idx < len(pipes):
+            last_pipe = pipes[last_exec_idx]
+            if isinstance(last_pipe, dict):
+                neg_exempt = bool(last_pipe.get("negated", False))
+        self._errexit_item_exempt = status != 0 and (
+            last_exec_idx < (len(pipes) - 1) or neg_exempt
+        )
         return status
 
     def _exec_asdl_pipeline(self, node: dict[str, Any]) -> int:
@@ -3159,7 +3178,11 @@ class Runtime:
         self._active_temp_fds = {fd for fd in self._active_temp_fds if fd in baseline}
 
     def _exec_and_or(self, node: AndOr, track_status: bool = True) -> int:
-        status = self._exec_pipeline(node.pipelines[0])
+        if len(node.pipelines) > 1:
+            with self._suppress_errexit():
+                status = self._exec_pipeline(node.pipelines[0])
+        else:
+            status = self._exec_pipeline(node.pipelines[0])
         last_exec_idx = 0
         if track_status:
             self.last_status = status
@@ -3169,7 +3192,11 @@ class Runtime:
         for i, (op, pipeline) in enumerate(zip(node.operators, node.pipelines[1:]), start=1):
             if op == "&&":
                 if status == 0:
-                    status = self._exec_pipeline(pipeline)
+                    if i < (len(node.pipelines) - 1):
+                        with self._suppress_errexit():
+                            status = self._exec_pipeline(pipeline)
+                    else:
+                        status = self._exec_pipeline(pipeline)
                     last_exec_idx = i
                     if track_status:
                         self.last_status = status
@@ -3178,14 +3205,23 @@ class Runtime:
                         self._trap_status_hint = status
             elif op == "||":
                 if status != 0:
-                    status = self._exec_pipeline(pipeline)
+                    if i < (len(node.pipelines) - 1):
+                        with self._suppress_errexit():
+                            status = self._exec_pipeline(pipeline)
+                    else:
+                        status = self._exec_pipeline(pipeline)
                     last_exec_idx = i
                     if track_status:
                         self.last_status = status
                         if status != 0:
                             self.last_nonzero_status = status
                         self._trap_status_hint = status
-        self._errexit_item_exempt = status != 0 and last_exec_idx < (len(node.pipelines) - 1)
+        neg_exempt = False
+        if status != 0 and 0 <= last_exec_idx < len(node.pipelines):
+            neg_exempt = bool(getattr(node.pipelines[last_exec_idx], "negate", False))
+        self._errexit_item_exempt = status != 0 and (
+            last_exec_idx < (len(node.pipelines) - 1) or neg_exempt
+        )
         return status
 
     def _exec_pipeline(self, node: Pipeline) -> int:

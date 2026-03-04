@@ -328,20 +328,34 @@ def _parse_startup_options(argv: List[str]) -> Tuple[Dict[str, bool], List[str],
             continue
         if (arg.startswith("-") or arg.startswith("+")) and len(arg) > 1 and not arg.startswith("--"):
             on = arg[0] == "-"
-            ok = True
-            for ch in arg[1:]:
-                if ch in ["c", "s", "o"]:
-                    ok = False
-                    break
+            chars = arg[1:]
+            if "o" in chars:
+                # Keep `-o/+o name` handling simple and explicit.
+                if len(chars) != 1:
+                    return changes, out, "illegal option grouping with -o/+o"
+                out.append(arg)
+                out.extend(argv[i + 1 :])
+                break
+            special = [ch for ch in chars if ch in {"c", "s"}]
+            if len(special) > 1:
+                return changes, out, "illegal option grouping with -c/-s"
+            for ch in chars:
+                if ch in {"c", "s"}:
+                    continue
                 if ch not in VALID_STARTUP_OPTION_LETTERS:
                     return changes, out, f"illegal option -- {ch}"
                 if ch == "l":
                     changes["__login__"] = on
                     continue
                 changes[ch] = on
-            if ok:
-                i += 1
-                continue
+            if special:
+                if not on:
+                    return changes, out, f"illegal option -- {special[0]}"
+                out.append(f"-{special[0]}")
+                out.extend(argv[i + 1 :])
+                break
+            i += 1
+            continue
         out.append(arg)
         out.extend(argv[i + 1 :])
         break

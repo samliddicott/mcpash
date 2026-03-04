@@ -1,13 +1,13 @@
 # Semantic Matrix Report
 
-Generated: 2026-03-04 09:34:58Z
+Generated: 2026-03-04 09:45:54Z
 
 Matrix source: `tests/compat/semantic_matrix.tsv`
 
 ## Summary
 
-- total rows: 17
-- pass: 9
+- total rows: 22
+- pass: 14
 - fail: 0
 - conflict: 0
 - info: 8
@@ -21,6 +21,11 @@ Matrix source: `tests/compat/semantic_matrix.tsv`
 | `set-e-negated-eval` | posix-required | `POSIX-2.8.1-errexit` | 0 | 0 | 0 | 0 | 0 | yes | yes | yes | pass | - |
 | `set-e-cmdsub-posix-abort` | posix-required | `POSIX-2.8.1-errexit` | 0 | 0 | 0 | 0 | 0 | yes | yes | yes | pass | - |
 | `set-e-cmdsub-bash-nonposix` | extension-bash | `BASH-set-e-cmdsub` | 0 | 0 | 0 | 0 | 0 | yes | yes | yes | pass | - |
+| `set-e-andor-subshell-left` | posix-required | `POSIX-2.8.1-errexit` | 0 | 0 | 0 | 0 | 0 | yes | yes | yes | pass | - |
+| `set-e-andor-func-subshell-left` | posix-required | `POSIX-2.8.1-errexit` | 0 | 0 | 0 | 0 | 0 | yes | yes | yes | pass | - |
+| `set-e-negated-brace-pipeline` | posix-required | `POSIX-2.8.1-errexit` | 0 | 0 | 0 | 0 | 0 | yes | yes | yes | pass | - |
+| `set-e-negation-true-continues` | posix-required | `POSIX-2.8.1-errexit` | 0 | 0 | 0 | 0 | 0 | yes | yes | yes | pass | - |
+| `startup-grouped-ce-posix` | posix-required | `POSIX-shell-invocation` | 0 | 0 | 0 | 0 | 0 | yes | yes | yes | pass | - |
 | `param-default-forms` | posix-required | `POSIX-2.6.2-parameter-expansion` | 0 | 0 | 0 | 0 | 0 | yes | yes | yes | pass | - |
 | `param-plus-forms` | posix-required | `POSIX-2.6.2-parameter-expansion` | 0 | 0 | 0 | 0 | 0 | yes | yes | yes | pass | - |
 | `param-assign-forms` | posix-required | `POSIX-2.6.2-parameter-expansion` | 0 | 0 | 0 | 0 | 0 | yes | yes | yes | pass | - |
