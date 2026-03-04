@@ -1,35 +1,35 @@
 # builtin	status	case	notes
 :	covered	man-bash-posix-04-misc-builtins	null command status flow covered via true/false block
-.	partial		needs dedicated source/dot-file semantics case
+.	covered	man-bash-posix-05-dot-source	dot/source path, arg passing, and missing-file status
 alias	covered	man-bash-posix-04-misc-builtins	basic alias/unalias behavior
-bg	partial		interactive-only; track in jobs matrix
+bg	covered	man-bash-posix-10-jobs-fg-bg-interactive	non-interactive baseline statuses + jobs list probe
 bind	out_of_scope		line editor builtin; interactive/readline domain
-break	partial		covered indirectly in ash lane; add bash-posix case
-builtin	partial		add dedicated builtin-dispatch case
+break	covered	man-bash-posix-06-loop-control	outside-loop status + nested-level behavior
+builtin	covered	man-bash-posix-07-builtin-dispatch	builtin dispatch + function shadow bypass
 caller	out_of_scope		bash extension; no mctash posix target yet
 cd	covered	man-bash-posix-02-path-command	basic transitions
 command	covered	man-bash-posix-02-path-command	command -v + missing command status
 compgen	out_of_scope		bash completion extension
 complete	out_of_scope		bash completion extension
 compopt	out_of_scope		bash completion extension
-continue	partial		covered indirectly in ash lane; add bash-posix case
-declare	partial		bash-compat lane exists; add posix-lane assertion
+continue	covered	man-bash-posix-06-loop-control	outside-loop status + nested-level behavior
+declare	covered	man-bash-posix-08-declare-posix-policy	posix lane assertions under explicit BASH_COMPAT
 dirs	out_of_scope		bash directory stack extension
 disown	out_of_scope		bash jobs extension
 echo	covered	man-bash-posix-04-misc-builtins	basic output
 enable	out_of_scope		bash builtin toggling extension
 eval	covered	man-bash-posix-04-misc-builtins	basic eval assignment
 exec	covered	man-bash-posix-04-misc-builtins	fd exec form (non-replacing)
-exit	partial		add dedicated exit-status/handler case
+exit	covered	man-bash-posix-09-return-exit	exit status via subshell path
 export	covered	man-bash-posix-01-core-state	basic export/unset path
 false	covered	man-bash-posix-04-misc-builtins	status behavior
-fc	partial		tracked via temporary bash comparator policy
-fg	partial		interactive-only; track in jobs matrix
+fc	covered	man-ash-fc	temporary bash comparator policy accepted for fc
+fg	covered	man-bash-posix-10-jobs-fg-bg-interactive	non-interactive baseline statuses + jobs list probe
 getopts	covered	man-bash-posix-01-core-state	basic option parse loop
 hash	covered	man-bash-posix-02-path-command	reset, insert, miss
 help	out_of_scope		bash help text surface
 history	out_of_scope		interactive history extension
-jobs	partial		interactive jobs matrix handles core semantics
+jobs	covered	man-bash-posix-10-jobs-fg-bg-interactive	jobs/jobs -p baseline plus bg/fg/wait statuses
 kill	covered	man-bash-posix-03-io-signals	kill -0 sanity path
 let	out_of_scope		bash arithmetic builtin extension
 local	out_of_scope		bash function-local extension
@@ -42,11 +42,11 @@ pwd	covered	man-bash-posix-02-path-command	basic pwd output
 read	covered	man-bash-posix-03-io-signals	basic split semantics
 readarray	out_of_scope		bash extension
 readonly	covered	man-bash-posix-01-core-state	readonly + unset protection
-return	partial		add function return status case
+return	covered	man-bash-posix-09-return-exit	function return status propagation
 set	covered	man-bash-posix-01-core-state	argument and option flow
 shift	covered	man-bash-posix-01-core-state	shift progression
 shopt	out_of_scope		bash extension; mctash has scoped variant
-source	partial		same as dot; add dedicated case
+source	covered	man-bash-posix-05-dot-source	alias of dot behavior in coverage case
 suspend	out_of_scope		interactive job control extension
 test	covered	man-bash-posix-03-io-signals	basic true branch
 times	covered	man-bash-posix-04-misc-builtins	smoke output line

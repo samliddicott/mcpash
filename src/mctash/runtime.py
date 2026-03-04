@@ -582,6 +582,7 @@ class Runtime:
         "true",
         "false",
         "command",
+        "builtin",
         "exec",
         "break",
         "continue",
@@ -707,7 +708,11 @@ class Runtime:
 
     def _bash_feature_enabled(self, feature: str) -> bool:
         # Policy: Bash-compat features are enabled only when BASH_COMPAT is set.
-        if self._bash_compat_level is None:
+        level = self._bash_compat_level
+        if level is None:
+            level = self._parse_bash_compat_level(self.env.get("BASH_COMPAT", ""))
+            self._bash_compat_level = level
+        if level is None:
             return False
         if feature == "declare_array":
             return True
@@ -3997,6 +4002,8 @@ class Runtime:
             return 1
         if name == "command":
             return self._run_command_builtin(argv[1:])
+        if name == "builtin":
+            return self._run_builtin_builtin(argv[1:])
         if name == "exec":
             if len(argv) <= 1:
                 return 0
@@ -8338,6 +8345,26 @@ class Runtime:
         if search_default_path:
             env["PATH"] = "/usr/bin:/bin"
         return self._run_external(cmd, env, [])
+
+    def _run_builtin_builtin(self, args: List[str]) -> int:
+        if not args:
+            return 1
+        i = 0
+        if args and args[0] == "--":
+            i = 1
+        cmd = args[i:]
+        while cmd and cmd[0] == "builtin":
+            cmd = cmd[1:]
+        if not cmd:
+            return 1
+        name = cmd[0]
+        if name not in self.BUILTINS:
+            self._report_error(f"builtin: {name}: not a shell builtin", line=self.current_line)
+            return 1
+        try:
+            return self._run_builtin(name, [name] + cmd[1:])
+        except SystemExit as e:
+            return int(e.code) if e.code is not None else 0
 
     def _run_trap(self, args: List[str]) -> int:
         if not args:

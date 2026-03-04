@@ -1,37 +1,32 @@
 # Bash POSIX Man-Page Matrix
 
-Generated: 2026-03-04 07:04:11Z
+Generated: 2026-03-04 07:10:06Z
 
 ## Summary
 
-- covered builtins: 28
-- partial builtins: 12
+- covered builtins: 40
+- partial builtins: 0
 - out-of-scope builtins: 20
-- executed case files: 4
+- executed case files: 11
 - matrix exit code: 0
 - mismatch lines detected: 0
 
 ## Executed Cases
 
+- man-ash-fc.sh
 - man-bash-posix-01-core-state.sh
 - man-bash-posix-02-path-command.sh
 - man-bash-posix-03-io-signals.sh
 - man-bash-posix-04-misc-builtins.sh
+- man-bash-posix-05-dot-source.sh
+- man-bash-posix-06-loop-control.sh
+- man-bash-posix-07-builtin-dispatch.sh
+- man-bash-posix-08-declare-posix-policy.sh
+- man-bash-posix-09-return-exit.sh
+- man-bash-posix-10-jobs-fg-bg-interactive.sh
 
 ## Partial/Uncovered Builtins
 
-- .: needs dedicated source/dot-file semantics case
-- bg: interactive-only; track in jobs matrix
-- break: covered indirectly in ash lane; add bash-posix case
-- builtin: add dedicated builtin-dispatch case
-- continue: covered indirectly in ash lane; add bash-posix case
-- declare: bash-compat lane exists; add posix-lane assertion
-- exit: add dedicated exit-status/handler case
-- fc: tracked via temporary bash comparator policy
-- fg: interactive-only; track in jobs matrix
-- jobs: interactive jobs matrix handles core semantics
-- return: add function return status case
-- source: same as dot; add dedicated case
 
 ## Out of Scope for POSIX Parity Lane
 
