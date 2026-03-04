@@ -456,6 +456,14 @@ class Parser:
                 continue
             break
         tok = self._peek()
+        tok1 = self._peek_n(1)
+        if (
+            tok
+            and tok1
+            and ((tok.kind == "OP" and tok.value == "(") or (self._is_word(tok) and tok.value == "("))
+            and ((tok1.kind == "OP" and tok1.value == "(") or (self._is_word(tok1) and tok1.value == "("))
+        ):
+            return self.parse_arith_command()
         if self._is_word(tok) and tok.value == "if":
             command, lst_command = self.parse_if()
             return self._maybe_wrap_redirects(command, lst_command)
@@ -612,6 +620,51 @@ class Parser:
         if not argv and assignments:
             return simple_cmd, LstShAssignmentCommand(assignments=lst_assignments, redirects=lst_redirects)
         return simple_cmd, lst_simple_cmd
+
+    def parse_arith_command(self) -> tuple[SimpleCommand, LstSimpleCommand]:
+        # Parse arithmetic command form: (( expr ))
+        self._expect_group_token("(")
+        self._expect_group_token("(")
+        parts: List[str] = []
+        depth = 1
+        while True:
+            tok = self._peek()
+            if tok is None:
+                raise ParseError("syntax error: expected '))'")
+            tok1 = self._peek_n(1)
+            if (
+                tok1
+                and ((tok.kind == "OP" and tok.value == "(") or (self._is_word(tok) and tok.value == "("))
+                and ((tok1.kind == "OP" and tok1.value == "(") or (self._is_word(tok1) and tok1.value == "("))
+            ):
+                depth += 1
+                parts.append("((")
+                self._advance()
+                self._advance()
+                continue
+            if (
+                tok1
+                and ((tok.kind == "OP" and tok.value == ")") or (self._is_word(tok) and tok.value == ")"))
+                and ((tok1.kind == "OP" and tok1.value == ")") or (self._is_word(tok1) and tok1.value == ")"))
+            ):
+                depth -= 1
+                self._advance()
+                self._advance()
+                if depth == 0:
+                    break
+                parts.append("))")
+                continue
+            self._advance()
+            parts.append(tok.value)
+        # Preserve arithmetic token adjacency so `(( x == 4 ))` becomes `x==4`
+        # and is passed to `let` as a single expression argument.
+        expr = "".join(parts)
+        argv = [Word("let"), Word(expr)]
+        lst_argv = [self._resolve_word(parse_word("let")), self._resolve_word(parse_word(expr))]
+        return (
+            SimpleCommand(argv=argv, assignments=[], redirects=[]),
+            LstSimpleCommand(argv=lst_argv, assignments=[], redirects=[]),
+        )
 
     def _parse_python_block_command(
         self,

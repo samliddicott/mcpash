@@ -96,6 +96,18 @@ run_case \
   $'s:1:\n'
 
 run_case \
+  "errexit_andor_nonfinal_exempt" \
+  'set -e; false && echo bad; echo ok' \
+  0 \
+  $'ok\n'
+
+run_case \
+  "errexit_negated_eval_exempt" \
+  'set -e; ! eval false; echo ok' \
+  0 \
+  $'ok\n'
+
+run_case \
   "assign_plus_equal" \
   'x=a; x+=b; echo $x' \
   0 \

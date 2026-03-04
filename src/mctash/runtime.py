@@ -636,6 +636,7 @@ class Runtime:
         self._trap_entry_status: int | None = None
         self.c_string_mode: bool = False
         self._trap_status_hint: int = 0
+        self._errexit_item_exempt: bool = False
         self._next_job_id: int = 1
         self._bg_jobs: Dict[int, threading.Thread] = {}
         self._bg_status: Dict[int, int] = {}
@@ -936,6 +937,11 @@ class Runtime:
         except ReturnFromFunction:
             return status
 
+    def _take_errexit_item_exempt(self) -> bool:
+        v = self._errexit_item_exempt
+        self._errexit_item_exempt = False
+        return v
+
     def _exec_list(self, node: ListNode) -> int:
         status = 0
         for item in node.items:
@@ -945,13 +951,19 @@ class Runtime:
                 self._trap_status_hint = status
                 continue
             status = self._exec_list_item(item)
+            errexit_item_exempt = self._take_errexit_item_exempt()
             self.last_status = status
             if status != 0:
                 self.last_nonzero_status = status
             self._trap_status_hint = status
             if not getattr(item, "background", False):
                 self._run_pending_traps()
-            if status != 0 and self.options.get("e", False) and self._errexit_suppressed == 0:
+            if (
+                status != 0
+                and self.options.get("e", False)
+                and self._errexit_suppressed == 0
+                and not errexit_item_exempt
+            ):
                 raise SystemExit(status)
         self._run_pending_traps()
         return status
@@ -1135,31 +1147,46 @@ class Runtime:
         if not pipes:
             return 0
         status = self._exec_asdl_pipeline(pipes[0])
+        last_exec_idx = 0
         if track_status:
             self.last_status = status
             if status != 0:
                 self.last_nonzero_status = status
             self._trap_status_hint = status
         ops = node.get("ops") or []
-        for op, pipeline in zip(ops, pipes[1:]):
+        for i, (op, pipeline) in enumerate(zip(ops, pipes[1:]), start=1):
             op_s = self._asdl_token_text(op)
             if op_s == "&&":
                 if status == 0:
                     status = self._exec_asdl_pipeline(pipeline)
+                    last_exec_idx = i
             elif op_s == "||":
                 if status != 0:
                     status = self._exec_asdl_pipeline(pipeline)
+                    last_exec_idx = i
             if track_status:
                 self.last_status = status
                 if status != 0:
                     self.last_nonzero_status = status
                 self._trap_status_hint = status
+        self._errexit_item_exempt = status != 0 and last_exec_idx < (len(pipes) - 1)
         return status
 
     def _exec_asdl_pipeline(self, node: dict[str, Any]) -> int:
         commands = node.get("children") or []
         negate = bool(node.get("negated", False))
-        if not commands:
+        if negate:
+            with self._suppress_errexit():
+                if not commands:
+                    status = 0
+                elif len(commands) == 1:
+                    status = self._exec_asdl_command(commands[0])
+                else:
+                    if self._asdl_pipeline_can_run_external(commands):
+                        status = self._exec_asdl_pipeline_external(commands)
+                    else:
+                        status = self._exec_asdl_pipeline_inprocess(node)
+        elif not commands:
             status = 0
         elif len(commands) == 1:
             status = self._exec_asdl_command(commands[0])
@@ -2148,6 +2175,7 @@ class Runtime:
         status = 0
         for child in children:
             status = self._exec_asdl_list_item(child)
+            errexit_item_exempt = self._take_errexit_item_exempt()
             self.last_status = status
             if status != 0:
                 self.last_nonzero_status = status
@@ -2159,7 +2187,12 @@ class Runtime:
             )
             if not is_bg:
                 self._run_pending_traps()
-            if status != 0 and self.options.get("e", False) and self._errexit_suppressed == 0:
+            if (
+                status != 0
+                and self.options.get("e", False)
+                and self._errexit_suppressed == 0
+                and not errexit_item_exempt
+            ):
                 raise SystemExit(status)
         self._run_pending_traps()
         return status
@@ -3127,15 +3160,17 @@ class Runtime:
 
     def _exec_and_or(self, node: AndOr, track_status: bool = True) -> int:
         status = self._exec_pipeline(node.pipelines[0])
+        last_exec_idx = 0
         if track_status:
             self.last_status = status
             if status != 0:
                 self.last_nonzero_status = status
             self._trap_status_hint = status
-        for op, pipeline in zip(node.operators, node.pipelines[1:]):
+        for i, (op, pipeline) in enumerate(zip(node.operators, node.pipelines[1:]), start=1):
             if op == "&&":
                 if status == 0:
                     status = self._exec_pipeline(pipeline)
+                    last_exec_idx = i
                     if track_status:
                         self.last_status = status
                         if status != 0:
@@ -3144,25 +3179,38 @@ class Runtime:
             elif op == "||":
                 if status != 0:
                     status = self._exec_pipeline(pipeline)
+                    last_exec_idx = i
                     if track_status:
                         self.last_status = status
                         if status != 0:
                             self.last_nonzero_status = status
                         self._trap_status_hint = status
+        self._errexit_item_exempt = status != 0 and last_exec_idx < (len(node.pipelines) - 1)
         return status
 
     def _exec_pipeline(self, node: Pipeline) -> int:
-        if len(node.commands) == 1:
+        if node.negate:
+            with self._suppress_errexit():
+                if len(node.commands) == 1:
+                    status = self._exec_command(node.commands[0])
+                    return 0 if status != 0 else 1
+                if isinstance(sys.stdin, io.StringIO):
+                    status = self._exec_pipeline_inprocess(node)
+                    return 0 if status != 0 else 1
+                if any(self._pipeline_needs_shell(cmd) for cmd in node.commands):
+                    status = self._exec_pipeline_inprocess(node)
+                    return 0 if status != 0 else 1
+        elif len(node.commands) == 1:
             status = self._exec_command(node.commands[0])
-            return 0 if (node.negate and status != 0) else (1 if node.negate and status == 0 else status)
+            return status
 
         if isinstance(sys.stdin, io.StringIO):
             status = self._exec_pipeline_inprocess(node)
-            return 0 if (node.negate and status != 0) else (1 if node.negate and status == 0 else status)
+            return status
 
         if any(self._pipeline_needs_shell(cmd) for cmd in node.commands):
             status = self._exec_pipeline_inprocess(node)
-            return 0 if (node.negate and status != 0) else (1 if node.negate and status == 0 else status)
+            return status
 
         procs: List[subprocess.Popen] = []
         statuses: List[int] = []
@@ -4141,13 +4189,19 @@ class Runtime:
                         raise ParseError("internal parse error: missing LST list item")
                     asdl_item = lst_list_item_to_asdl(parser_impl.last_lst_item, strict=True)
                     status = self._exec_asdl_list_item(asdl_item)
+                    errexit_item_exempt = self._take_errexit_item_exempt()
                     self.last_status = status
                     if status != 0:
                         self.last_nonzero_status = status
                     self._trap_status_hint = status
                     if not getattr(node, "background", False):
                         self._run_pending_traps()
-                    if status != 0 and self.options.get("e", False) and self._errexit_suppressed == 0:
+                    if (
+                        status != 0
+                        and self.options.get("e", False)
+                        and self._errexit_suppressed == 0
+                        and not errexit_item_exempt
+                    ):
                         raise SystemExit(status)
         except ReturnFromFunction as e:
             status = e.code
@@ -8539,13 +8593,19 @@ class Runtime:
                     raise ParseError("internal parse error: missing LST list item")
                 asdl_item = lst_list_item_to_asdl(parser_impl.last_lst_item, strict=True)
                 status = self._exec_asdl_list_item(asdl_item)
+                errexit_item_exempt = self._take_errexit_item_exempt()
                 self.last_status = status
                 if status != 0:
                     self.last_nonzero_status = status
                 self._trap_status_hint = status
                 if not getattr(node, "background", False):
                     self._run_pending_traps()
-                if status != 0 and self.options.get("e", False) and self._errexit_suppressed == 0:
+                if (
+                    status != 0
+                    and self.options.get("e", False)
+                    and self._errexit_suppressed == 0
+                    and not errexit_item_exempt
+                ):
                     raise SystemExit(status)
         except ReturnFromFunction as e:
             status = e.code

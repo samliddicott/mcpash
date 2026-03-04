@@ -105,12 +105,13 @@ def main(argv: List[str] | None = None) -> int:
                     raise ParseError("internal parse error: missing LST list item")
                 asdl_item = lst_list_item_to_asdl(parser_impl.last_lst_item, strict=True)
                 rt.last_status = rt._exec_asdl_list_item(asdl_item)
+                errexit_item_exempt = rt._take_errexit_item_exempt()
                 if rt.last_status != 0:
                     rt.last_nonzero_status = rt.last_status
                 rt._trap_status_hint = rt.last_status
                 if not getattr(item, "background", False):
                     rt._run_pending_traps()
-                if rt.last_status != 0 and rt.options.get("e", False):
+                if rt.last_status != 0 and rt.options.get("e", False) and not errexit_item_exempt:
                     raise SystemExit(rt.last_status)
             return rt._run_exit_trap(rt.last_status)
         except ParseError as e:
@@ -205,12 +206,13 @@ def main(argv: List[str] | None = None) -> int:
                 raise ParseError("internal parse error: missing LST list item")
             asdl_item = lst_list_item_to_asdl(parser_impl.last_lst_item, strict=True)
             rt.last_status = rt._exec_asdl_list_item(asdl_item)
+            errexit_item_exempt = rt._take_errexit_item_exempt()
             if rt.last_status != 0:
                 rt.last_nonzero_status = rt.last_status
             rt._trap_status_hint = rt.last_status
             if not getattr(item, "background", False):
                 rt._run_pending_traps()
-            if rt.last_status != 0 and rt.options.get("e", False):
+            if rt.last_status != 0 and rt.options.get("e", False) and not errexit_item_exempt:
                 raise SystemExit(rt.last_status)
         return rt._run_exit_trap(rt.last_status)
     except ParseError as e:
