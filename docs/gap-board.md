@@ -42,7 +42,7 @@ Status legend:
 | Area | Status | What is missing |
 |---|---|---|
 | `read` option matrix across ash variants | covered | Ash-family and bash comparator coverage is now centralized in `tests/diff/run_read_matrix.sh` (`make read-matrix`), including `man-ash-read-options.sh`, `man-ash-read-ifs-matrix.sh`, `man-ash-read-option-probe.sh`, and `bash-read-options-core.sh`. |
-| `fc` editor/history parity | partial | Added `man-ash-fc-editor-env.sh`, `man-ash-fc-ranges.sh`, and core `man-ash-fc.sh`; richer edit/re-exec flows still remain.
+| `fc` editor/history parity | covered | `tests/diff/cases/man-ash-fc.sh`, `tests/diff/cases/man-ash-fc-editor-env.sh`, `tests/diff/cases/man-ash-fc-ranges.sh`, `tests/diff/cases/man-ash-fc-edit-reexec.sh` now cover list/reverse/range, editor precedence, and deterministic edit/re-exec (`sed -i`) flows.
 | `ulimit` full flag set | covered | Query/set/error/listing coverage now includes `man-ash-ulimit-flags.sh`, `man-ash-ulimit-set.sh`, `man-ash-ulimit-errors.sh`, `man-ash-ulimit-soft-hard.sh`, and `man-ash-ulimit-all.sh` for this ash comparator surface. |
 | `trap` signal matrix | covered | Delivery/matrix coverage includes `man-ash-trap-delivery.sh`, `man-ash-trap-signal-matrix.sh`, plus strict compatibility gates (`STRICT=1 make trap-noninteractive-matrix`, `STRICT=1 make trap-interactive-matrix`) and variant reporting (`make trap-variant-matrix`). Coverage is scoped to declared Linux comparator/signal set. |
 | `fc` comparator availability | covered | Policy accepted: when comparator ash lacks `fc`, differential parity uses temporary bash comparator (`man-ash-fc*.sh`) as documented in `docs/fc-comparator-blocker.md`. |
@@ -54,12 +54,12 @@ Reference summary source: `docs/posix-shall-trace.md`.
 
 | POSIX Area | Status | Evidence |
 |---|---|---|
-| 2.6 Word Expansions | partial | `docs/posix-shall-trace.md` + BusyBox/Oil corpus references.
+| 2.6 Word Expansions | partial | Narrowed to pathname-expansion full-space proof row in `docs/posix-shall-trace.md`; core expansion/word-operator rows are now covered with differential matrices (`man-ash-var-ops*.sh`, `man-ash-word-nesting*.sh`).
 | 2.7 Redirection | covered | `docs/posix-shall-trace.md` + `tests/diff/cases/man-ash-redir.sh`.
 | 2.8 Exit Status and Errors | covered | `docs/posix-shall-trace.md` + differential command-status cases.
-| 2.9 Shell Commands | partial | Differential builtin cases + BusyBox/Oil references, but not full production-by-production closure.
-| 2.10 Shell Grammar | partial | `docs/posix-shall-trace.md`, `docs/grammar-production-checklist.md`, `tests/diff/cases/man-ash-prefix-suffix.sh`, `tests/diff/cases/man-ash-grammar-negative.sh`, `tests/diff/cases/man-ash-grammar-reserved.sh`.
-| 2.11 Signals/Traps | partial | `man-ash-trap` plus signal corpus; full matrix still open.
+| 2.9 Shell Commands | partial | Narrowed to special-builtin full option-surface parity row in `docs/posix-shall-trace.md`; command grammar/control-flow rows are verified.
+| 2.10 Shell Grammar | covered | `docs/posix-shall-trace.md`, `docs/grammar-production-checklist.md`, `tests/diff/cases/man-ash-prefix-suffix.sh`, `tests/diff/cases/man-ash-grammar-negative.sh`, `tests/diff/cases/man-ash-grammar-reserved.sh`.
+| 2.11 Signals/Traps | covered | `man-ash-trap*` differential corpus plus strict non-interactive and PTY-interactive matrices (`STRICT=1 make trap-noninteractive-matrix`, `STRICT=1 make trap-interactive-matrix`) for declared Linux comparator/signal scope.
 
 ## Bash-Compat Lane (Differential vs bash baseline)
 
@@ -75,7 +75,7 @@ Reference summary source: `docs/posix-shall-trace.md`.
 |---|---|---|
 | Requirement-level trace completeness (all "shall" rows) | partial | Continue adding explicit case-id links for every remaining row in `docs/posix-shall-trace.md`.
 | Grammar production closure | partial | Closure-order artifacts are completed; remaining work is deeper word-level/operator combinatorics and diagnostic text parity.
-| Threaded-runtime parity checks | partial | Core cwd/fd/var isolation cases are covered (`man-ash-thread-cwd.sh`, `man-ash-thread-fd.sh`, `man-ash-thread-vars.sh`, `man-ash-thread-pipeline-cwd.sh`, `man-ash-thread-pipeline-fd.sh`) plus fallback-diag/process-subst regressions (`thread_unshare_fallback_diag`, `thread_unshare_forced_fail_diag`, `process_subst_*`, `thread_combined_bg_pipeline_process_subst`, `thread_multi_job_concurrency_isolation`, `thread_high_load_concurrency_isolation`, `monitor_mode_noninteractive_diag`, `monitor_mode_interactive_pty`, `monitor_mode_interactive_jobs_fg` in `tests/regressions/run.sh`); expand to long-running mixed workloads and deeper interactive monitor semantics.
+| Threaded-runtime parity checks | covered | Core cwd/fd/var isolation cases are covered (`man-ash-thread-cwd.sh`, `man-ash-thread-fd.sh`, `man-ash-thread-vars.sh`, `man-ash-thread-pipeline-cwd.sh`, `man-ash-thread-pipeline-fd.sh`) plus fallback-diag/process-subst regressions (`thread_unshare_fallback_diag`, `thread_unshare_forced_fail_diag`, `process_subst_*`, `thread_combined_bg_pipeline_process_subst`, `thread_multi_job_concurrency_isolation`, `thread_high_load_concurrency_isolation`, `thread_long_running_mixed_stress`, `monitor_mode_noninteractive_diag`, `monitor_mode_interactive_pty`, `monitor_mode_interactive_jobs_fg` in `tests/regressions/run.sh`) for declared Linux comparator scope.
 
 ## Sentinel-To-Structured Expansion Transition
 
