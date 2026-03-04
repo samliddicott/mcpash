@@ -6498,7 +6498,8 @@ class Runtime:
                         raise RuntimeError(
                             self._format_error("syntax error: bad substitution", line=self.current_line)
                         )
-                    out.append(self._expand_braced_param(name, op, arg, False))
+                    val = self._expand_braced_param(name, op, arg, False)
+                    out.append(self._scalarize_assignment_expansion(val))
                     i = end + 1
                     continue
                 if i + 1 < len(text):
