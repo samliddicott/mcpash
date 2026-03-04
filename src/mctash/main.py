@@ -120,6 +120,8 @@ def main(argv: List[str] | None = None) -> int:
                 print(f"{script_name or 'mctash -c'}: line {line}: {text}", file=sys.stderr)
             else:
                 print(f"parse error: {text}", file=sys.stderr)
+            if "bad substitution" in text:
+                return 127 if os.environ.get("MCTASH_DIAG_STYLE", "").strip().lower() == "bash" else 2
             return 2
         except RuntimeError as e:
             msg = str(e)
@@ -225,6 +227,8 @@ def main(argv: List[str] | None = None) -> int:
                 print(f"{args.script}: {text}", file=sys.stderr)
         else:
             print(f"parse error: {text}", file=sys.stderr)
+        if "bad substitution" in text:
+            return 127 if os.environ.get("MCTASH_DIAG_STYLE", "").strip().lower() == "bash" else 2
         return 2
     except AsdlMappingError as e:
         print(f"asdl error: {e}", file=sys.stderr)

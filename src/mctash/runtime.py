@@ -901,7 +901,10 @@ class Runtime:
 
     def _runtime_error_status(self, msg: str) -> int:
         if "bad substitution" in msg or "unbound variable:" in msg:
-            return 2
+            # Bash-style diagnostics report bad substitution as command-not-found
+            # class status (127), while ash-style keeps traditional parse/runtime
+            # failure status (2). Preserve mode-specific parity.
+            return 127 if self._diag.style == "bash" else 2
         return 1
 
     def _run_pending_traps(self) -> None:
@@ -1940,7 +1943,7 @@ class Runtime:
             msg = str(e)
             print(msg, file=sys.stderr)
             if "bad substitution" in msg or "unbound variable:" in msg:
-                raise SystemExit(2)
+                raise SystemExit(self._runtime_error_status(msg))
             raise SystemExit(1)
         except CommandSubstFailure as e:
             return e.code
@@ -3738,10 +3741,8 @@ class Runtime:
             except RuntimeError as e:
                 msg = str(e)
                 print(msg, file=sys.stderr)
-                if "bad substitution" in msg:
-                    raise SystemExit(2)
-                if "unbound variable:" in msg:
-                    raise SystemExit(2)
+                if "bad substitution" in msg or "unbound variable:" in msg:
+                    raise SystemExit(self._runtime_error_status(msg))
                 raise SystemExit(1)
             except CommandSubstFailure as e:
                 return e.code

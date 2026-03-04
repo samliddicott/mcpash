@@ -1,6 +1,6 @@
 # Parameter Brace/Quote Edge Matrix
 
-Generated: 2026-03-04 13:39:54Z
+Generated: 2026-03-04 14:17:38Z
 Comparator: `bash --posix`
 Target: `mctash --posix`
 
@@ -26,7 +26,7 @@ This is a focused parser/expansion edge corpus for `${...}` with mixed quote/bra
 | `E014` | braced op with escaped right brace | `0` | `0` | `<}z>\n` | `<}z>\n` | `` | `` | ok |
 | `E015` | double-quoted braced op with escaped right brace | `0` | `0` | `<}z>\n` | `<}z>\n` | `` | `` | ok |
 | `E016` | malformed: missing close brace | `2` | `2` | `` | `` | `bash: -c: line 1: unexpected EOF while looking for matching `"'\nbash: -c: line 2: syntax error: unexpected end of fi...` | `mctash -c: line 1: syntax error: unterminated quoted string\n` | mismatch |
-| `E017` | malformed: bad parameter name | `127` | `2` | `` | `` | `bash: line 1: ${+x}: bad substitution\n` | `syntax error: bad substitution\n` | mismatch |
+| `E017` | malformed: bad parameter name | `127` | `127` | `` | `` | `bash: line 1: ${+x}: bad substitution\n` | `syntax error: bad substitution\n` | mismatch |
 | `E018` | malformed: unterminated quote in braced op word | `0` | `0` | `"abc\n` | `"abc\n` | `` | `` | ok |
 
 ## Notes
