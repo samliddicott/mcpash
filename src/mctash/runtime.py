@@ -860,14 +860,21 @@ class Runtime:
             prefix = self.script_name
         else:
             return msg
-        if context:
-            prefix = f"{prefix}: {context}"
         if line is not None:
             if self._line_offset:
                 line += self._line_offset
-            if self.c_string_mode and line > 0 and len(self.source_stack) <= 1:
+            if self._diag.style != "bash" and self.c_string_mode and line > 0 and len(self.source_stack) <= 1:
                 line = line - 1
-            prefix = f"{prefix}: line {line}"
+        if self._diag.style == "bash":
+            if line is not None:
+                prefix = f"{prefix}: line {line}"
+            if context:
+                prefix = f"{prefix}: {context}"
+        else:
+            if context:
+                prefix = f"{prefix}: {context}"
+            if line is not None:
+                prefix = f"{prefix}: line {line}"
         return f"{prefix}: {msg}"
 
     def _report_error(self, msg: str, line: int | None = None, context: str | None = None) -> None:
@@ -6873,7 +6880,7 @@ class Runtime:
         status = 0
         for name in args[idx:]:
             if mode_vars and name in self.readonly_vars:
-                msg = self._diag_msg(DiagnosticKey.READONLY_VAR, name=name)
+                msg = self._diag_msg(DiagnosticKey.READONLY_UNSET, name=name)
                 self._report_error(msg, line=self.current_line, context="unset")
                 if not self.options.get("i", False):
                     raise SystemExit(2)

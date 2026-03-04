@@ -1050,6 +1050,26 @@ grep -Eq '^mctash -c: line 1: syntax error:' "$tmpdir/err" || fail "diag_expecte
 grep -Fq 'expecting "done"' "$tmpdir/err" || fail "diag_expected_done_eof: expected hint about done"
 printf '[PASS] diag_expected_done_eof\n'
 
+set +e
+PYTHONPATH="$ROOT/src" MCTASH_MODE=bash python3 -m mctash -c 'no_such_cmd' >"$tmpdir/out" 2>"$tmpdir/err"
+status=$?
+set -e
+[[ "$status" -eq 127 ]] || fail "diag_bash_mode_command_not_found: expected status 127, got $status"
+grep -Fq 'no_such_cmd: command not found' "$tmpdir/err" || fail "diag_bash_mode_command_not_found: expected bash-style command-not-found text"
+printf '[PASS] diag_bash_mode_command_not_found\n'
+
+cat >"$tmpdir/diag_readonly_unset.sh" <<'EOF'
+readonly R=1
+unset R
+EOF
+set +e
+PYTHONPATH="$ROOT/src" MCTASH_MODE=bash python3 -m mctash "$tmpdir/diag_readonly_unset.sh" >"$tmpdir/out" 2>"$tmpdir/err"
+status=$?
+set -e
+[[ "$status" -eq 2 ]] || fail "diag_bash_mode_readonly_unset: expected status 2, got $status"
+grep -Eq '^.*/diag_readonly_unset\.sh: line [0-9]+: unset: R: cannot unset: readonly variable$' "$tmpdir/err" || fail "diag_bash_mode_readonly_unset: expected bash-style readonly unset diagnostic"
+printf '[PASS] diag_bash_mode_readonly_unset\n'
+
 printf '[PASS] diagnostic format regressions\n'
 
 cat >"$tmpdir/asdl_do_group.sh" <<'EOF'
