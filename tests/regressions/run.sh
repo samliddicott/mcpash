@@ -84,6 +84,18 @@ run_case \
   $'s:4\n'
 
 run_case \
+  "errexit_not_leaked_from_subshell" \
+  'set +e; (set -e; false); echo after:$?' \
+  0 \
+  $'after:1\n'
+
+run_case \
+  "errexit_not_inherited_by_command_subst" \
+  'set +e; out=$(set -e; false; echo no); echo s:$?:$out' \
+  0 \
+  $'s:1:\n'
+
+run_case \
   "assign_plus_equal" \
   'x=a; x+=b; echo $x' \
   0 \
@@ -1066,7 +1078,7 @@ set +e
 PYTHONPATH="$ROOT/src" MCTASH_MODE=bash python3 -m mctash "$tmpdir/diag_readonly_unset.sh" >"$tmpdir/out" 2>"$tmpdir/err"
 status=$?
 set -e
-[[ "$status" -eq 2 ]] || fail "diag_bash_mode_readonly_unset: expected status 2, got $status"
+[[ "$status" -eq 1 ]] || fail "diag_bash_mode_readonly_unset: expected status 1, got $status"
 grep -Eq '^.*/diag_readonly_unset\.sh: line [0-9]+: unset: R: cannot unset: readonly variable$' "$tmpdir/err" || fail "diag_bash_mode_readonly_unset: expected bash-style readonly unset diagnostic"
 printf '[PASS] diag_bash_mode_readonly_unset\n'
 

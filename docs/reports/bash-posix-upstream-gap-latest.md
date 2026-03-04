@@ -1,6 +1,6 @@
 # Bash POSIX Upstream Gap Report
 
-Generated: 2026-03-04 07:03:14Z
+Generated: 2026-03-04 07:21:22Z
 Comparator baseline: GNU bash `--posix` (baserock mirror corpus, `bash-5.1-testing`)
 Target: `mctash --posix`
 
@@ -24,9 +24,9 @@ Target: `mctash --posix`
 | `posixexp2.tests` | core | 0 | 2 | mismatch | mismatch |
 | `posixpat.tests` | core | 0 | 0 | mismatch | ok |
 | `posixpipe.tests` | core | 0 | 2 | mismatch | mismatch |
-| `ifs-posix.tests` | core | 0 | 124 | mismatch | mismatch |
+| `ifs-posix.tests` | core | 0 | 137 | mismatch | mismatch |
 | `comsub-posix.tests` | core | 0 | 2 | mismatch | mismatch |
-| `set-e.tests` | core | 0 | 1 | mismatch | ok |
+| `set-e.tests` | core | 0 | 124 | mismatch | mismatch |
 | `builtins.tests` | info | 2 | 1 | mismatch | mismatch |
 
 ## Artifacts

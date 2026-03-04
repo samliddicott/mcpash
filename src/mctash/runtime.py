@@ -1647,6 +1647,7 @@ class Runtime:
         self._set_subshell_depth(self._get_subshell_depth() + 1)
         saved_env = dict(self.env)
         self.env = dict(self.env)
+        saved_options = dict(self.options)
         saved_local = [dict(s) for s in self.local_stack]
         saved_positional = list(self.positional)
         saved_cwd = os.getcwd()
@@ -1689,6 +1690,7 @@ class Runtime:
         finally:
             self._set_subshell_depth(self._get_subshell_depth() - 1)
             self.env = saved_env
+            self.options = saved_options
             self.local_stack = saved_local
             self.positional = saved_positional
             self.traps = saved_traps
@@ -3867,6 +3869,7 @@ class Runtime:
         self._set_subshell_depth(self._get_subshell_depth() + 1)
         saved_env = dict(self.env)
         self.env = dict(self.env)
+        saved_options = dict(self.options)
         saved_local = [dict(s) for s in self.local_stack]
         saved_positional = list(self.positional)
         saved_cwd = os.getcwd()
@@ -3911,6 +3914,7 @@ class Runtime:
         finally:
             self._set_subshell_depth(self._get_subshell_depth() - 1)
             self.env = saved_env
+            self.options = saved_options
             self.local_stack = saved_local
             self.positional = saved_positional
             self.traps = saved_traps
@@ -8587,8 +8591,12 @@ class Runtime:
         sys.stdout = py_stdout
         saved_line = self.current_line
         saved_offset = self._line_offset
+        saved_options = dict(self.options)
         base = (self.current_line or 1) + line_bias
         self._line_offset = saved_offset + (base - 1)
+        # Match POSIX/bash behavior: command substitution does not inherit
+        # errexit state from parent context.
+        self.options["e"] = False
         try:
             with self._push_frame(kind=frame_kind):
                 status = self._eval_source(source)
@@ -8604,6 +8612,7 @@ class Runtime:
                 pass
             self.current_line = saved_line
             self._line_offset = saved_offset
+            self.options = saved_options
             os.dup2(saved_stdout, 1)
             os.close(saved_stdout)
         tmp.seek(0)
@@ -8629,8 +8638,10 @@ class Runtime:
         sys.stdout = py_stdout
         saved_line = self.current_line
         saved_offset = self._line_offset
+        saved_options = dict(self.options)
         base = (self.current_line or 1) + line_bias
         self._line_offset = saved_offset + (base - 1)
+        self.options["e"] = False
         hard_error = False
         try:
             with self._push_frame(kind=frame_kind):
@@ -8654,6 +8665,7 @@ class Runtime:
                 pass
             self.current_line = saved_line
             self._line_offset = saved_offset
+            self.options = saved_options
             os.dup2(saved_stdout, 1)
             os.close(saved_stdout)
         tmp.seek(0)
