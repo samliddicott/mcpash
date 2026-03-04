@@ -891,6 +891,15 @@ def _scan_braced_sub(source: str, start: int) -> tuple[str, int]:
                 continue
             i += 1
             continue
+        if ch == "'":
+            prev = source[i - 1] if i - 1 >= start else ""
+            if prev in {"+", "-", ":", "=", "?", "%", "#", "/", "{", "[", " ", "\t", "\n"}:
+                sq_end = _scan_single_quote_atom(source, i + 1)
+                if sq_end != -1:
+                    i = sq_end
+                    continue
+            i += 1
+            continue
         if ch == '"':
             in_double = True
             i += 1
@@ -936,6 +945,18 @@ def _scan_braced_sub(source: str, start: int) -> tuple[str, int]:
             continue
         i += 1
     return source[start:i], i
+
+
+def _scan_single_quote_atom(source: str, start: int) -> int:
+    i = start
+    while i < len(source):
+        ch = source[i]
+        if ch == "'":
+            return i + 1
+        if ch == "\n":
+            return -1
+        i += 1
+    return -1
 
 
 def _scan_process_sub(source: str, start: int) -> tuple[str, int]:

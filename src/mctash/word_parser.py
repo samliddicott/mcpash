@@ -200,6 +200,15 @@ def _find_matching_brace(text: str, start: int) -> int:
     depth = 1
     i = start
     while i < len(text):
+        if text[i] == "'":
+            prev = text[i - 1] if i - 1 >= start else ""
+            if prev in {"+", "-", ":", "=", "?", "%", "#", "/", "{", "[", " ", "\t", "\n"}:
+                sq_end = _scan_single_quote_atom(text, i + 1)
+                if sq_end != -1:
+                    i = sq_end
+                    continue
+            i += 1
+            continue
         if text[i] == "\\":
             i += 2
             continue
@@ -224,6 +233,18 @@ def _find_matching_brace(text: str, start: int) -> int:
                 return i
             i += 1
             continue
+        i += 1
+    return -1
+
+
+def _scan_single_quote_atom(text: str, start: int) -> int:
+    i = start
+    while i < len(text):
+        ch = text[i]
+        if ch == "'":
+            return i + 1
+        if ch == "\n":
+            return -1
         i += 1
     return -1
 
