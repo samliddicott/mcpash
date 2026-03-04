@@ -476,6 +476,17 @@ class Parser:
             and ((tok1.kind == "OP" and tok1.value == "(") or (self._is_word(tok1) and tok1.value == "("))
         ):
             return self.parse_arith_command()
+        if self._is_word(tok) and tok.value == "!":
+            ntok = self._peek_n(1)
+            if ntok is None or (ntok.kind == "OP" and ntok.value in ["\n", ";", "&", "|"]):
+                self._advance()
+                null_cmd = SimpleCommand(argv=[Word(":")], assignments=[], redirects=[])
+                lst_null_cmd = LstSimpleCommand(
+                    argv=[self._resolve_word(parse_word(":"))],
+                    assignments=[],
+                    redirects=[],
+                )
+                return null_cmd, lst_null_cmd
         if self._is_word(tok) and tok.value == "if":
             command, lst_command = self.parse_if()
             return self._maybe_wrap_redirects(command, lst_command)

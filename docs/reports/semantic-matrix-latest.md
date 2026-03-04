@@ -1,6 +1,6 @@
 # Semantic Matrix Report
 
-Generated: 2026-03-04 10:06:19Z
+Generated: 2026-03-04 10:08:12Z
 
 Matrix source: `tests/compat/semantic_matrix.tsv`
 
