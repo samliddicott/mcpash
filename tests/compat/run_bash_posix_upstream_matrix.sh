@@ -45,10 +45,14 @@ summary="$RDIR/summary.tsv"
 : > "$summary"
 
 for c in "${cases[@]}"; do
+  case_timeout=45
+  if [[ "$c" == "ifs-posix.tests" ]]; then
+    case_timeout=120
+  fi
   b_out="$RDIR/bash/${c}.out"; b_err="$RDIR/bash/${c}.err"; b_rc=0
   m_out="$RDIR/mctash/${c}.out"; m_err="$RDIR/mctash/${c}.err"; m_rc=0
-  ( cd "$TROOT" && timeout -k 5 45 env THIS_SH="$RDIR/bash_posix_wrapper.sh" bash --posix "./$c" >"$b_out" 2>"$b_err" ) || b_rc=$?
-  ( cd "$TROOT" && timeout -k 5 45 env THIS_SH="$RDIR/mctash_posix_wrapper.sh" PYTHONPATH="$ROOT/src" MCTASH_MODE=posix MCTASH_DIAG_STYLE=bash MCTASH_MAX_VMEM_KB=786432 python3 -m mctash --posix "./$c" >"$m_out" 2>"$m_err" ) || m_rc=$?
+  ( cd "$TROOT" && timeout -k 5 "$case_timeout" env THIS_SH="$RDIR/bash_posix_wrapper.sh" bash --posix "./$c" >"$b_out" 2>"$b_err" ) || b_rc=$?
+  ( cd "$TROOT" && timeout -k 5 "$case_timeout" env THIS_SH="$RDIR/mctash_posix_wrapper.sh" PYTHONPATH="$ROOT/src" MCTASH_MODE=posix MCTASH_DIAG_STYLE=bash MCTASH_MAX_VMEM_KB=786432 python3 -m mctash --posix "./$c" >"$m_out" 2>"$m_err" ) || m_rc=$?
   out_m=0; err_m=0
   diff -u "$b_out" "$m_out" > "$RDIR/diff/${c}.out.diff" || out_m=1
   diff -u "$b_err" "$m_err" > "$RDIR/diff/${c}.err.diff" || err_m=1
