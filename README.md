@@ -141,6 +141,24 @@ Choose compatibility level under test:
 PARITY_COMPAT=50 make compat-posix-bash-strict
 ```
 
+Run bash-man-page-driven POSIX parity matrix (`bash --posix` baseline):
+
+```sh
+make bash-posix-man-matrix
+```
+
+Report output:
+- `docs/reports/bash-posix-man-matrix-latest.md`
+
+Fetch upstream GNU bash tests metadata (Savannah) for corpus planning:
+
+```sh
+make bash-tests-fetch
+```
+
+Fetched metadata location:
+- `tests/bash/upstream/`
+
 Useful overrides:
 
 ```sh

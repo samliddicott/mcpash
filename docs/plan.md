@@ -103,6 +103,28 @@ Additional independent check:
   - Initial target files: `smoke`, `redirect`, `word-split`
   - Purpose: independent semantics checks without replacing BusyBox ash corpus as primary gate.
 
+### Bash POSIX Parity Matrix (New)
+
+To close parity for `mctash --posix` against `bash --posix`, we now maintain a man-page-driven matrix:
+
+- Coverage map: `tests/compat/bash_posix_man_coverage.tsv`
+- Runner: `tests/compat/run_bash_posix_man_matrix.sh`
+- Make target: `make bash-posix-man-matrix`
+- Latest report: `docs/reports/bash-posix-man-matrix-latest.md`
+
+This matrix tracks all bash man-page builtins as:
+- `covered` (has case and currently executed)
+- `partial` (known gap, case still needed)
+- `out_of_scope` (bash extension not in current POSIX-lane target)
+
+Online corpus source for expansion:
+- GNU bash upstream tests index: `https://git.savannah.gnu.org/cgit/bash.git/tree/tests`
+- Fetch helper: `tests/bash/fetch_upstream_tests.sh` (`make bash-tests-fetch`)
+- Fetched artifacts (ignored by git): `tests/bash/upstream/`
+
+License note:
+- Upstream bash tests are GPL-licensed; we keep fetched corpus as external test input and avoid copying test bodies into tracked project sources unless explicitly approved.
+
 Local conformance gate (no external CI required):
 - `make regressions`
   - Runs targeted regression checks for fragile semantics:
