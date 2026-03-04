@@ -874,22 +874,9 @@ def _scan_braced_sub(source: str, start: int) -> tuple[str, int]:
         return source[start:start + 1], start + 1
     i += 2
     depth = 1
-    in_single = False
     in_double = False
     while i < len(source):
         ch = source[i]
-        if in_single:
-            if ch == "'":
-                in_single = False
-                i += 1
-                continue
-            if ch == "}" and not _quote_terminator_ahead(source, i, "'"):
-                # Unmatched quote in ${...}: treat quote char as literal and let
-                # this brace terminate expansion if appropriate (bash-compatible).
-                in_single = False
-                continue
-            i += 1
-            continue
         if in_double:
             if ch == "\\" and i + 1 < len(source):
                 i += 2
@@ -902,13 +889,6 @@ def _scan_braced_sub(source: str, start: int) -> tuple[str, int]:
                 in_double = False
                 i += 1
                 continue
-            if ch == "}" and not _quote_terminator_ahead(source, i, '"'):
-                in_double = False
-                continue
-            i += 1
-            continue
-        if ch == "'":
-            in_single = True
             i += 1
             continue
         if ch == '"':
@@ -934,6 +914,20 @@ def _scan_braced_sub(source: str, start: int) -> tuple[str, int]:
             _, new_i = _scan_backtick_sub(source, i)
             i = new_i
             continue
+        if (
+            ch == "}"
+            and i - 2 >= start
+            and source[i - 1] == "'"
+            and i + 1 < len(source)
+            and source[i + 1] == "'"
+        ):
+            # Heuristic for ${name+'}'}-style operator words: treat the brace
+            # as literal when enclosed by a simple single-quoted atom that
+            # starts right after an operator/delimiter.
+            opener_prev = source[i - 2]
+            if opener_prev in {"+", "-", ":", "=", "?", "%", "#", "/", "{", "[", " ", "\t", "\n"}:
+                i += 1
+                continue
         if ch == "}":
             depth -= 1
             i += 1
@@ -942,24 +936,6 @@ def _scan_braced_sub(source: str, start: int) -> tuple[str, int]:
             continue
         i += 1
     return source[start:i], i
-
-
-def _quote_terminator_ahead(source: str, start: int, quote: str) -> bool:
-    i = start + 1
-    while i < len(source):
-        ch = source[i]
-        if ch == "\\" and i + 1 < len(source) and source[i + 1] == "\n":
-            i += 2
-            continue
-        if ch == "\n":
-            return False
-        if quote == '"' and ch == "\\" and i + 1 < len(source):
-            i += 2
-            continue
-        if ch == quote:
-            return True
-        i += 1
-    return False
 
 
 def _scan_process_sub(source: str, start: int) -> tuple[str, int]:

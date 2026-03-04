@@ -207,6 +207,17 @@ def _find_matching_brace(text: str, start: int) -> int:
             depth += 1
             i += 2
             continue
+        if (
+            text[i] == "}"
+            and i - 2 >= start
+            and text[i - 1] == "'"
+            and i + 1 < len(text)
+            and text[i + 1] == "'"
+        ):
+            opener_prev = text[i - 2]
+            if opener_prev in {"+", "-", ":", "=", "?", "%", "#", "/", "{", "[", " ", "\t", "\n"}:
+                i += 1
+                continue
         if text[i] == "}":
             depth -= 1
             if depth == 0:

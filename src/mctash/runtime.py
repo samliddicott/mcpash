@@ -894,7 +894,14 @@ class Runtime:
         return f"{prefix}: {msg}"
 
     def _report_error(self, msg: str, line: int | None = None, context: str | None = None) -> None:
-        print(self._format_error(msg, line=line, context=context), file=sys.stderr)
+        self._print_stderr(self._format_error(msg, line=line, context=context))
+
+    def _print_stderr(self, msg: str) -> None:
+        try:
+            print(msg, file=sys.stderr)
+        except OSError:
+            # stderr may be explicitly closed (e.g. 2>&-); preserve status flow.
+            pass
 
     def _diag_msg(self, key: DiagnosticKey, **kwargs: str) -> str:
         return self._diag.render(key, **kwargs)
@@ -1941,7 +1948,7 @@ class Runtime:
             argv = self._expand_asdl_simple_argv(node)
         except RuntimeError as e:
             msg = str(e)
-            print(msg, file=sys.stderr)
+            self._print_stderr(msg)
             if "bad substitution" in msg or "unbound variable:" in msg:
                 raise SystemExit(self._runtime_error_status(msg))
             raise SystemExit(1)
@@ -2144,7 +2151,7 @@ class Runtime:
                         return self._run_builtin(name, argv)
                 except RuntimeError as e:
                     msg = str(e)
-                    print(msg, file=sys.stderr)
+                    self._print_stderr(msg)
                     return self._runtime_error_status(msg)
             saved_env = self.env
             try:
@@ -2154,7 +2161,7 @@ class Runtime:
                         status = self._run_builtin(name, argv)
                 except RuntimeError as e:
                     msg = str(e)
-                    print(msg, file=sys.stderr)
+                    self._print_stderr(msg)
                     return self._runtime_error_status(msg)
                 if name in self.ENV_MUTATING_BUILTINS:
                     result_env = dict(self.env)
@@ -3740,7 +3747,7 @@ class Runtime:
                 argv = self._expand_argv(node.argv)
             except RuntimeError as e:
                 msg = str(e)
-                print(msg, file=sys.stderr)
+                self._print_stderr(msg)
                 if "bad substitution" in msg or "unbound variable:" in msg:
                     raise SystemExit(self._runtime_error_status(msg))
                 raise SystemExit(1)
@@ -5611,9 +5618,6 @@ class Runtime:
         arg_fields: list[ExpansionField] | None = None,
     ) -> str | List[str]:
         def _expand_alt_word(text: str) -> str:
-            # Under outer double quotes, single quotes are literal chars.
-            if quoted and "'" in text:
-                return self._expand_assignment_word_protected(text.replace("'", "\\'"))
             return self._expand_assignment_word_protected(text)
 
         def _expand_alt_fields(text: str, fields: list[ExpansionField] | None = None) -> PresplitFields:
