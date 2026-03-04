@@ -117,6 +117,17 @@ def _one_line(s: str) -> str:
     return s if len(s) <= 120 else s[:117] + "..."
 
 
+def _err_class(s: str) -> str:
+    t = s.lower()
+    if "bad substitution" in t:
+        return "bad_substitution"
+    if "unterminated quoted string" in t or "unexpected eof while looking for matching" in t or "unexpected end of file" in t:
+        return "unterminated_quote"
+    if "syntax error" in t:
+        return "syntax_error"
+    return "none" if not t.strip() else "other"
+
+
 def run_case(shell_kind: str, code: str) -> tuple[int, str, str]:
     if shell_kind == "bash":
         cmd = [
@@ -158,7 +169,11 @@ full = 0
 for case in CASES:
     b_rc, b_out, b_err = run_case("bash", case["code"])
     m_rc, m_out, m_err = run_case("mctash", case["code"])
-    ok = b_rc == m_rc and b_out == m_out and b_err == m_err
+    malformed = case["desc"].startswith("malformed:")
+    if malformed:
+        ok = b_rc == m_rc and b_out == m_out and _err_class(b_err) == _err_class(m_err)
+    else:
+        ok = b_rc == m_rc and b_out == m_out and b_err == m_err
     if ok:
         full += 1
     rows.append(

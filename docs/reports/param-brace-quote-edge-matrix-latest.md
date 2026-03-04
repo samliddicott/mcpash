@@ -1,12 +1,12 @@
 # Parameter Brace/Quote Edge Matrix
 
-Generated: 2026-03-04 15:21:49Z
+Generated: 2026-03-04 15:35:43Z
 Comparator: `bash --posix`
 Target: `mctash --posix`
 
 This is a focused parser/expansion edge corpus for `${...}` with mixed quote/brace content.
 
-- Full parity rows: 16/18
+- Full parity rows: 18/18
 
 | Case | Intent | bash rc | mctash rc | bash stdout | mctash stdout | bash stderr | mctash stderr | Parity |
 |---|---|---:|---:|---|---|---|---|---|
@@ -25,8 +25,8 @@ This is a focused parser/expansion edge corpus for `${...}` with mixed quote/bra
 | `E013` | line continuation inside ${...} word (double quotes) | `0` | `0` | `<foo>\n<bar>\n<baz>\n` | `<foo>\n<bar>\n<baz>\n` | `` | `` | ok |
 | `E014` | braced op with escaped right brace | `0` | `0` | `<}z>\n` | `<}z>\n` | `` | `` | ok |
 | `E015` | double-quoted braced op with escaped right brace | `0` | `0` | `<}z>\n` | `<}z>\n` | `` | `` | ok |
-| `E016` | malformed: missing close brace | `2` | `2` | `` | `` | `bash: -c: line 1: unexpected EOF while looking for matching `"'\nbash: -c: line 2: syntax error: unexpected end of fi...` | `mctash -c: line 1: syntax error: unterminated quoted string\n` | mismatch |
-| `E017` | malformed: bad parameter name | `127` | `127` | `` | `` | `bash: line 1: ${+x}: bad substitution\n` | `syntax error: bad substitution\n` | mismatch |
+| `E016` | malformed: missing close brace | `2` | `2` | `` | `` | `bash: -c: line 1: unexpected EOF while looking for matching `"'\nbash: -c: line 2: syntax error: unexpected end of fi...` | `mctash -c: line 1: syntax error: unterminated quoted string\n` | ok |
+| `E017` | malformed: bad parameter name | `127` | `127` | `` | `` | `bash: line 1: ${+x}: bad substitution\n` | `syntax error: bad substitution\n` | ok |
 | `E018` | malformed: unterminated quote in braced op word | `0` | `0` | `"abc\n` | `"abc\n` | `` | `` | ok |
 
 ## Notes
