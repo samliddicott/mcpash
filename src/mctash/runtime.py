@@ -8654,9 +8654,11 @@ class Runtime:
         saved_options = dict(self.options)
         base = (self.current_line or 1) + line_bias
         self._line_offset = saved_offset + (base - 1)
-        # Match POSIX/bash behavior: command substitution does not inherit
-        # errexit state from parent context.
-        self.options["e"] = False
+        # In bash/ash POSIX behavior, command substitution under `set -e`
+        # remains errexit-sensitive. In non-POSIX bash mode, `-e` is not
+        # inherited into command substitution.
+        if not saved_options.get("posix", False):
+            self.options["e"] = False
         try:
             with self._push_frame(kind=frame_kind):
                 status = self._eval_source(source)
@@ -8701,7 +8703,8 @@ class Runtime:
         saved_options = dict(self.options)
         base = (self.current_line or 1) + line_bias
         self._line_offset = saved_offset + (base - 1)
-        self.options["e"] = False
+        if not saved_options.get("posix", False):
+            self.options["e"] = False
         hard_error = False
         try:
             with self._push_frame(kind=frame_kind):

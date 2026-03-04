@@ -354,3 +354,14 @@ Row classification:
 Policy:
 1. This semantic matrix is the master/sole behavior matrix for new parity closure.
 2. Existing lane-specific harnesses (BusyBox, upstream bash lanes, diff suites) remain feeder corpora and diagnostics, not competing truth tables.
+3. Upstream heavy corpus rows are imported as feeder rows (`@upstream:*`) and start as `posix-unspecified` until split into smaller `posix-required` requirements with explicit POSIX anchors.
+
+Current feeder imports:
+1. `posix2.tests`
+2. `posixexp.tests`
+3. `posixexp2.tests`
+4. `posixpat.tests`
+5. `posixpipe.tests`
+6. `ifs-posix.tests`
+7. `comsub-posix.tests`
+8. `set-e.tests`

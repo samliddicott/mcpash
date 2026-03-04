@@ -2,7 +2,17 @@
 set-e-andor-nonfinal	posix-required	POSIX-2.8.1-errexit	set -e; false && echo bad; echo ok
 set-e-andor-final	posix-required	POSIX-2.8.1-errexit	set -e; true && false; echo bad
 set-e-negated-eval	posix-required	POSIX-2.8.1-errexit	set -e; ! eval false; echo ok
+set-e-cmdsub-posix-abort	posix-required	POSIX-2.8.1-errexit	set -e; z=$(false; echo foo); echo "$z"
+set-e-cmdsub-bash-nonposix	extension-bash	BASH-set-e-cmdsub	set -e; z=$(false; echo foo); echo "$z"
 param-default-forms	posix-required	POSIX-2.6.2-parameter-expansion	unset f; echo "<${f-word}>|<${f:-word}>"
 param-plus-forms	posix-required	POSIX-2.6.2-parameter-expansion	f=''; echo "<${f+word}>|<${f:+word}>"
 param-assign-forms	posix-required	POSIX-2.6.2-parameter-expansion	unset f; echo "<${f=word}>|<${f:=word}>|$f"
 bash-array-basic	extension-bash	BASH-Arrays	declare -a arr; arr[0]=a; arr[1]=b; echo "${arr[1]}"
+upstream-posix2	posix-unspecified	BASH-UPSTREAM-posix2	@upstream:posix2.tests
+upstream-posixexp	posix-unspecified	BASH-UPSTREAM-posixexp	@upstream:posixexp.tests
+upstream-posixexp2	posix-unspecified	BASH-UPSTREAM-posixexp2	@upstream:posixexp2.tests
+upstream-posixpat	posix-unspecified	BASH-UPSTREAM-posixpat	@upstream:posixpat.tests
+upstream-posixpipe	posix-unspecified	BASH-UPSTREAM-posixpipe	@upstream:posixpipe.tests
+upstream-ifs-posix	posix-unspecified	BASH-UPSTREAM-ifs-posix	@upstream:ifs-posix.tests
+upstream-comsub-posix	posix-unspecified	BASH-UPSTREAM-comsub-posix	@upstream:comsub-posix.tests
+upstream-set-e	posix-unspecified	BASH-UPSTREAM-set-e	@upstream:set-e.tests

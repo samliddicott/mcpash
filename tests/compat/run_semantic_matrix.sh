@@ -4,6 +4,12 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 MATRIX="${ROOT}/tests/compat/semantic_matrix.tsv"
 REPORT="${ROOT}/docs/reports/semantic-matrix-latest.md"
+UPSTREAM_TROOT="${ROOT}/tests/bash/upstream/baserock-bash-5.1-testing/tests"
+ROW_TIMEOUT_SIMPLE="${ROW_TIMEOUT_SIMPLE:-15}"
+ROW_TIMEOUT_UPSTREAM="${ROW_TIMEOUT_UPSTREAM:-20}"
+MCTASH_MAX_VMEM_KB="${MCTASH_MAX_VMEM_KB:-786432}"
+ROW_FILTER="${ROW_FILTER:-}"
+RUN_UPSTREAM_ROWS="${RUN_UPSTREAM_ROWS:-0}"
 
 if [[ ! -f "$MATRIX" ]]; then
   echo "missing matrix: $MATRIX" >&2
@@ -17,13 +23,103 @@ trap cleanup EXIT
 summary="$tmpdir/summary.tsv"
 : >"$summary"
 
+mk_wrapper() {
+  local path="$1"
+  local body="$2"
+  cat >"$path" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+${body}
+EOF
+  chmod +x "$path"
+}
+
+run_simple_row() {
+  local script_file="$1"
+  local ash_out="$2" ash_err="$3" ash_rc_var="$4"
+  local bp_out="$5" bp_err="$6" bp_rc_var="$7"
+  local bf_out="$8" bf_err="$9" bf_rc_var="${10}"
+  local mp_out="${11}" mp_err="${12}" mp_rc_var="${13}"
+  local mb_out="${14}" mb_err="${15}" mb_rc_var="${16}"
+
+  local ash_rc=0 bp_rc=0 bf_rc=0 mp_rc=0 mb_rc=0
+  set +e
+  timeout -k 5 "$ROW_TIMEOUT_SIMPLE" ash "$script_file" >"$ash_out" 2>"$ash_err"; ash_rc=$?
+  timeout -k 5 "$ROW_TIMEOUT_SIMPLE" bash --posix "$script_file" >"$bp_out" 2>"$bp_err"; bp_rc=$?
+  timeout -k 5 "$ROW_TIMEOUT_SIMPLE" bash "$script_file" >"$bf_out" 2>"$bf_err"; bf_rc=$?
+  timeout -k 5 "$ROW_TIMEOUT_SIMPLE" env PYTHONPATH="$ROOT/src" MCTASH_MODE=posix MCTASH_MAX_VMEM_KB="$MCTASH_MAX_VMEM_KB" python3 -m mctash --posix "$script_file" >"$mp_out" 2>"$mp_err"; mp_rc=$?
+  timeout -k 5 "$ROW_TIMEOUT_SIMPLE" env PYTHONPATH="$ROOT/src" MCTASH_MODE=bash MCTASH_MAX_VMEM_KB="$MCTASH_MAX_VMEM_KB" python3 -m mctash "$script_file" >"$mb_out" 2>"$mb_err"; mb_rc=$?
+  set -e
+
+  printf -v "$ash_rc_var" '%s' "$ash_rc"
+  printf -v "$bp_rc_var" '%s' "$bp_rc"
+  printf -v "$bf_rc_var" '%s' "$bf_rc"
+  printf -v "$mp_rc_var" '%s' "$mp_rc"
+  printf -v "$mb_rc_var" '%s' "$mb_rc"
+}
+
+run_upstream_row() {
+  local mode="$1"
+  local case_name="$2"
+  local ash_out="$3" ash_err="$4" ash_rc_var="$5"
+  local bp_out="$6" bp_err="$7" bp_rc_var="$8"
+  local bf_out="$9" bf_err="${10}" bf_rc_var="${11}"
+  local mp_out="${12}" mp_err="${13}" mp_rc_var="${14}"
+  local mb_out="${15}" mb_err="${16}" mb_rc_var="${17}"
+
+  if [[ ! -d "$UPSTREAM_TROOT" ]]; then
+    echo "missing upstream corpus at $UPSTREAM_TROOT" >&2
+    exit 2
+  fi
+  if [[ ! -f "$UPSTREAM_TROOT/$case_name" ]]; then
+    echo "missing upstream case: $UPSTREAM_TROOT/$case_name" >&2
+    exit 2
+  fi
+
+  local w_ash="$tmpdir/w-ash.sh"
+  local w_bp="$tmpdir/w-bash-posix.sh"
+  local w_bf="$tmpdir/w-bash-full.sh"
+  local w_mp="$tmpdir/w-mctash-posix.sh"
+  local w_mb="$tmpdir/w-mctash-bash.sh"
+  mk_wrapper "$w_ash" "exec ash \"\$@\""
+  mk_wrapper "$w_bp" "exec bash --posix \"\$@\""
+  mk_wrapper "$w_bf" "exec bash \"\$@\""
+  mk_wrapper "$w_mp" "exec env PYTHONPATH=\"$ROOT/src\" MCTASH_MODE=posix MCTASH_MAX_VMEM_KB=\"$MCTASH_MAX_VMEM_KB\" python3 -m mctash --posix \"\$@\""
+  mk_wrapper "$w_mb" "exec env PYTHONPATH=\"$ROOT/src\" MCTASH_MODE=bash MCTASH_MAX_VMEM_KB=\"$MCTASH_MAX_VMEM_KB\" python3 -m mctash \"\$@\""
+
+  local ash_rc=0 bp_rc=0 bf_rc=0 mp_rc=0 mb_rc=0
+  set +e
+  ( cd "$UPSTREAM_TROOT" && timeout -k 5 "$ROW_TIMEOUT_UPSTREAM" env THIS_SH="$w_ash" ash "./$case_name" >"$ash_out" 2>"$ash_err" ); ash_rc=$?
+  ( cd "$UPSTREAM_TROOT" && timeout -k 5 "$ROW_TIMEOUT_UPSTREAM" env THIS_SH="$w_bp" bash --posix "./$case_name" >"$bp_out" 2>"$bp_err" ); bp_rc=$?
+  ( cd "$UPSTREAM_TROOT" && timeout -k 5 "$ROW_TIMEOUT_UPSTREAM" env THIS_SH="$w_mp" PYTHONPATH="$ROOT/src" MCTASH_MODE=posix MCTASH_MAX_VMEM_KB="$MCTASH_MAX_VMEM_KB" python3 -m mctash --posix "./$case_name" >"$mp_out" 2>"$mp_err" ); mp_rc=$?
+  if [[ "$mode" == "full" ]]; then
+    ( cd "$UPSTREAM_TROOT" && timeout -k 5 "$ROW_TIMEOUT_UPSTREAM" env THIS_SH="$w_bf" bash "./$case_name" >"$bf_out" 2>"$bf_err" ); bf_rc=$?
+    ( cd "$UPSTREAM_TROOT" && timeout -k 5 "$ROW_TIMEOUT_UPSTREAM" env THIS_SH="$w_mb" PYTHONPATH="$ROOT/src" MCTASH_MODE=bash MCTASH_MAX_VMEM_KB="$MCTASH_MAX_VMEM_KB" python3 -m mctash "./$case_name" >"$mb_out" 2>"$mb_err" ); mb_rc=$?
+  else
+    : >"$bf_out"
+    : >"$bf_err"
+    : >"$mb_out"
+    : >"$mb_err"
+    bf_rc=-1
+    mb_rc=-1
+  fi
+  set -e
+
+  printf -v "$ash_rc_var" '%s' "$ash_rc"
+  printf -v "$bp_rc_var" '%s' "$bp_rc"
+  printf -v "$bf_rc_var" '%s' "$bf_rc"
+  printf -v "$mp_rc_var" '%s' "$mp_rc"
+  printf -v "$mb_rc_var" '%s' "$mb_rc"
+}
+
 row_idx=0
 while IFS=$'\t' read -r id class spec script; do
   [[ -z "${id:-}" ]] && continue
   [[ "${id:0:1}" == "#" ]] && continue
+  if [[ -n "$ROW_FILTER" ]] && [[ "$id" != $ROW_FILTER ]]; then
+    continue
+  fi
   row_idx=$((row_idx + 1))
-  script_file="$tmpdir/${row_idx}-${id}.sh"
-  printf '%s\n' "$script" >"$script_file"
 
   # Comparator/baseline executions
   ash_out="$tmpdir/${row_idx}-${id}.ash.out"; ash_err="$tmpdir/${row_idx}-${id}.ash.err"; ash_rc=0
@@ -32,13 +128,43 @@ while IFS=$'\t' read -r id class spec script; do
   mp_out="$tmpdir/${row_idx}-${id}.mctash_posix.out"; mp_err="$tmpdir/${row_idx}-${id}.mctash_posix.err"; mp_rc=0
   mb_out="$tmpdir/${row_idx}-${id}.mctash_bash.out"; mb_err="$tmpdir/${row_idx}-${id}.mctash_bash.err"; mb_rc=0
 
-  set +e
-  timeout -k 5 15 ash "$script_file" >"$ash_out" 2>"$ash_err"; ash_rc=$?
-  timeout -k 5 15 bash --posix "$script_file" >"$bp_out" 2>"$bp_err"; bp_rc=$?
-  timeout -k 5 15 bash "$script_file" >"$bf_out" 2>"$bf_err"; bf_rc=$?
-  timeout -k 5 15 env PYTHONPATH="$ROOT/src" MCTASH_MODE=posix MCTASH_MAX_VMEM_KB=786432 python3 -m mctash --posix "$script_file" >"$mp_out" 2>"$mp_err"; mp_rc=$?
-  timeout -k 5 15 env PYTHONPATH="$ROOT/src" MCTASH_MODE=bash MCTASH_MAX_VMEM_KB=786432 python3 -m mctash "$script_file" >"$mb_out" 2>"$mb_err"; mb_rc=$?
-  set -e
+  if [[ "$script" == @upstream:* ]]; then
+    if [[ "$RUN_UPSTREAM_ROWS" != "1" ]]; then
+      ash_rc=-1; bp_rc=-1; bf_rc=-1; mp_rc=-1; mb_rc=-1
+      : >"$ash_out"; : >"$ash_err"; : >"$bp_out"; : >"$bp_err"; : >"$bf_out"; : >"$bf_err"; : >"$mp_out"; : >"$mp_err"; : >"$mb_out"; : >"$mb_err"
+      posix_refs_agree=0
+      mctash_posix_ok=0
+      mctash_bash_ok=0
+      row_status="info"
+      row_note="upstream row skipped (set RUN_UPSTREAM_ROWS=1 to execute)"
+      printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+        "$id" "$class" "$spec" \
+        "$ash_rc" "$bp_rc" "$bf_rc" "$mp_rc" "$mb_rc" \
+        "$posix_refs_agree" "$mctash_posix_ok" "$mctash_bash_ok" \
+        "$row_status" "$row_note" >>"$summary"
+      continue
+    fi
+    case_name="${script#@upstream:}"
+    upstream_mode="full"
+    if [[ "$class" == "posix-required" ]]; then
+      upstream_mode="posix-only"
+    fi
+    run_upstream_row "$upstream_mode" "$case_name" \
+      "$ash_out" "$ash_err" ash_rc \
+      "$bp_out" "$bp_err" bp_rc \
+      "$bf_out" "$bf_err" bf_rc \
+      "$mp_out" "$mp_err" mp_rc \
+      "$mb_out" "$mb_err" mb_rc
+  else
+    script_file="$tmpdir/${row_idx}-${id}.sh"
+    printf '%s\n' "$script" >"$script_file"
+    run_simple_row "$script_file" \
+      "$ash_out" "$ash_err" ash_rc \
+      "$bp_out" "$bp_err" bp_rc \
+      "$bf_out" "$bf_err" bf_rc \
+      "$mp_out" "$mp_err" mp_rc \
+      "$mb_out" "$mb_err" mb_rc
+  fi
 
   posix_refs_agree=0
   mctash_posix_ok=0
@@ -90,12 +216,11 @@ while IFS=$'\t' read -r id class spec script; do
       ;;
   esac
 
-  printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+  printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
     "$id" "$class" "$spec" \
     "$ash_rc" "$bp_rc" "$bf_rc" "$mp_rc" "$mb_rc" \
     "$posix_refs_agree" "$mctash_posix_ok" "$mctash_bash_ok" \
-    "$row_status" "$row_note" \
-    "$ash_out" "$bp_out" >>"$summary"
+    "$row_status" "$row_note" >>"$summary"
 done <"$MATRIX"
 
 python3 - "$summary" "$REPORT" <<'PY'

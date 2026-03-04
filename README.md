@@ -170,6 +170,19 @@ Report output:
 
 This is the canonical behavior matrix for new parity work; older lane-specific matrices remain useful as feeder corpora/harnesses.
 
+By default, heavy upstream-corpus rows (`@upstream:*`) are skipped to keep iteration fast.
+Enable them explicitly:
+
+```sh
+RUN_UPSTREAM_ROWS=1 make semantic-matrix
+```
+
+To run a single row while debugging:
+
+```sh
+ROW_FILTER='upstream-set-e' RUN_UPSTREAM_ROWS=1 make semantic-matrix
+```
+
 Fetch upstream GNU bash tests metadata (Savannah) for corpus planning:
 
 ```sh
