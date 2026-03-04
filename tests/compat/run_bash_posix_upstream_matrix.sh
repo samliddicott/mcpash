@@ -54,8 +54,29 @@ for c in "${cases[@]}"; do
   ( cd "$TROOT" && timeout -k 5 "$case_timeout" env THIS_SH="$RDIR/bash_posix_wrapper.sh" bash --posix "./$c" >"$b_out" 2>"$b_err" ) || b_rc=$?
   ( cd "$TROOT" && timeout -k 5 "$case_timeout" env THIS_SH="$RDIR/mctash_posix_wrapper.sh" PYTHONPATH="$ROOT/src" MCTASH_MODE=posix MCTASH_DIAG_STYLE=bash MCTASH_MAX_VMEM_KB=786432 python3 -m mctash --posix "./$c" >"$m_out" 2>"$m_err" ) || m_rc=$?
   out_m=0; err_m=0
+  err_left="$b_err"; err_right="$m_err"
+  if [[ "$c" == "posixpipe.tests" ]]; then
+    # Timing output is inherently non-deterministic across implementations/runs.
+    # Compare semantic diagnostics only.
+    err_left="$RDIR/bash/${c}.err.norm"
+    err_right="$RDIR/mctash/${c}.err.norm"
+    sed -E \
+      -e '/^real [0-9]/d' \
+      -e '/^user [0-9]/d' \
+      -e '/^sys [0-9]/d' \
+      -e '/^[0-9.]+user [0-9.]+system /d' \
+      -e '/^[0-9]+inputs\+[0-9]+outputs /d' \
+      "$b_err" >"$err_left"
+    sed -E \
+      -e '/^real [0-9]/d' \
+      -e '/^user [0-9]/d' \
+      -e '/^sys [0-9]/d' \
+      -e '/^[0-9.]+user [0-9.]+system /d' \
+      -e '/^[0-9]+inputs\+[0-9]+outputs /d' \
+      "$m_err" >"$err_right"
+  fi
   diff -u "$b_out" "$m_out" > "$RDIR/diff/${c}.out.diff" || out_m=1
-  diff -u "$b_err" "$m_err" > "$RDIR/diff/${c}.err.diff" || err_m=1
+  diff -u "$err_left" "$err_right" > "$RDIR/diff/${c}.err.diff" || err_m=1
   lane="core"
   for i in "${info_cases[@]}"; do
     [[ "$c" == "$i" ]] && lane="info"

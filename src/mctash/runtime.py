@@ -671,7 +671,7 @@ class Runtime:
         self._errexit_suppressed: int = 0
         self._py_callables: Dict[str, Any] = {}
         self._py_ties: Dict[str, tuple[Any, Any, str | None]] = {}
-        self._shopts: Dict[str, bool] = {"read_interruptible": False}
+        self._shopts: Dict[str, bool] = {"read_interruptible": False, "xpg_echo": False}
         self._last_read_interrupt_status: int | None = None
         self._last_read_timed_out: bool = False
         self.env.setdefault("OPTIND", "1")

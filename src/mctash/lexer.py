@@ -237,6 +237,9 @@ class TokenReader:
                             buf.append(chunk)
                             self._advance_to(new_i)
                             continue
+                        if self._peek() == "\\" and self._peek(1) == "\n" and self._is_line_continuation():
+                            self._advance(2)
+                            continue
                         if self._peek() == "\\" and self._peek(1) in ['"', "\\", "$", "`"]:
                             buf.append("\\")
                             self._advance()
@@ -602,11 +605,6 @@ def _scan_command_sub_from_lparen(source: str, lparen_idx: int) -> tuple[str, in
     in_double = False
     while i < len(source):
         ch = source[i]
-        if in_single:
-            if ch == "'":
-                in_single = False
-            i += 1
-            continue
         if in_double:
             if ch == "\\" and i + 1 < len(source):
                 i += 2
@@ -738,15 +736,9 @@ def _scan_arith_sub(source: str, start: int) -> tuple[str, int]:
     i += 3
     depth = 1
     paren_depth = 0
-    in_single = False
     in_double = False
     while i < len(source):
         ch = source[i]
-        if in_single:
-            if ch == "'":
-                in_single = False
-            i += 1
-            continue
         if in_double:
             if ch == "\\" and i + 1 < len(source):
                 i += 2
