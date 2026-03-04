@@ -21,7 +21,7 @@ fi
 mkdir -p "$LOGDIR"
 runner_out="$LOGDIR/runner.out"
 set +e
-env PARITY_MIRROR_POSIX=1 BASH_BIN='bash --posix' "$RUNNER" --logdir "$LOGDIR" "${CASES[@]}" >"$runner_out" 2>&1
+env PARITY_MIRROR_POSIX=1 MCTASH_DIAG_STYLE=bash BASH_BIN='bash --posix' "$RUNNER" --logdir "$LOGDIR" "${CASES[@]}" >"$runner_out" 2>&1
 rc=$?
 set -e
 

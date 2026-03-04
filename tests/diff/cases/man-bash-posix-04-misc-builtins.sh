@@ -24,7 +24,7 @@ umask 022
 printf 'umask:%s\n' "$(umask)"
 umask "$old_umask"
 
-times | sed -n '1p'
+times | sed -n '1p' | awk '{print "times-fields:"NF}'
 
 cur_ul=$(ulimit -n)
 printf 'ulimit-n:%s\n' "$cur_ul"

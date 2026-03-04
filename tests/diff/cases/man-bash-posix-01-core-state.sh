@@ -14,7 +14,9 @@ XVAR='one two'
 export XVAR
 readonly RVAR=const
 unset XVAR
-unset RVAR
+# Run readonly-unset probe in a subshell so status is observable even on
+# implementations where special-builtin errors terminate that shell context.
+( unset RVAR ) 2>/dev/null
 printf 'env:%s readonly-unset-rc:%s\n' "${XVAR-unset}" "$?"
 
 set -- -a v1 -b v2

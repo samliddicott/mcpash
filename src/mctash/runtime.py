@@ -669,7 +669,9 @@ class Runtime:
         self._last_read_interrupt_status: int | None = None
         self._last_read_timed_out: bool = False
         mode = self.env.get("MCTASH_MODE", "").strip().lower()
-        diag_style = "bash" if mode == "bash" else "ash"
+        diag_style = self.env.get("MCTASH_DIAG_STYLE", "").strip().lower()
+        if diag_style not in {"ash", "bash"}:
+            diag_style = "bash" if mode == "bash" else "ash"
         self._diag = DiagnosticCatalog(style=diag_style, gettext=get_translator())
         shared_path = self.env.get(
             "MCTASH_SHARED_FILE",
@@ -4289,30 +4291,30 @@ class Runtime:
         if argv[0] == "":
             self._report_error(": Permission denied", line=self.current_line, context=context)
             return 127
-        if "/" in argv[0]:
-            resolved = argv[0]
-            exec_argv = list(argv)
-        else:
-            resolved = self._resolve_external_path(argv[0], env)
-            if resolved is None:
-                msg = self._diag_msg(DiagnosticKey.COMMAND_NOT_FOUND, name=argv[0])
-                self._report_error(msg, line=self.current_line, context=context)
-                return 127
-            exec_argv = [resolved] + argv[1:]
-        child_env = dict(env)
-        # If we're directly exec'ing a shebang script, propagate the script
-        # basename so the child mctash can mirror ash-like /proc/$pid/comm.
-        path0 = resolved
-        if os.path.isfile(path0):
-            try:
-                with open(path0, "rb") as f:
-                    head = f.read(2)
-                if head == b"#!":
-                    child_env["MCTASH_COMM_NAME"] = os.path.basename(path0)
-            except OSError:
-                pass
         try:
             with self._redirected_fds(redirects):
+                if "/" in argv[0]:
+                    resolved = argv[0]
+                    exec_argv = list(argv)
+                else:
+                    resolved = self._resolve_external_path(argv[0], env)
+                    if resolved is None:
+                        msg = self._diag_msg(DiagnosticKey.COMMAND_NOT_FOUND, name=argv[0])
+                        self._report_error(msg, line=self.current_line, context=context)
+                        return 127
+                    exec_argv = [resolved] + argv[1:]
+                child_env = dict(env)
+                # If we're directly exec'ing a shebang script, propagate the script
+                # basename so the child mctash can mirror ash-like /proc/$pid/comm.
+                path0 = resolved
+                if os.path.isfile(path0):
+                    try:
+                        with open(path0, "rb") as f:
+                            head = f.read(2)
+                        if head == b"#!":
+                            child_env["MCTASH_COMM_NAME"] = os.path.basename(path0)
+                    except OSError:
+                        pass
                 try:
                     job_id = getattr(self._thread_ctx, "job_id", None)
                     proc = subprocess.Popen(
@@ -4401,7 +4403,7 @@ class Runtime:
         for name in names:
             path = self._resolve_external_path(name, self.env)
             if path is None:
-                print(self._diag_msg(DiagnosticKey.HASH_NOT_FOUND, name=name), file=sys.stderr)
+                self._report_error(self._diag_msg(DiagnosticKey.HASH_NOT_FOUND, name=name), line=self.current_line)
                 status = 1
                 continue
             if verbose:
@@ -4665,8 +4667,12 @@ class Runtime:
         if args:
             return 2
         t = os.times()
-        print(f"{t.user:.2f} {t.system:.2f}")
-        print(f"{t.children_user:.2f} {t.children_system:.2f}")
+        def _fmt(v: float) -> str:
+            mins = int(v // 60)
+            secs = v - mins * 60
+            return f"{mins}m{secs:0.3f}s"
+        print(f"{_fmt(t.user)} {_fmt(t.system)}")
+        print(f"{_fmt(t.children_user)} {_fmt(t.children_system)}")
         return 0
 
     def _run_umask(self, args: List[str]) -> int:
@@ -6882,9 +6888,11 @@ class Runtime:
             if mode_vars and name in self.readonly_vars:
                 msg = self._diag_msg(DiagnosticKey.READONLY_UNSET, name=name)
                 self._report_error(msg, line=self.current_line, context="unset")
-                if not self.options.get("i", False):
+                # ash-style lane keeps historical special-builtin fatal behavior;
+                # bash-style lane reports status and continues script execution.
+                if self._diag.style != "bash" and not self.options.get("i", False):
                     raise SystemExit(2)
-                status = 2
+                status = 1 if self._diag.style == "bash" else 2
                 continue
             if not mode_vars:
                 self.functions.pop(name, None)
@@ -8292,6 +8300,12 @@ class Runtime:
                     return 1
                 name = args[i + 1]
                 if args[i] == "-v":
+                    if self._has_function(name):
+                        print(name)
+                        return 0
+                    if name in self.BUILTINS:
+                        print(name)
+                        return 0
                     path = self._find_in_path(name, lookup_path)
                     if path:
                         print(path)
@@ -8374,8 +8388,8 @@ class Runtime:
                 if path:
                     print(f"{name} is {path}", flush=True)
                 else:
-                    print(self._diag_msg(DiagnosticKey.TYPE_NOT_FOUND, name=name), file=sys.stderr)
-                    status = 127
+                    self._report_error(self._diag_msg(DiagnosticKey.TYPE_NOT_FOUND, name=name), line=self.current_line)
+                    status = 1
         return status
 
     def _run_let(self, args: List[str]) -> int:

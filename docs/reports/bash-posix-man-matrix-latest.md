@@ -1,6 +1,6 @@
 # Bash POSIX Man-Page Matrix
 
-Generated: 2026-03-04 06:42:49Z
+Generated: 2026-03-04 07:01:29Z
 
 ## Summary
 
@@ -8,8 +8,8 @@ Generated: 2026-03-04 06:42:49Z
 - partial builtins: 12
 - out-of-scope builtins: 20
 - executed case files: 4
-- matrix exit code: 1
-- mismatch lines detected: 7
+- matrix exit code: 0
+- mismatch lines detected: 0
 
 ## Executed Cases
 
@@ -58,20 +58,4 @@ Generated: 2026-03-04 06:42:49Z
 
 ## Mismatch Extract
 
-- 1:man-bash-posix-01-core-state: exit status mismatch bash=0 mctash=2
-- 2:man-bash-posix-01-core-state: stdout mismatch
-- 3:man-bash-posix-01-core-state: stderr mismatch
-- 4:man-bash-posix-02-path-command: stdout mismatch
-- 5:man-bash-posix-02-path-command: stderr mismatch
-- 6:man-bash-posix-04-misc-builtins: stdout mismatch
-- 7:man-bash-posix-04-misc-builtins: stderr mismatch
-
-## Runner Output
-
-    man-bash-posix-01-core-state: exit status mismatch bash=0 mctash=2
-    man-bash-posix-01-core-state: stdout mismatch
-    man-bash-posix-01-core-state: stderr mismatch
-    man-bash-posix-02-path-command: stdout mismatch
-    man-bash-posix-02-path-command: stderr mismatch
-    man-bash-posix-04-misc-builtins: stdout mismatch
-    man-bash-posix-04-misc-builtins: stderr mismatch
+- none
