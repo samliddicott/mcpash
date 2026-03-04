@@ -1,6 +1,6 @@
 # Bash POSIX Upstream Gap Report
 
-Generated: 2026-03-04 07:45:44Z
+Generated: 2026-03-04 15:42:48Z
 Comparator baseline: GNU bash `--posix` (baserock mirror corpus, `bash-5.1-testing`)
 Target: `mctash --posix`
 
@@ -11,22 +11,22 @@ Target: `mctash --posix`
 
 ## Summary
 
-- core full parity: 0/8
-- core failing rows: 8
+- core full parity: 6/8
+- core failing rows: 2
 - info full parity: 0/1
 
 ## Case Results
 
 | Case | Lane | bash rc | mctash rc | stdout | stderr |
 |---|---|---:|---:|---|---|
-| `posix2.tests` | core | 2 | 6 | mismatch | mismatch |
+| `posix2.tests` | core | 2 | 2 | ok | ok |
 | `posixexp.tests` | core | 2 | 2 | mismatch | mismatch |
-| `posixexp2.tests` | core | 0 | 2 | mismatch | mismatch |
+| `posixexp2.tests` | core | 0 | 0 | ok | ok |
 | `posixpat.tests` | core | 0 | 0 | mismatch | ok |
-| `posixpipe.tests` | core | 0 | 2 | mismatch | mismatch |
-| `ifs-posix.tests` | core | 0 | 137 | mismatch | mismatch |
-| `comsub-posix.tests` | core | 0 | 2 | mismatch | mismatch |
-| `set-e.tests` | core | 0 | 1 | mismatch | mismatch |
+| `posixpipe.tests` | core | 0 | 0 | ok | ok |
+| `ifs-posix.tests` | core | 0 | 0 | ok | ok |
+| `comsub-posix.tests` | core | 0 | 0 | ok | ok |
+| `set-e.tests` | core | 0 | 0 | ok | ok |
 | `builtins.tests` | info | 2 | 1 | mismatch | mismatch |
 
 ## Artifacts
