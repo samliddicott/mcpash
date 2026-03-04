@@ -12,6 +12,9 @@ References:
 
 - POSIX Shell Command Language (Issue 8): `https://pubs.opengroup.org/onlinepubs/9799919799.2024edition/utilities/V3_chap02.html`
 - Parser implementation: `src/mctash/parser.py`
+- Canonical grammar spec: `docs/specs/mctash-grammar.ebnf`
+- Canonical lexer/context rules: `docs/specs/mctash-lexer-modes.md`
+- Grammar-to-ASDL mapping: `docs/specs/mctash-grammar-asdl-map.md`
 - BusyBox ash tests: `tests/busybox/ash_test`
 - Oil shell grammar tests: `tests/oil/oils-master/spec/shell-grammar.test.sh`
 
