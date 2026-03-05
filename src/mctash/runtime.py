@@ -543,6 +543,8 @@ class Runtime:
         "from",
         "shared",
         "shopt",
+        "pushd",
+        "popd",
     }
     SPECIAL_BUILTINS = {
         ":",
@@ -577,6 +579,9 @@ class Runtime:
         "readarray",
         "enable",
         "help",
+        "dirs",
+        "pushd",
+        "popd",
         "[",
         "[[",
         "test",
@@ -671,6 +676,7 @@ class Runtime:
         self._var_attrs: Dict[str, set[str]] = {k: {"exported"} for k in self.env.keys()}
         self._typed_vars: Dict[str, object] = {}
         self.disabled_builtins: set[str] = set()
+        self._dir_stack: list[str] = [self.env.get("PWD", os.getcwd())]
         self._bash_compat_level: int | None = self._parse_bash_compat_level(self.env.get("BASH_COMPAT", ""))
         self._frame_stack: List[Dict[str, object]] = []
         self._call_stack: List[str] = []
@@ -4362,6 +4368,7 @@ class Runtime:
                 os.chdir(target)
                 self.env["OLDPWD"] = old
                 self.env["PWD"] = os.getcwd()
+                self._sync_dir_stack_current()
                 return 0
             except OSError:
                 return 1
@@ -4407,6 +4414,12 @@ class Runtime:
             return self._run_enable(argv[1:])
         if name == "help":
             return self._run_help(argv[1:])
+        if name == "dirs":
+            return self._run_dirs(argv[1:])
+        if name == "pushd":
+            return self._run_pushd(argv[1:])
+        if name == "popd":
+            return self._run_popd(argv[1:])
         if name == "exec":
             if len(argv) <= 1:
                 return 0
@@ -9080,6 +9093,144 @@ class Runtime:
             self._report_error(f"help: no help topics match `{name}'")
             status = 1
         return status
+
+    def _sync_dir_stack_current(self) -> None:
+        cwd = os.getcwd()
+        self.env["PWD"] = cwd
+        if not self._dir_stack:
+            self._dir_stack = [cwd]
+            return
+        self._dir_stack[0] = cwd
+
+    def _dir_index_from_spec(self, spec: str, size: int) -> int | None:
+        if len(spec) < 2 or spec[0] not in "+-" or not spec[1:].isdigit():
+            return None
+        n = int(spec[1:], 10)
+        if n < 0 or n >= size:
+            return None
+        if spec[0] == "+":
+            return n
+        return size - 1 - n
+
+    def _print_dirs(self, entries: list[str], *, per_line: bool = False, numbered: bool = False, choose: int | None = None) -> None:
+        if choose is not None:
+            print(entries[choose], flush=True)
+            return
+        if numbered:
+            for i, d in enumerate(entries):
+                print(f"{i}\t{d}", flush=True)
+            return
+        if per_line:
+            for d in entries:
+                print(d, flush=True)
+            return
+        print(" ".join(entries), flush=True)
+
+    def _run_dirs(self, args: List[str]) -> int:
+        self._sync_dir_stack_current()
+        per_line = False
+        numbered = False
+        clear = False
+        choose: int | None = None
+        i = 0
+        while i < len(args):
+            a = args[i]
+            idx = self._dir_index_from_spec(a, len(self._dir_stack))
+            if idx is not None:
+                choose = idx
+                i += 1
+                continue
+            if a == "-p":
+                per_line = True
+                i += 1
+                continue
+            if a == "-v":
+                numbered = True
+                i += 1
+                continue
+            if a == "-c":
+                clear = True
+                i += 1
+                continue
+            if a == "-l":
+                i += 1
+                continue
+            self._report_error(f"dirs: invalid option {a}")
+            return 2
+        if clear:
+            self._dir_stack = [os.getcwd()]
+            return 0
+        if choose is not None and (choose < 0 or choose >= len(self._dir_stack)):
+            return 1
+        self._print_dirs(self._dir_stack, per_line=per_line, numbered=numbered, choose=choose)
+        return 0
+
+    def _run_pushd(self, args: List[str]) -> int:
+        self._sync_dir_stack_current()
+        if not args:
+            if len(self._dir_stack) < 2:
+                self._report_error("pushd: no other directory")
+                return 1
+            self._dir_stack[0], self._dir_stack[1] = self._dir_stack[1], self._dir_stack[0]
+            old = os.getcwd()
+            os.chdir(self._dir_stack[0])
+            self.env["OLDPWD"] = old
+            self.env["PWD"] = os.getcwd()
+            self._sync_dir_stack_current()
+            self._print_dirs(self._dir_stack)
+            return 0
+        spec = args[0]
+        idx = self._dir_index_from_spec(spec, len(self._dir_stack))
+        if idx is not None:
+            if idx == 0:
+                self._print_dirs(self._dir_stack)
+                return 0
+            head = self._dir_stack[idx:]
+            tail = self._dir_stack[:idx]
+            self._dir_stack = head + tail
+            old = os.getcwd()
+            os.chdir(self._dir_stack[0])
+            self.env["OLDPWD"] = old
+            self.env["PWD"] = os.getcwd()
+            self._sync_dir_stack_current()
+            self._print_dirs(self._dir_stack)
+            return 0
+        try:
+            old = os.getcwd()
+            os.chdir(spec)
+            self.env["OLDPWD"] = old
+            self.env["PWD"] = os.getcwd()
+            self._dir_stack.insert(1, old)
+            self._sync_dir_stack_current()
+            self._print_dirs(self._dir_stack)
+            return 0
+        except OSError:
+            return 1
+
+    def _run_popd(self, args: List[str]) -> int:
+        self._sync_dir_stack_current()
+        if len(self._dir_stack) < 2:
+            self._report_error("popd: directory stack empty")
+            return 1
+        idx = 0
+        if args:
+            parsed = self._dir_index_from_spec(args[0], len(self._dir_stack))
+            if parsed is None:
+                self._report_error(f"popd: invalid option {args[0]}")
+                return 2
+            idx = parsed
+        if idx < 0 or idx >= len(self._dir_stack):
+            return 1
+        removed_current = idx == 0
+        self._dir_stack.pop(idx)
+        if removed_current:
+            old = os.getcwd()
+            os.chdir(self._dir_stack[0])
+            self.env["OLDPWD"] = old
+            self.env["PWD"] = os.getcwd()
+            self._sync_dir_stack_current()
+        self._print_dirs(self._dir_stack)
+        return 0
 
     def _fd_ready_now(self, fd: int) -> bool:
         if fd == 0 and isinstance(sys.stdin, io.StringIO):
