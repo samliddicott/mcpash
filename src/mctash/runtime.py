@@ -8,6 +8,7 @@ import copy
 import io
 import json
 import os
+import socket
 import select
 import signal
 import shlex
@@ -2237,6 +2238,13 @@ class Runtime:
         argv = self._expand_aliases(argv)
         assign_pairs = node.get("more_env") or []
 
+        if argv and argv[0] == "exec" and len(argv) == 2 and redirects:
+            named_fd_var = self._parse_exec_named_fd_var(argv[1])
+            if named_fd_var is not None:
+                handled = self._handle_exec_named_fd_redirect(named_fd_var, redirects)
+                if handled is not None:
+                    return handled
+
         if argv and argv[0] == "exec" and len(argv) <= 1 and redirects:
             local_env = dict(self.env)
             saved_env = self.env
@@ -4249,7 +4257,7 @@ class Runtime:
             fd = redir.fd if redir.fd is not None else (0 if redir.op in ["<", "<<", "<<<", "<&", "<>"] else 1)
             if fd != 1:
                 continue
-            if redir.op in [">", ">>"]:
+            if redir.op in [">", ">>", "&>", "&>>"]:
                 return True
             if redir.op == ">&" and redir.target is not None:
                 return redir.target != "1"
@@ -4337,6 +4345,13 @@ class Runtime:
             except ArithExpansionFailure as e:
                 raise SystemExit(e.code)
             argv = self._expand_aliases(argv)
+
+            if argv and argv[0] == "exec" and len(argv) == 2 and node.redirects:
+                named_fd_var = self._parse_exec_named_fd_var(argv[1])
+                if named_fd_var is not None:
+                    handled = self._handle_exec_named_fd_redirect(named_fd_var, node.redirects)
+                    if handled is not None:
+                        return handled
 
             if argv and argv[0] == "exec" and len(argv) <= 1 and node.redirects:
                 local_env = dict(self.env)
@@ -4822,6 +4837,40 @@ class Runtime:
         if name == "exec":
             if len(argv) <= 1:
                 return 0
+            if len(argv) == 2:
+                spec = argv[1]
+                m_open = re.match(r"^\{([A-Za-z_][A-Za-z0-9_]*)\}(<>|>>|>|<)(.*)$", spec)
+                if m_open is not None:
+                    var_name, op, path = m_open.group(1), m_open.group(2), m_open.group(3)
+                    flags = None
+                    if op == ">":
+                        flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC
+                    elif op == ">>":
+                        flags = os.O_WRONLY | os.O_CREAT | os.O_APPEND
+                    elif op == "<":
+                        flags = os.O_RDONLY
+                    elif op == "<>":
+                        flags = os.O_RDWR | os.O_CREAT
+                    if flags is not None:
+                        try:
+                            fd = os.open(path, flags, 0o666)
+                        except OSError as e:
+                            self._print_stderr(f"exec: {path}: {e.strerror or 'error'}")
+                            return 1
+                        self._set_var(var_name, str(fd))
+                        if fd >= 3:
+                            self._user_fds.add(fd)
+                        return 0
+                m_close = re.match(r"^\{([A-Za-z_][A-Za-z0-9_]*)\}(?:>&-|<&-)$", spec)
+                if m_close is not None:
+                    var_name = m_close.group(1)
+                    fd_s, is_set = self._get_var_with_state(var_name)
+                    if is_set and fd_s.isdigit():
+                        try:
+                            os.close(int(fd_s))
+                        except OSError:
+                            pass
+                    return 0
             cmd = argv[1:]
             if self._is_restricted() and "/" in cmd[0]:
                 self._print_stderr("exec: restricted")
@@ -4925,6 +4974,82 @@ class Runtime:
             self.last_status = 0
             raise ContinueLoop(count)
         return 2
+
+    def _parse_exec_named_fd_var(self, token: str) -> str | None:
+        m = re.fullmatch(r"\{([A-Za-z_][A-Za-z0-9_]*)\}", token)
+        if m is None:
+            return None
+        return m.group(1)
+
+    def _alloc_user_fd(self, src_fd: int) -> int:
+        if src_fd >= 10:
+            return src_fd
+        if fcntl is None:
+            return src_fd
+        dup_fd = int(fcntl.fcntl(src_fd, fcntl.F_DUPFD, 10))
+        os.close(src_fd)
+        return dup_fd
+
+    def _handle_exec_named_fd_redirect(self, var_name: str, redirects: List[Redirect]) -> int | None:
+        if len(redirects) != 1:
+            return None
+        redir = redirects[0]
+        if redir.fd is not None:
+            return None
+
+        if redir.op in [">", ">>", "<", "<>"]:
+            target = self._expand_redir_target(redir)
+            if target is None:
+                self._print_stderr(f"exec: {var_name}: ambiguous redirect")
+                return 1
+            if redir.op == ">":
+                flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC
+            elif redir.op == ">>":
+                flags = os.O_WRONLY | os.O_CREAT | os.O_APPEND
+            elif redir.op == "<":
+                flags = os.O_RDONLY
+            else:
+                flags = os.O_RDWR | os.O_CREAT
+            try:
+                fd = os.open(target, flags, 0o666)
+                fd = self._alloc_user_fd(fd)
+            except OSError as e:
+                self._print_stderr(f"exec: {target}: {e.strerror or 'error'}")
+                return 1
+            self._set_var(var_name, str(fd))
+            if fd >= 3:
+                self._user_fds.add(fd)
+            return 0
+
+        if redir.op in [">&", "<&"]:
+            target = self._expand_redir_target(redir) if redir.target is not None else None
+            if target == "-":
+                fd_s, is_set = self._get_var_with_state(var_name)
+                if not is_set or not fd_s.isdigit():
+                    self._print_stderr(f"exec: {var_name}: ambiguous redirect")
+                    return 1
+                try:
+                    fd = int(fd_s)
+                    os.close(fd)
+                    self._user_fds.discard(fd)
+                except OSError:
+                    pass
+                return 0
+            if target is None or not target.isdigit():
+                self._print_stderr(f"exec: {target or var_name}: ambiguous redirect")
+                return 1
+            try:
+                fd = os.dup(int(target))
+                fd = self._alloc_user_fd(fd)
+            except OSError as e:
+                self._print_stderr(f"exec: {target}: {e.strerror or 'error'}")
+                return 1
+            self._set_var(var_name, str(fd))
+            if fd >= 3:
+                self._user_fds.add(fd)
+            return 0
+
+        return None
 
     def _run_source(self, path: str, args: List[str]) -> int:
         if "/" not in path:
@@ -5937,6 +6062,16 @@ class Runtime:
                     stdout = f
                 elif target_fd == 2:
                     stderr = f
+            elif redir.op == "&>":
+                f = self._open_for_redir(target, "wb", redir.op)
+                to_close.append(f)
+                stdout = f
+                stderr = f
+            elif redir.op == "&>>":
+                f = self._open_for_redir(target, "ab", redir.op)
+                to_close.append(f)
+                stdout = f
+                stderr = f
             elif redir.op == "<<":
                 content = self._expand_heredoc(redir)
                 f = tempfile.TemporaryFile()
@@ -5980,6 +6115,8 @@ class Runtime:
 
     def _open_for_redir(self, path: str, mode: str, op: str) -> object:
         try:
+            if path.startswith("/dev/tcp/") or path.startswith("/dev/udp/"):
+                return self._open_network_redir(path, mode)
             if op == ">" and self.options.get("C", False):
                 try:
                     st = os.stat(path)
@@ -6000,6 +6137,32 @@ class Runtime:
             else:
                 msg = f"{path}: {reason}"
             raise RuntimeError(self._format_error(msg, line=self.current_line))
+
+    def _open_network_redir(self, path: str, mode: str) -> object:
+        proto = "tcp" if path.startswith("/dev/tcp/") else "udp"
+        rest = path.split("/", 3)[3] if path.count("/") >= 3 else ""
+        parts = rest.split("/", 1)
+        if len(parts) != 2:
+            raise RuntimeError(self._format_error(f"{path}: invalid network redirection", line=self.current_line))
+        host, port_s = parts
+        try:
+            port = int(port_s, 10)
+        except ValueError:
+            raise RuntimeError(self._format_error(f"{path}: invalid port", line=self.current_line))
+        if not (0 <= port <= 65535):
+            raise RuntimeError(self._format_error(f"{path}: invalid port", line=self.current_line))
+        try:
+            if proto == "tcp":
+                sock = socket.create_connection((host, port), timeout=3.0)
+            else:
+                sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+                sock.connect((host, port))
+            sock.settimeout(None)
+            io_mode = "rb" if "r" in mode and "w" not in mode and "a" not in mode else "wb"
+            return sock.makefile(io_mode, buffering=0)
+        except OSError as e:
+            reason = (e.strerror or "error").lower()
+            raise RuntimeError(self._format_error(f"{path}: {reason}", line=self.current_line))
 
     def _open_for_redir_readwrite(self, path: str) -> object:
         try:
@@ -6047,6 +6210,18 @@ class Runtime:
                 self._dup2_file(f, fd)
                 if fd >= 3:
                     self._user_fds.add(fd)
+            elif redir.op == "&>":
+                f = self._open_for_redir(target, "wb", redir.op)
+                dup_fd = os.dup(f.fileno())
+                self._dup2_file(f, 1)
+                os.dup2(dup_fd, 2)
+                os.close(dup_fd)
+            elif redir.op == "&>>":
+                f = self._open_for_redir(target, "ab", redir.op)
+                dup_fd = os.dup(f.fileno())
+                self._dup2_file(f, 1)
+                os.dup2(dup_fd, 2)
+                os.close(dup_fd)
             elif redir.op == "<<":
                 content = self._expand_heredoc(redir)
                 f = tempfile.TemporaryFile()
@@ -6087,6 +6262,24 @@ class Runtime:
             for redir in redirects:
                 fd = redir.fd if redir.fd is not None else (0 if redir.op in ["<", "<<", "<<<", "<&", "<>"] else 1)
                 target = self._expand_redir_target(redir)
+                if redir.op in {"&>", "&>>"}:
+                    for save_fd in (1, 2):
+                        try:
+                            saved_fd = os.dup(save_fd)
+                            try:
+                                os.set_inheritable(saved_fd, False)
+                            except OSError:
+                                pass
+                        except OSError:
+                            saved_fd = -1
+                        saved.append((save_fd, saved_fd))
+                    mode = "wb" if redir.op == "&>" else "ab"
+                    f = self._open_for_redir(target, mode, redir.op)
+                    dup_fd = os.dup(f.fileno())
+                    self._dup2_file(f, 1)
+                    os.dup2(dup_fd, 2)
+                    os.close(dup_fd)
+                    continue
                 try:
                     saved_fd = os.dup(fd)
                     try:

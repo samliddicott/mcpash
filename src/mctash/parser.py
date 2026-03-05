@@ -595,6 +595,35 @@ class Parser:
                     redirects.append(redir)
                     lst_redirects.append(lst_redir)
                     continue
+            if tok.kind == "OP" and tok.value == "&":
+                next_tok = self._peek_n(1)
+                if (
+                    next_tok
+                    and next_tok.kind == "OP"
+                    and next_tok.value in [">", ">>"]
+                    and self._token_adjacent(tok, next_tok)
+                ):
+                    if command_line is None:
+                        command_line = tok.line
+                    self._advance()
+                    self._advance()
+                    target_tok = self._peek()
+                    if target_tok is None or not self._is_word(target_tok):
+                        raise ParseError(f"expected redirection target at {self._where(target_tok)}")
+                    op = "&>" if next_tok.value == ">" else "&>>"
+                    redir = self._make_redirect(op, target_tok.value, None)
+                    lst_redir = LstRedirect(
+                        op=op,
+                        target=self._resolve_word(
+                            parse_word(target_tok.value, line=target_tok.line, col=target_tok.col, index=target_tok.index)
+                        ),
+                        fd=None,
+                        op_pos=LstTokenPos(value=op, line=tok.line, col=tok.col, length=len(op), index=tok.index),
+                    )
+                    self._advance()
+                    redirects.append(redir)
+                    lst_redirects.append(lst_redir)
+                    continue
             if tok.kind == "OP" and tok.value in ["<", ">", ">>", "<>", "<<", "<<-", "<<<", ">&", "<&"]:
                 op = tok.value
                 if command_line is None:
@@ -1321,6 +1350,33 @@ class Parser:
                     self._advance()
                     if redir.op in ["<<", "<<-"]:
                         self.pending_heredocs.append((redir, lst_redir))
+                    redirects.append(redir)
+                    lst_redirects.append(lst_redir)
+                    continue
+            if tok.kind == "OP" and tok.value == "&":
+                next_tok = self._peek_n(1)
+                if (
+                    next_tok
+                    and next_tok.kind == "OP"
+                    and next_tok.value in [">", ">>"]
+                    and self._token_adjacent(tok, next_tok)
+                ):
+                    self._advance()
+                    self._advance()
+                    target_tok = self._peek()
+                    if target_tok is None or not self._is_word(target_tok):
+                        raise ParseError(f"expected redirection target at {self._where(target_tok)}")
+                    op = "&>" if next_tok.value == ">" else "&>>"
+                    redir = self._make_redirect(op, target_tok.value, None)
+                    lst_redir = LstRedirect(
+                        op=op,
+                        target=self._resolve_word(
+                            parse_word(target_tok.value, line=target_tok.line, col=target_tok.col, index=target_tok.index)
+                        ),
+                        fd=None,
+                        op_pos=LstTokenPos(value=op, line=tok.line, col=tok.col, length=len(op), index=tok.index),
+                    )
+                    self._advance()
                     redirects.append(redir)
                     lst_redirects.append(lst_redir)
                     continue
