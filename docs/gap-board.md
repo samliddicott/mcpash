@@ -55,7 +55,7 @@ Reference summary source: `docs/posix-shall-trace.md`.
 | POSIX Area | Status | Evidence |
 |---|---|---|
 | 2.6 Word Expansions | partial | Narrowed to pathname-expansion full-space proof row in `docs/posix-shall-trace.md`; core expansion/word-operator rows are now covered with differential matrices (`man-ash-var-ops*.sh`, `man-ash-word-nesting*.sh`).
-| 2.7 Redirection | covered | `docs/posix-shall-trace.md` + `tests/diff/cases/man-ash-redir.sh`.
+| 2.7 Redirection | covered | `docs/posix-shall-trace.md` + `tests/diff/cases/man-ash-redir.sh`, `tests/diff/cases/man-ash-heredoc-edges.sh`, `tests/diff/cases/man-ash-redir-heredoc-matrix.sh`.
 | 2.8 Exit Status and Errors | covered | `docs/posix-shall-trace.md` + differential command-status cases.
 | 2.9 Shell Commands | partial | Narrowed to special-builtin full option-surface parity row in `docs/posix-shall-trace.md`; command grammar/control-flow rows are verified.
 | 2.10 Shell Grammar | covered | `docs/posix-shall-trace.md`, `docs/grammar-production-checklist.md`, `tests/diff/cases/man-ash-prefix-suffix.sh`, `tests/diff/cases/man-ash-grammar-negative.sh`, `tests/diff/cases/man-ash-grammar-reserved.sh`.
