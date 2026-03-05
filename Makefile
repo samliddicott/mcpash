@@ -5,7 +5,7 @@ OIL_MIN_PASS ?= 245
 OIL_MAX_FAIL ?= 0
 SUMMARY_FILE ?= docs/reports/parity-summary.json
 
-.PHONY: regressions bridge-conformance diff-conformance diff-parity-matrix read-matrix semantic-matrix jobs-interactive-matrix trap-noninteractive-matrix trap-interactive-matrix trap-variant-matrix busybox-conformance parity-summary parity-summary-validate perf-baseline perf-compare perf-variation stress-race stress-bridge compat-posix-bash compat-posix-bash-strict bash-posix-man-matrix bash-posix-upstream-matrix bash-tests-fetch conformance conformance-full conformance-quick test-all
+.PHONY: regressions bridge-conformance diff-conformance diff-parity-matrix read-matrix semantic-matrix jobs-interactive-matrix trap-noninteractive-matrix trap-interactive-matrix trap-variant-matrix completion-interactive-matrix bash-builtin-matrix busybox-conformance parity-summary parity-summary-validate perf-baseline perf-compare perf-variation stress-race stress-bridge compat-posix-bash compat-posix-bash-strict bash-posix-man-matrix bash-posix-upstream-matrix bash-tests-fetch conformance conformance-full conformance-quick test-all
 
 regressions:
 	@./tests/regressions/run.sh
@@ -36,6 +36,12 @@ trap-interactive-matrix:
 
 trap-variant-matrix:
 	@./tests/compat/run_trap_variant_matrix.sh
+
+completion-interactive-matrix:
+	@./tests/compat/run_completion_interactive_matrix.sh
+
+bash-builtin-matrix:
+	@./tests/compat/run_bash_builtin_matrix.sh
 
 busybox-conformance:
 	@RUN_TIMEOUT=$(RUN_TIMEOUT) RUN_MODULE_TIMEOUT=$(RUN_TIMEOUT) ./src/tests/run_busybox_ash.sh run
@@ -94,5 +100,6 @@ conformance-quick:
 test-all:
 	@$(MAKE) diff-parity-matrix
 	@$(MAKE) compat-posix-bash-strict
+	@$(MAKE) bash-builtin-matrix
 	@$(MAKE) bash-posix-man-matrix
 	@$(MAKE) conformance-full

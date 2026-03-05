@@ -13,6 +13,16 @@ class DiagnosticKey(str, Enum):
     HASH_NOT_FOUND = "hash_not_found"
     ALIAS_NOT_FOUND = "alias_not_found"
     UNALIAS_NOT_FOUND = "unalias_not_found"
+    INVALID_OPTION = "invalid_option"
+    OPTION_REQUIRES_ARG = "option_requires_arg"
+    INVALID_NUMBER = "invalid_number"
+    INVALID_FD = "invalid_fd"
+    TOO_MANY_ARGS = "too_many_args"
+    NOT_VALID_IDENTIFIER = "not_valid_identifier"
+    NOT_SHELL_BUILTIN = "not_shell_builtin"
+    HELP_NO_TOPIC = "help_no_topic"
+    DIRSTACK_EMPTY = "dirstack_empty"
+    NO_OTHER_DIRECTORY = "no_other_directory"
 
 
 _TEMPLATES: dict[str, dict[DiagnosticKey, str]] = {
@@ -26,6 +36,16 @@ _TEMPLATES: dict[str, dict[DiagnosticKey, str]] = {
         DiagnosticKey.HASH_NOT_FOUND: "hash: {name}: not found",
         DiagnosticKey.ALIAS_NOT_FOUND: "alias: {name}: not found",
         DiagnosticKey.UNALIAS_NOT_FOUND: "unalias: {name}: not found",
+        DiagnosticKey.INVALID_OPTION: "{cmd}: invalid option {opt}",
+        DiagnosticKey.OPTION_REQUIRES_ARG: "{cmd}: option requires an argument -- {opt}",
+        DiagnosticKey.INVALID_NUMBER: "{cmd}: invalid {what}",
+        DiagnosticKey.INVALID_FD: "{cmd}: {fd}: invalid file descriptor",
+        DiagnosticKey.TOO_MANY_ARGS: "{cmd}: too many arguments",
+        DiagnosticKey.NOT_VALID_IDENTIFIER: "{cmd}: {name}: not a valid identifier",
+        DiagnosticKey.NOT_SHELL_BUILTIN: "{cmd}: {name}: not a shell builtin",
+        DiagnosticKey.HELP_NO_TOPIC: "{cmd}: no help topics match `{name}'",
+        DiagnosticKey.DIRSTACK_EMPTY: "{cmd}: directory stack empty",
+        DiagnosticKey.NO_OTHER_DIRECTORY: "{cmd}: no other directory",
     },
     "bash": {
         DiagnosticKey.COMMAND_NOT_FOUND: "{name}: command not found",
@@ -35,6 +55,16 @@ _TEMPLATES: dict[str, dict[DiagnosticKey, str]] = {
         DiagnosticKey.HASH_NOT_FOUND: "hash: {name}: not found",
         DiagnosticKey.ALIAS_NOT_FOUND: "alias: {name}: not found",
         DiagnosticKey.UNALIAS_NOT_FOUND: "unalias: {name}: not found",
+        DiagnosticKey.INVALID_OPTION: "{cmd}: invalid option {opt}",
+        DiagnosticKey.OPTION_REQUIRES_ARG: "{cmd}: option requires an argument -- {opt}",
+        DiagnosticKey.INVALID_NUMBER: "{cmd}: invalid {what}",
+        DiagnosticKey.INVALID_FD: "{cmd}: {fd}: invalid file descriptor",
+        DiagnosticKey.TOO_MANY_ARGS: "{cmd}: too many arguments",
+        DiagnosticKey.NOT_VALID_IDENTIFIER: "{cmd}: {name}: not a valid identifier",
+        DiagnosticKey.NOT_SHELL_BUILTIN: "{cmd}: {name}: not a shell builtin",
+        DiagnosticKey.HELP_NO_TOPIC: "{cmd}: no help topics match `{name}'",
+        DiagnosticKey.DIRSTACK_EMPTY: "{cmd}: directory stack empty",
+        DiagnosticKey.NO_OTHER_DIRECTORY: "{cmd}: no other directory",
     },
 }
 

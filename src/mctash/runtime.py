@@ -8914,7 +8914,7 @@ class Runtime:
                 continue
             if a in {"-d", "-n", "-s", "-O", "-u"}:
                 if i + 1 >= len(args):
-                    self._report_error(f"mapfile: option requires an argument -- {a[1:]}")
+                    self._report_error(self._diag_msg(DiagnosticKey.OPTION_REQUIRES_ARG, cmd="mapfile", opt=a[1:]))
                     return 2
                 val = args[i + 1]
                 i += 2
@@ -8924,44 +8924,44 @@ class Runtime:
                     try:
                         max_count = max(0, int(val, 10))
                     except ValueError:
-                        self._report_error("mapfile: invalid line count")
+                        self._report_error(self._diag_msg(DiagnosticKey.INVALID_NUMBER, cmd="mapfile", what="line count"))
                         return 2
                 elif a == "-s":
                     try:
                         skip = max(0, int(val, 10))
                     except ValueError:
-                        self._report_error("mapfile: invalid skip count")
+                        self._report_error(self._diag_msg(DiagnosticKey.INVALID_NUMBER, cmd="mapfile", what="skip count"))
                         return 2
                 elif a == "-O":
                     try:
                         origin = int(val, 10)
                     except ValueError:
-                        self._report_error("mapfile: invalid origin")
+                        self._report_error(self._diag_msg(DiagnosticKey.INVALID_NUMBER, cmd="mapfile", what="origin"))
                         return 2
                     if origin < 0:
-                        self._report_error("mapfile: origin must be non-negative")
+                        self._report_error(self._diag_msg(DiagnosticKey.INVALID_NUMBER, cmd="mapfile", what="origin"))
                         return 1
                 elif a == "-u":
                     try:
                         fd = int(val, 10)
                     except ValueError:
-                        self._report_error("mapfile: invalid file descriptor")
+                        self._report_error(self._diag_msg(DiagnosticKey.INVALID_FD, cmd="mapfile", fd=val))
                         return 2
                     if fd < 0:
-                        self._report_error("mapfile: invalid file descriptor")
+                        self._report_error(self._diag_msg(DiagnosticKey.INVALID_FD, cmd="mapfile", fd=str(fd)))
                         return 2
                 continue
-            self._report_error(f"mapfile: invalid option {a}")
+            self._report_error(self._diag_msg(DiagnosticKey.INVALID_OPTION, cmd="mapfile", opt=a))
             return 2
 
         if i < len(args):
             array_name = args[i]
             i += 1
         if i < len(args):
-            self._report_error("mapfile: too many arguments")
+            self._report_error(self._diag_msg(DiagnosticKey.TOO_MANY_ARGS, cmd="mapfile"))
             return 2
         if not self._is_valid_name(array_name):
-            self._report_error(f"mapfile: {array_name}: not a valid identifier")
+            self._report_error(self._diag_msg(DiagnosticKey.NOT_VALID_IDENTIFIER, cmd="mapfile", name=array_name))
             return 1
 
         try:
@@ -8972,7 +8972,7 @@ class Runtime:
                 stream = os.fdopen(os.dup(fd), "r", encoding="utf-8", errors="surrogateescape")
                 close_stream = True
         except OSError:
-            self._report_error(f"mapfile: {fd}: invalid file descriptor")
+            self._report_error(self._diag_msg(DiagnosticKey.INVALID_FD, cmd="mapfile", fd=str(fd)))
             return 1
 
         lines: list[str] = []
@@ -9051,7 +9051,7 @@ class Runtime:
                 elif ch == "s":
                     special_only = True
                 else:
-                    self._report_error(f"enable: invalid option -{ch}")
+                    self._report_error(self._diag_msg(DiagnosticKey.INVALID_OPTION, cmd="enable", opt=f"-{ch}"))
                     return 2
             i += 1
 
@@ -9076,7 +9076,7 @@ class Runtime:
         status = 0
         for n in names:
             if n not in self.BUILTINS:
-                self._report_error(f"enable: {n}: not a shell builtin")
+                self._report_error(self._diag_msg(DiagnosticKey.NOT_SHELL_BUILTIN, cmd="enable", name=n))
                 status = 1
                 continue
             if disable:
@@ -9107,7 +9107,7 @@ class Runtime:
             if name in self.BUILTINS:
                 print(f"{name}: shell builtin")
                 continue
-            self._report_error(f"help: no help topics match `{name}'")
+            self._report_error(self._diag_msg(DiagnosticKey.HELP_NO_TOPIC, cmd="help", name=name))
             status = 1
         return status
 
@@ -9172,7 +9172,7 @@ class Runtime:
             if a == "-l":
                 i += 1
                 continue
-            self._report_error(f"dirs: invalid option {a}")
+            self._report_error(self._diag_msg(DiagnosticKey.INVALID_OPTION, cmd="dirs", opt=a))
             return 2
         if clear:
             self._dir_stack = [os.getcwd()]
@@ -9186,7 +9186,7 @@ class Runtime:
         self._sync_dir_stack_current()
         if not args:
             if len(self._dir_stack) < 2:
-                self._report_error("pushd: no other directory")
+                self._report_error(self._diag_msg(DiagnosticKey.NO_OTHER_DIRECTORY, cmd="pushd"))
                 return 1
             self._dir_stack[0], self._dir_stack[1] = self._dir_stack[1], self._dir_stack[0]
             old = os.getcwd()
@@ -9227,13 +9227,13 @@ class Runtime:
     def _run_popd(self, args: List[str]) -> int:
         self._sync_dir_stack_current()
         if len(self._dir_stack) < 2:
-            self._report_error("popd: directory stack empty")
+            self._report_error(self._diag_msg(DiagnosticKey.DIRSTACK_EMPTY, cmd="popd"))
             return 1
         idx = 0
         if args:
             parsed = self._dir_index_from_spec(args[0], len(self._dir_stack))
             if parsed is None:
-                self._report_error(f"popd: invalid option {args[0]}")
+                self._report_error(self._diag_msg(DiagnosticKey.INVALID_OPTION, cmd="popd", opt=args[0]))
                 return 2
             idx = parsed
         if idx < 0 or idx >= len(self._dir_stack):
@@ -9338,6 +9338,7 @@ class Runtime:
                 continue
             if a in takes_arg:
                 if i + 1 >= len(args):
+                    self._report_error(self._diag_msg(DiagnosticKey.OPTION_REQUIRES_ARG, cmd="complete", opt=a[1:]))
                     return 2
                 v = args[i + 1]
                 if a == "-W":
@@ -9352,6 +9353,7 @@ class Runtime:
             if all(ch in "abcdefgjksuvDEI" for ch in a[1:]):
                 i += 1
                 continue
+            self._report_error(self._diag_msg(DiagnosticKey.INVALID_OPTION, cmd="complete", opt=a))
             return 2
         else:
             names = []
@@ -9388,6 +9390,7 @@ class Runtime:
             return 0
 
         if not names:
+            self._report_error(self._diag_msg(DiagnosticKey.OPTION_REQUIRES_ARG, cmd="complete", opt="name"))
             return 2
         for n in names:
             self._completion_specs[n] = {"W": wordlist, "A": action, "o": set(comp_opts)}
@@ -9406,6 +9409,7 @@ class Runtime:
                 continue
             if a == "-A":
                 if i + 1 >= len(args):
+                    self._report_error(self._diag_msg(DiagnosticKey.OPTION_REQUIRES_ARG, cmd="compgen", opt="A"))
                     return 2
                 action = args[i + 1]
                 i += 2
@@ -9445,6 +9449,7 @@ class Runtime:
             a = args[i]
             if a in {"-o", "+o"}:
                 if i + 1 >= len(args):
+                    self._report_error(self._diag_msg(DiagnosticKey.OPTION_REQUIRES_ARG, cmd="compopt", opt="o"))
                     return 2
                 i += 2
                 continue
@@ -9452,6 +9457,7 @@ class Runtime:
                 i += 1
                 continue
             if a.startswith("-"):
+                self._report_error(self._diag_msg(DiagnosticKey.INVALID_OPTION, cmd="compopt", opt=a))
                 return 2
             names.extend(args[i:])
             break
@@ -9473,14 +9479,17 @@ class Runtime:
                 return 0
             if a == "-q":
                 if i + 1 >= len(args):
+                    self._report_error(self._diag_msg(DiagnosticKey.OPTION_REQUIRES_ARG, cmd="bind", opt="q"))
                     return 2
                 return 0 if args[i + 1] in readline_funcs else 1
             if a == "-r":
                 if i + 1 >= len(args):
+                    self._report_error(self._diag_msg(DiagnosticKey.OPTION_REQUIRES_ARG, cmd="bind", opt="r"))
                     return 2
                 return 0
             if a.startswith("-"):
                 # Accept a small non-interactive subset.
+                self._report_error(self._diag_msg(DiagnosticKey.INVALID_OPTION, cmd="bind", opt=a))
                 return 2
             i += 1
         return 0

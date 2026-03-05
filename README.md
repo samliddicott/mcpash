@@ -150,6 +150,27 @@ make bash-posix-man-matrix
 Report output:
 - `docs/reports/bash-posix-man-matrix-latest.md`
 
+Run builtin-focused parity matrix lanes (core + bash-compat):
+
+```sh
+make bash-builtin-matrix
+```
+
+Strict mode also runs PTY interactive completion/readline checks:
+
+```sh
+STRICT=1 make bash-builtin-matrix
+```
+
+Report output:
+- `docs/reports/bash-builtin-matrix-latest.md`
+
+Run interactive completion/readline matrix directly:
+
+```sh
+make completion-interactive-matrix
+```
+
 Run upstream bash POSIX-core matrix lanes (core strict + info lane):
 
 ```sh
