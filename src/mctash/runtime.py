@@ -869,6 +869,14 @@ class Runtime:
     def _set_subshell_depth(self, value: int) -> None:
         self._thread_ctx.subshell_depth = max(0, int(value))
 
+    def _activate_restricted_mode(self) -> None:
+        # Match bash restricted-shell behavior for core mutable path/env vars.
+        for name in ("PATH", "SHELL", "ENV", "BASH_ENV"):
+            self.readonly_vars.add(name)
+
+    def _is_restricted(self) -> bool:
+        return bool(self.options.get("r", False))
+
     def set_positional_args(self, args: List[str]) -> None:
         self.positional = list(args)
 
@@ -4458,6 +4466,9 @@ class Runtime:
 
     def _run_builtin(self, name: str, argv: List[str]) -> int:
         if name == "cd":
+            if self._is_restricted():
+                self._print_stderr("cd: restricted")
+                return 1
             target = argv[1] if len(argv) > 1 else self.env.get("HOME", "/")
             try:
                 old = os.getcwd()
@@ -4472,6 +4483,9 @@ class Runtime:
             if len(argv) < 2:
                 return 2
             path = argv[1]
+            if self._is_restricted() and "/" in path:
+                self._print_stderr(f"{name}: restricted")
+                return 1
             args = argv[2:]
             return self._run_source(path, args)
         if name == "local":
@@ -4530,6 +4544,9 @@ class Runtime:
             if len(argv) <= 1:
                 return 0
             cmd = argv[1:]
+            if self._is_restricted() and "/" in cmd[0]:
+                self._print_stderr("exec: restricted")
+                return 1
             if self._is_builtin_enabled(cmd[0]):
                 status = self._run_builtin(cmd[0], cmd)
                 raise SystemExit(status)
@@ -4896,6 +4913,9 @@ class Runtime:
         if argv[0] == "":
             self._report_error(self._diag_msg(DiagnosticKey.PERMISSION_DENIED), line=self.current_line, context=context)
             return 127
+        if self._is_restricted() and "/" in argv[0]:
+            self._print_stderr(f"{argv[0]}: restricted: cannot specify `/' in command names")
+            return 1
         try:
             with self._redirected_fds(redirects):
                 if "/" in argv[0]:
@@ -7690,6 +7710,14 @@ class Runtime:
 
     def _run_set(self, args: List[str]) -> int:
         def _set_option(opt: str, enabled: bool) -> int:
+            if opt == "r":
+                if not enabled and self.options.get("r", False):
+                    self._print_stderr("set: +r: invalid option")
+                    return 1
+                if enabled:
+                    self.options["r"] = True
+                    self._activate_restricted_mode()
+                    return 0
             if opt == "m" and enabled and not os.isatty(0):
                 self._report_error(self._diag_msg(DiagnosticKey.SET_CANT_ACCESS_TTY), line=self.current_line, context=None)
                 self.options["m"] = False

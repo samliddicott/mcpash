@@ -11,7 +11,7 @@ from .parser import ParseError, Parser
 from .asdl_map import AsdlMappingError, lst_list_item_to_asdl, lst_script_to_asdl
 from .runtime import BreakLoop, ContinueLoop, Runtime, RuntimeError
 
-VALID_STARTUP_OPTION_LETTERS = set("aCefnuvxIimqVEbpsl")
+VALID_STARTUP_OPTION_LETTERS = set("aCefnuvxIimqVEbpslr")
 DEFAULT_BASH_COMPAT = "50"
 
 
@@ -84,6 +84,11 @@ def main(argv: List[str] | None = None) -> int:
         rt.c_string_mode = True
         rt.set_script_name(script_name)
         rt.set_positional_args(script_args)
+        login_shell = startup_changes.get("__login__", False) or os.path.basename(sys.argv[0]).startswith("-")
+        interactive = bool(rt.options.get("i", False))
+        rt.set_login_shell(login_shell)
+        rt.set_interactive_session(interactive)
+        _source_startup_files(rt, mode=mode, login_shell=login_shell, interactive=interactive)
         try:
             parser_impl = Parser(source, aliases=rt.aliases)
             while True:
@@ -183,8 +188,10 @@ def main(argv: List[str] | None = None) -> int:
     if interactive and args.script is None:
         if "m" not in startup_changes:
             rt.options["m"] = True
-        _source_startup_files(rt, login_shell=login_shell, interactive=True)
+        _source_startup_files(rt, mode=mode, login_shell=login_shell, interactive=True)
         return _run_interactive(rt)
+
+    _source_startup_files(rt, mode=mode, login_shell=login_shell, interactive=False)
 
     if args.script is None:
         source = sys.stdin.read()
@@ -289,6 +296,7 @@ def _option_name_to_letter(name: str) -> str | None:
         "quiet": "q",
         "stdin": "s",
         "privileged": "p",
+        "restricted": "r",
         "posix": "posix",
     }
     return mapping.get(name.lower())
@@ -375,6 +383,8 @@ def _apply_startup_options(rt: Runtime, changes: Dict[str, bool]) -> None:
         if k.startswith("__"):
             continue
         rt.options[k] = v
+    if rt.options.get("r", False):
+        rt._activate_restricted_mode()
     # ash behavior: vi/emacs modes are mutually exclusive.
     if rt.options.get("V", False):
         rt.options["E"] = False
@@ -382,13 +392,41 @@ def _apply_startup_options(rt: Runtime, changes: Dict[str, bool]) -> None:
         rt.options["V"] = False
 
 
-def _source_startup_files(rt: Runtime, *, login_shell: bool, interactive: bool) -> None:
+def _source_startup_files(rt: Runtime, *, mode: str, login_shell: bool, interactive: bool) -> None:
     if login_shell:
-        for path in ["/etc/profile", os.path.expanduser("~/.profile")]:
+        login_files: list[str]
+        if mode == "bash":
+            login_files = [
+                "/etc/profile",
+                os.path.expanduser("~/.bash_profile"),
+                os.path.expanduser("~/.bash_login"),
+                os.path.expanduser("~/.profile"),
+            ]
+        else:
+            login_files = ["/etc/profile", os.path.expanduser("~/.profile")]
+        loaded_user = False
+        for path in login_files:
+            if loaded_user and path.startswith(os.path.expanduser("~/")):
+                continue
             if os.path.exists(path):
                 rt._run_source(path, [])
+                if path.startswith(os.path.expanduser("~/")):
+                    loaded_user = True
     if interactive:
-        env_path = rt._get_var("ENV")
+        if mode == "bash":
+            bashrc = os.path.expanduser("~/.bashrc")
+            if os.path.exists(bashrc):
+                rt._run_source(bashrc, [])
+        else:
+            env_path = rt._get_var("ENV")
+            if env_path:
+                p = os.path.expanduser(env_path)
+                if os.path.exists(p):
+                    rt._run_source(p, [])
+        return
+    # Non-interactive startup files.
+    if mode == "bash":
+        env_path = rt._get_var("BASH_ENV")
         if env_path:
             p = os.path.expanduser(env_path)
             if os.path.exists(p):

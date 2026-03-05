@@ -32,6 +32,7 @@ Scope note:
 | `-E` | emacs | Partial | Readline emacs editing mode is requested when available; full dash editor parity not claimed. |
 | `-b` | notify | Parsed (out-of-scope runtime effect) | Job notification parity not in current scope. |
 | `-p` | privileged | Parsed | Listed and tracked; full privilege-mode semantics not claimed. |
+| `-r` | restricted | Implemented (core parity) | Disallows slash-command execution and `cd`, and protects `PATH/SHELL/ENV/BASH_ENV` as readonly. |
 | `-s` | stdin | Parsed | Command intake mode control supported in startup parser path. |
 
 ## `-o/+o` option names
@@ -54,6 +55,7 @@ Scope note:
 | `ignoreeof` | Partial | Maps to `-I`; implemented for TTY REPL path. |
 | `stdin` | Parsed | Maps to `-s`. |
 | `privileged` | Parsed | Maps to `-p`. |
+| `restricted` | Implemented (core parity) | Maps to `-r`; core restricted-shell constraints enforced. |
 | `nolog` | Parsed | Maps to `-q`; included for ash listing compatibility. |
 | `debug` | Parsed | Listed for ash compatibility surface. |
 | `pipefail` | Implemented (extension) | Not in classic POSIX ash, retained as mctash extension. |
@@ -72,5 +74,6 @@ Scope note:
   - `set -o` / `set +o` listing
   - `nolog` / `debug` toggling and reporting
   - startup semantics for `-u`, `-f`, and `-C`
+  - startup semantics for `-r` restricted mode
   - startup `-v` input echoing
   - startup `-x` with `PS4` prefix

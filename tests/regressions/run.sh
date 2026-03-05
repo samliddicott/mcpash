@@ -1280,6 +1280,79 @@ grep -Fxq 'one' "$tmpdir/out" || fail "startup_noclobber_behavior: expected file
 grep -Fq 'file exists' "$tmpdir/err" || fail "startup_noclobber_behavior: expected noclobber diagnostic"
 printf '[PASS] startup_noclobber_behavior\n'
 
+tmp_home="$tmpdir/startup_home"
+mkdir -p "$tmp_home"
+cat >"$tmp_home/bash_env.sh" <<'EOF'
+echo BASHENV
+EOF
+set +e
+HOME="$tmp_home" MCTASH_MODE=bash BASH_ENV="$tmp_home/bash_env.sh" PYTHONPATH="$ROOT/src" python3 -m mctash -c 'echo BODY' >"$tmpdir/out" 2>"$tmpdir/err"
+status=$?
+set -e
+[[ "$status" -eq 0 ]] || fail "startup_bash_env_noninteractive: expected status 0, got $status"
+grep -Fxq 'BASHENV' "$tmpdir/out" || fail "startup_bash_env_noninteractive: expected BASH_ENV preload output"
+grep -Fxq 'BODY' "$tmpdir/out" || fail "startup_bash_env_noninteractive: expected body output"
+printf '[PASS] startup_bash_env_noninteractive\n'
+
+set +e
+HOME="$tmp_home" MCTASH_MODE=posix BASH_ENV="$tmp_home/bash_env.sh" PYTHONPATH="$ROOT/src" python3 -m mctash --posix -c 'echo BODY' >"$tmpdir/out" 2>"$tmpdir/err"
+status=$?
+set -e
+[[ "$status" -eq 0 ]] || fail "startup_posix_ignores_bash_env: expected status 0, got $status"
+grep -Fxq 'BODY' "$tmpdir/out" || fail "startup_posix_ignores_bash_env: expected body output"
+if grep -Fxq 'BASHENV' "$tmpdir/out"; then
+  fail "startup_posix_ignores_bash_env: expected no BASH_ENV preload in posix mode"
+fi
+printf '[PASS] startup_posix_ignores_bash_env\n'
+
+cat >"$tmp_home/.bash_profile" <<'EOF'
+echo LOGIN_BASH_PROFILE
+EOF
+set +e
+HOME="$tmp_home" MCTASH_MODE=bash PYTHONPATH="$ROOT/src" python3 -m mctash -lc 'echo BODY' >"$tmpdir/out" 2>"$tmpdir/err"
+status=$?
+set -e
+[[ "$status" -eq 0 ]] || fail "startup_login_bash_profile: expected status 0, got $status"
+grep -Fxq 'LOGIN_BASH_PROFILE' "$tmpdir/out" || fail "startup_login_bash_profile: expected login profile preload output"
+grep -Fxq 'BODY' "$tmpdir/out" || fail "startup_login_bash_profile: expected body output"
+printf '[PASS] startup_login_bash_profile\n'
+
+cat >"$tmp_home/.profile" <<'EOF'
+echo LOGIN_POSIX_PROFILE
+EOF
+set +e
+HOME="$tmp_home" MCTASH_MODE=posix PYTHONPATH="$ROOT/src" python3 -m mctash -lc 'echo BODY' >"$tmpdir/out" 2>"$tmpdir/err"
+status=$?
+set -e
+[[ "$status" -eq 0 ]] || fail "startup_login_posix_profile: expected status 0, got $status"
+grep -Fxq 'LOGIN_POSIX_PROFILE' "$tmpdir/out" || fail "startup_login_posix_profile: expected login profile preload output"
+grep -Fxq 'BODY' "$tmpdir/out" || fail "startup_login_posix_profile: expected body output"
+printf '[PASS] startup_login_posix_profile\n'
+
+set +e
+PYTHONPATH="$ROOT/src" python3 -m mctash -r -c 'PATH=/bin; echo "PATH=$PATH"' >"$tmpdir/out" 2>"$tmpdir/err"
+status=$?
+set -e
+[[ "$status" -ne 0 ]] || fail "startup_restricted_path_readonly: expected non-zero status"
+grep -Eq 'readonly|read only' "$tmpdir/err" || fail "startup_restricted_path_readonly: expected readonly diagnostic"
+printf '[PASS] startup_restricted_path_readonly\n'
+
+set +e
+PYTHONPATH="$ROOT/src" python3 -m mctash -r -c '/bin/echo hi' >"$tmpdir/out" 2>"$tmpdir/err"
+status=$?
+set -e
+[[ "$status" -eq 1 ]] || fail "startup_restricted_slash_command: expected status 1, got $status"
+grep -Fq "cannot specify \`/' in command names" "$tmpdir/err" || fail "startup_restricted_slash_command: expected restricted command diagnostic"
+printf '[PASS] startup_restricted_slash_command\n'
+
+set +e
+PYTHONPATH="$ROOT/src" python3 -m mctash -r -c 'cd /' >"$tmpdir/out" 2>"$tmpdir/err"
+status=$?
+set -e
+[[ "$status" -eq 1 ]] || fail "startup_restricted_cd: expected status 1, got $status"
+grep -Fq 'cd: restricted' "$tmpdir/err" || fail "startup_restricted_cd: expected restricted cd diagnostic"
+printf '[PASS] startup_restricted_cd\n'
+
 if ! "$ROOT/tests/regressions/asdl_fallback_audit.sh" >"$tmpdir/out" 2>"$tmpdir/err"; then
   fail "asdl_fallback_audit"
 fi
