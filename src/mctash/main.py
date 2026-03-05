@@ -177,6 +177,8 @@ def main(argv: List[str] | None = None) -> int:
     rt.set_positional_args(args.script_args)
     login_shell = startup_changes.get("__login__", False) or os.path.basename(sys.argv[0]).startswith("-")
     interactive = bool(rt.options.get("i", False)) or (args.script is None and os.isatty(0))
+    rt.set_login_shell(login_shell)
+    rt.set_interactive_session(interactive)
 
     if interactive and args.script is None:
         if "m" not in startup_changes:

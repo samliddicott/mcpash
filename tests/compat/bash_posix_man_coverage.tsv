@@ -6,7 +6,7 @@ bg	covered	man-bash-posix-10-jobs-fg-bg-interactive	non-interactive baseline sta
 bind	partial	bash-builtin-completion	interactive/readline semantics partially covered; strict PTY matrix in `run_completion_interactive_matrix.sh`
 break	covered	man-bash-posix-06-loop-control	outside-loop status + nested-level behavior
 builtin	covered	man-bash-posix-07-builtin-dispatch	builtin dispatch + function shadow bypass
-caller	out_of_scope		bash extension; no mctash posix target yet
+caller	covered	man-bash-posix-11-extension-builtins-core	caller stack-frame query surface covered
 cd	covered	man-bash-posix-02-path-command	basic transitions
 command	covered	man-bash-posix-02-path-command	command -v + missing command status
 compgen	covered	bash-builtin-completion	non-interactive generation/status paths covered
@@ -28,12 +28,12 @@ fg	covered	man-bash-posix-10-jobs-fg-bg-interactive	non-interactive baseline sta
 getopts	covered	man-bash-posix-01-core-state	basic option parse loop
 hash	covered	man-bash-posix-02-path-command	reset, insert, miss
 help	covered	bash-builtin-help	core help status behavior covered
-history	out_of_scope		interactive history extension
+history	covered	man-bash-posix-12-history-suspend-logout	history list/edit/read-write surface covered in non-login lane
 jobs	covered	man-bash-posix-10-jobs-fg-bg-interactive	jobs/jobs -p baseline plus bg/fg/wait statuses
 kill	covered	man-bash-posix-03-io-signals	kill -0 sanity path
-let	out_of_scope		bash arithmetic builtin extension
+let	covered	man-bash-posix-11-extension-builtins-core	let arithmetic command/status surface covered
 local	covered	bash-builtin-declare-typeset-local	function-local declaration scope behavior covered
-logout	out_of_scope		login-shell session extension
+logout	covered	man-bash-posix-12-history-suspend-logout	logout non-login status behavior covered
 mapfile	covered	bash-compat-mapfile-readarray	bash-compat array ingest surface covered
 popd	covered	bash-builtin-dirstack	core stack pop/index behavior covered
 printf	covered	man-bash-posix-04-misc-builtins	basic formatting path
@@ -45,9 +45,9 @@ readonly	covered	man-bash-posix-01-core-state	readonly + unset protection
 return	covered	man-bash-posix-09-return-exit	function return status propagation
 set	covered	man-bash-posix-01-core-state	argument and option flow
 shift	covered	man-bash-posix-01-core-state	shift progression
-shopt	out_of_scope		bash extension; mctash has scoped variant
+shopt	covered	man-bash-posix-11-extension-builtins-core	shopt set/unset/query/print surface covered
 source	covered	man-bash-posix-05-dot-source	alias of dot behavior in coverage case
-suspend	out_of_scope		interactive job control extension
+suspend	covered	man-bash-posix-12-history-suspend-logout	suspend non-interactive status behavior covered
 test	covered	man-bash-posix-03-io-signals	basic true branch
 times	covered	man-bash-posix-04-misc-builtins	smoke output line
 trap	covered	man-bash-posix-03-io-signals	set/clear + delivery smoke

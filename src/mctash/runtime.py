@@ -627,6 +627,67 @@ class Runtime:
         "from",
         "shared",
         "shopt",
+        "caller",
+        "history",
+        "suspend",
+        "logout",
+    }
+    SHOPT_DEFAULTS: Dict[str, bool] = {
+        "autocd": False,
+        "assoc_expand_once": False,
+        "cdable_vars": False,
+        "cdspell": False,
+        "checkhash": False,
+        "checkjobs": False,
+        "checkwinsize": False,
+        "cmdhist": False,
+        "compat31": False,
+        "compat32": False,
+        "compat40": False,
+        "compat41": False,
+        "compat42": False,
+        "compat43": False,
+        "compat44": False,
+        "complete_fullquote": False,
+        "direxpand": False,
+        "dirspell": False,
+        "dotglob": False,
+        "execfail": False,
+        "expand_aliases": False,
+        "extdebug": False,
+        "extglob": False,
+        "extquote": False,
+        "failglob": False,
+        "force_fignore": False,
+        "globasciiranges": False,
+        "globstar": False,
+        "gnu_errfmt": False,
+        "histappend": False,
+        "histreedit": False,
+        "histverify": False,
+        "hostcomplete": False,
+        "huponexit": False,
+        "inherit_errexit": False,
+        "interactive_comments": False,
+        "lastpipe": False,
+        "lithist": False,
+        "localvar_inherit": False,
+        "localvar_unset": False,
+        "login_shell": False,
+        "mailwarn": False,
+        "no_empty_cmd_completion": False,
+        "nocaseglob": False,
+        "nocasematch": False,
+        "nullglob": False,
+        "progcomp": False,
+        "progcomp_alias": False,
+        "promptvars": False,
+        "restricted_shell": False,
+        "shift_verbose": False,
+        "sourcepath": False,
+        "xpg_echo": False,
+        # mctash extension
+        "read_interruptible": False,
     }
 
     def __init__(self) -> None:
@@ -692,7 +753,10 @@ class Runtime:
         self._errexit_suppressed: int = 0
         self._py_callables: Dict[str, Any] = {}
         self._py_ties: Dict[str, tuple[Any, Any, str | None]] = {}
-        self._shopts: Dict[str, bool] = {"read_interruptible": False, "xpg_echo": False}
+        self._shopts: Dict[str, bool] = dict(self.SHOPT_DEFAULTS)
+        self._history_read_cursor: int = 0
+        self._is_interactive_session: bool = False
+        self._is_login_shell: bool = False
         self._last_read_interrupt_status: int | None = None
         self._last_read_timed_out: bool = False
         # POSIX shells initialize IFS by default; many parameter-expansion
@@ -815,7 +879,13 @@ class Runtime:
                 self.source_stack[0] = name
             else:
                 self.source_stack = [name]
-        self._sync_root_frame()
+            self._sync_root_frame()
+
+    def set_interactive_session(self, enabled: bool) -> None:
+        self._is_interactive_session = bool(enabled)
+
+    def set_login_shell(self, enabled: bool) -> None:
+        self._is_login_shell = bool(enabled)
 
     def run(self, script: Script) -> int:
         return self._exec_list(script.body)
@@ -4495,6 +4565,14 @@ class Runtime:
             return self._run_shared(argv[1:])
         if name == "shopt":
             return self._run_shopt(argv[1:])
+        if name == "caller":
+            return self._run_caller(argv[1:])
+        if name == "history":
+            return self._run_history(argv[1:])
+        if name == "suspend":
+            return self._run_suspend(argv[1:])
+        if name == "logout":
+            return self._run_logout(argv[1:])
         if name in ["[", "[[", "test"]:
             return self._run_test(name, argv[1:])
         if name == "exit":
@@ -8035,6 +8113,190 @@ class Runtime:
             if query_mode and not self._shopts[name]:
                 status = 1
         return status
+
+    def _run_caller(self, args: List[str]) -> int:
+        level = 0
+        if args:
+            if len(args) > 1:
+                return 2
+            try:
+                level = int(args[0], 10)
+            except ValueError:
+                return 1
+            if level < 0:
+                return 1
+        frames = [fr for fr in self._frame_stack if str(fr.get("kind", "")) == "function"]
+        if not frames:
+            return 1
+        idx = len(frames) - 1 - level
+        if idx < 0:
+            return 1
+        fr = frames[idx]
+        lineno = int(fr.get("lineno", 0) or 0) + 1
+        source = str(fr.get("source", "") or "")
+        # Match bash output shape:
+        # - caller 0: "<line> <file>"
+        # - caller N>0: "<line> <func-or-main> <file>"
+        if level == 0:
+            print(f"{lineno} {source}")
+            return 0
+        outer = "main"
+        if idx > 0:
+            outer_name = str(frames[idx - 1].get("funcname", "") or "")
+            if outer_name:
+                outer = outer_name
+        print(f"{lineno} {outer} {source}")
+        return 0
+
+    def _history_file(self, path: str | None = None) -> str:
+        if path:
+            return os.path.expanduser(path)
+        return os.path.expanduser(self.env.get("HISTFILE", "~/.bash_history"))
+
+    def _history_public_entries(self) -> list[tuple[int, str]]:
+        out: list[tuple[int, str]] = []
+        for i, line in enumerate(self._history):
+            stripped = line.lstrip()
+            if stripped.startswith("history"):
+                continue
+            # Bash non-interactive history output doesn't surface plain
+            # assignment lines by default.
+            if re.match(r"^[A-Za-z_][A-Za-z0-9_]*=", stripped):
+                continue
+            out.append((i, line))
+        return out
+
+    def _history_write(self, path: str, lines: list[str], *, append: bool) -> int:
+        mode = "a" if append else "w"
+        try:
+            with open(path, mode, encoding="utf-8", errors="surrogateescape") as f:
+                for line in lines:
+                    f.write(line + "\n")
+            return 0
+        except OSError:
+            return 1
+
+    def _run_history(self, args: List[str]) -> int:
+        i = 0
+        print_mode = True
+        while i < len(args) and args[i].startswith("-") and args[i] != "-":
+            a = args[i]
+            if a == "--":
+                i += 1
+                break
+            if a == "-c":
+                self._history.clear()
+                self._history_read_cursor = 0
+                print_mode = False
+                i += 1
+                continue
+            if a == "-d":
+                if i + 1 >= len(args):
+                    return 2
+                try:
+                    off = int(args[i + 1], 10)
+                except ValueError:
+                    return 1
+                public = self._history_public_entries()
+                if off <= 0 or off > len(public):
+                    return 1
+                real_idx = public[off - 1][0]
+                del self._history[real_idx]
+                self._history_read_cursor = min(self._history_read_cursor, len(self._history))
+                print_mode = False
+                i += 2
+                continue
+            if a in {"-a", "-w", "-r", "-n"}:
+                path = self._history_file(args[i + 1] if i + 1 < len(args) and not args[i + 1].startswith("-") else None)
+                if a == "-a":
+                    public_lines = [x for _, x in self._history_public_entries()]
+                    start = min(self._history_read_cursor, len(public_lines))
+                    status = self._history_write(path, public_lines[start:], append=True)
+                    if status != 0:
+                        return status
+                    self._history_read_cursor = len(public_lines)
+                elif a == "-w":
+                    public_lines = [x for _, x in self._history_public_entries()]
+                    status = self._history_write(path, public_lines, append=False)
+                    if status != 0:
+                        return status
+                    self._history_read_cursor = len(public_lines)
+                elif a in {"-r", "-n"}:
+                    try:
+                        with open(path, "r", encoding="utf-8", errors="surrogateescape") as f:
+                            file_lines = [ln.rstrip("\n") for ln in f]
+                    except OSError:
+                        return 1
+                    if a == "-r":
+                        self._history.extend(file_lines)
+                    else:
+                        start = min(self._history_read_cursor, len(file_lines))
+                        self._history.extend(file_lines[start:])
+                    self._history_read_cursor = len(file_lines)
+                print_mode = False
+                if i + 1 < len(args) and not args[i + 1].startswith("-"):
+                    i += 2
+                else:
+                    i += 1
+                continue
+            if a == "-s":
+                if i + 1 >= len(args):
+                    return 2
+                self.add_history_entry(" ".join(args[i + 1 :]))
+                return 0
+            if a == "-p":
+                for tok in args[i + 1 :]:
+                    print(tok)
+                return 0
+            return 2
+        rest = args[i:]
+        if not print_mode:
+            return 0
+        public = self._history_public_entries()
+        count = len(public)
+        if rest:
+            if len(rest) != 1:
+                return 2
+            try:
+                n = int(rest[0], 10)
+            except ValueError:
+                return 1
+            if n < 0:
+                return 1
+            start = max(0, len(public) - n)
+        else:
+            start = 0
+        for idx in range(start, len(public)):
+            print(f"{idx + 1:5d}  {public[idx][1]}")
+        return 0
+
+    def _run_suspend(self, args: List[str]) -> int:
+        force = False
+        for a in args:
+            if a == "-f":
+                force = True
+                continue
+            return 2
+        if not self._is_interactive_session:
+            self._print_stderr("suspend: cannot suspend: not interactive")
+            return 1
+        if self._is_login_shell and not force:
+            self._print_stderr("suspend: cannot suspend a login shell")
+            return 1
+        try:
+            os.kill(os.getpid(), signal.SIGSTOP)
+            return 0
+        except Exception:
+            return 1
+
+    def _run_logout(self, args: List[str]) -> int:
+        if args:
+            return 2
+        if not self._is_login_shell:
+            self._print_stderr("logout: not login shell: use `exit'")
+            return 1
+        code = self.last_status
+        raise SystemExit(code)
 
     def _run_printf(self, args: List[str]) -> int:
         if not args:
