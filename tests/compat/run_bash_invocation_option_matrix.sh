@@ -1,0 +1,79 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+tmpdir="$(mktemp -d)"
+trap 'rm -rf "$tmpdir"' EXIT
+
+run_cmd() {
+  local name=$1
+  local mode=$2
+  local shell_kind=$3
+  local stdin_text=$4
+  shift 4
+  local out="$tmpdir/${name}.${mode}.${shell_kind}.out"
+  local err="$tmpdir/${name}.${mode}.${shell_kind}.err"
+  local rc="$tmpdir/${name}.${mode}.${shell_kind}.rc"
+  local -a cmd=()
+  if [[ "$shell_kind" == "bash" ]]; then
+    cmd=(bash)
+    [[ "$mode" == "posix" ]] && cmd+=(--posix)
+  else
+    cmd=(env PYTHONPATH="$ROOT/src" MCTASH_MODE=bash python3 -m mctash)
+    [[ "$mode" == "posix" ]] && cmd+=(--posix)
+  fi
+  cmd+=("$@")
+  set +e
+  if [[ -n "$stdin_text" ]]; then
+    printf '%s' "$stdin_text" | "${cmd[@]}" >"$out" 2>"$err"
+  else
+    "${cmd[@]}" >"$out" 2>"$err"
+  fi
+  echo "$?" >"$rc"
+  set -e
+}
+
+compare_case() {
+  local name=$1
+  local mode=$2
+  local stdin_text=$3
+  shift 3
+  run_cmd "$name" "$mode" bash "$stdin_text" "$@"
+  run_cmd "$name" "$mode" mctash "$stdin_text" "$@"
+  local brc mrc
+  brc=$(cat "$tmpdir/${name}.${mode}.bash.rc")
+  mrc=$(cat "$tmpdir/${name}.${mode}.mctash.rc")
+  local ok=1
+  if [[ "$brc" != "$mrc" ]]; then
+    echo "[MISMATCH] $name/$mode rc bash=$brc mctash=$mrc"
+    ok=0
+  fi
+  if ! diff -u "$tmpdir/${name}.${mode}.bash.out" "$tmpdir/${name}.${mode}.mctash.out" >/dev/null; then
+    echo "[MISMATCH] $name/$mode stdout"
+    ok=0
+  fi
+  if ! diff -u "$tmpdir/${name}.${mode}.bash.err" "$tmpdir/${name}.${mode}.mctash.err" >/dev/null; then
+    echo "[MISMATCH] $name/$mode stderr"
+    ok=0
+  fi
+  return $((ok ? 0 : 1))
+}
+
+fail=0
+for mode in bash posix; do
+  compare_case short-c "$mode" '' -c 'echo c:ok' || fail=1
+  compare_case short-v "$mode" '' -v -c 'echo v:ok' || fail=1
+  compare_case short-x "$mode" '' -x -c 'echo x:ok' || fail=1
+  compare_case short-s-with-args "$mode" 'echo "s:$1:$2:$#"\n' -s A B || fail=1
+  compare_case long-verbose "$mode" '' --verbose -c 'echo verbose:ok' || fail=1
+  compare_case short-D "$mode" '' -D -c 'echo $"hello"' || fail=1
+  compare_case long-dump-strings "$mode" '' --dump-strings -c 'echo $"hello"' || fail=1
+  compare_case long-dump-po "$mode" '' --dump-po-strings -c 'echo $"hello"' || fail=1
+done
+
+if [[ $fail -ne 0 ]]; then
+  echo "[FAIL] invocation option matrix"
+  exit 1
+fi
+
+echo "[PASS] invocation option matrix"
