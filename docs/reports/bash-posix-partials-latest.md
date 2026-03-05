@@ -2,101 +2,16 @@
 
 Source: `docs/specs/bash-man-implementation-matrix.tsv`
 
-Total partial rows in `mctash --posix`: **52**
+Total partial rows in `mctash --posix`: **31**
 
 ## Counts by Category
 
-- Category 1: 21
 - Category 3: 15
 - Category 4: 5
 - Category 10: 6
 - Category 11: 5
 
 ## Rows
-
-- `C1.OPT.SHORT.c` category=1 feature=`-c`
-  tests: `run_bash_invocation_option_matrix.sh`
-  note: Row-level evidence mapping assigned from requirement->case rules. Evidence run has failing/timeout tests: run_bash_invocation_option_matrix.sh
-
-- `C1.OPT.SHORT.i` category=1 feature=`-i`
-  tests: `run_bash_invocation_option_matrix.sh`
-  note: Row-level evidence mapping assigned from requirement->case rules. Evidence run has failing/timeout tests: run_bash_invocation_option_matrix.sh
-
-- `C1.OPT.SHORT.l` category=1 feature=`-l`
-  tests: `run_bash_invocation_option_matrix.sh`
-  note: Row-level evidence mapping assigned from requirement->case rules. Evidence run has failing/timeout tests: run_bash_invocation_option_matrix.sh
-
-- `C1.OPT.SHORT.r` category=1 feature=`-r`
-  tests: `run_bash_invocation_option_matrix.sh`
-  note: Row-level evidence mapping assigned from requirement->case rules. Evidence run has failing/timeout tests: run_bash_invocation_option_matrix.sh
-
-- `C1.OPT.SHORT.v` category=1 feature=`-v`
-  tests: `run_bash_invocation_option_matrix.sh`
-  note: Row-level evidence mapping assigned from requirement->case rules. Evidence run has failing/timeout tests: run_bash_invocation_option_matrix.sh
-
-- `C1.OPT.SHORT.x` category=1 feature=`-x`
-  tests: `run_bash_invocation_option_matrix.sh`
-  note: Row-level evidence mapping assigned from requirement->case rules. Evidence run has failing/timeout tests: run_bash_invocation_option_matrix.sh
-
-- `C1.OPT.SHORT.O` category=1 feature=`-O [shopt_option]`
-  tests: `run_bash_invocation_option_matrix.sh,bash-man-shopt-surface.sh`
-  note: Row-level evidence mapping assigned from requirement->case rules. Evidence run has failing/timeout tests: run_bash_invocation_option_matrix.sh
-
-- `C1.OPT.SHORT.PLUSO` category=1 feature=`+O [shopt_option]`
-  tests: `run_bash_invocation_option_matrix.sh,bash-man-shopt-surface.sh`
-  note: Row-level evidence mapping assigned from requirement->case rules. Evidence run has failing/timeout tests: run_bash_invocation_option_matrix.sh
-
-- `C1.OPT.SHORT.DASHDASH` category=1 feature=`--`
-  tests: `run_bash_invocation_option_matrix.sh,run_startup_mode_matrix.sh`
-  note: Row-level evidence mapping assigned from requirement->case rules. Evidence run has failing/timeout tests: run_bash_invocation_option_matrix.sh
-
-- `C1.OPT.SHORT.SINGLEDASH` category=1 feature=`- (as argument)`
-  tests: `run_bash_invocation_option_matrix.sh,run_startup_mode_matrix.sh`
-  note: Row-level evidence mapping assigned from requirement->case rules. Evidence run has failing/timeout tests: run_bash_invocation_option_matrix.sh
-
-- `C1.OPT.LONG.DEBUGGER` category=1 feature=`--debugger`
-  tests: `run_bash_invocation_option_matrix.sh`
-  note: Row-level evidence mapping assigned from requirement->case rules. Evidence run has failing/timeout tests: run_bash_invocation_option_matrix.sh
-
-- `C1.OPT.LONG.HELP` category=1 feature=`--help`
-  tests: `run_bash_invocation_option_matrix.sh`
-  note: Row-level evidence mapping assigned from requirement->case rules. Evidence run has failing/timeout tests: run_bash_invocation_option_matrix.sh
-
-- `C1.OPT.LONG.INIT_FILE_FILE` category=1 feature=`--init-file FILE`
-  tests: `run_bash_invocation_option_matrix.sh`
-  note: Row-level evidence mapping assigned from requirement->case rules. Evidence run has failing/timeout tests: run_bash_invocation_option_matrix.sh
-
-- `C1.OPT.LONG.RCFILE_FILE` category=1 feature=`--rcfile FILE`
-  tests: `run_bash_invocation_option_matrix.sh`
-  note: Row-level evidence mapping assigned from requirement->case rules. Evidence run has failing/timeout tests: run_bash_invocation_option_matrix.sh
-
-- `C1.OPT.LONG.LOGIN` category=1 feature=`--login`
-  tests: `run_bash_invocation_option_matrix.sh`
-  note: Row-level evidence mapping assigned from requirement->case rules. Evidence run has failing/timeout tests: run_bash_invocation_option_matrix.sh
-
-- `C1.OPT.LONG.NOEDITING` category=1 feature=`--noediting`
-  tests: `run_bash_invocation_option_matrix.sh`
-  note: Row-level evidence mapping assigned from requirement->case rules. Evidence run has failing/timeout tests: run_bash_invocation_option_matrix.sh
-
-- `C1.OPT.LONG.NOPROFILE` category=1 feature=`--noprofile`
-  tests: `run_bash_invocation_option_matrix.sh`
-  note: Row-level evidence mapping assigned from requirement->case rules. Evidence run has failing/timeout tests: run_bash_invocation_option_matrix.sh
-
-- `C1.OPT.LONG.NORC` category=1 feature=`--norc`
-  tests: `run_bash_invocation_option_matrix.sh`
-  note: Row-level evidence mapping assigned from requirement->case rules. Evidence run has failing/timeout tests: run_bash_invocation_option_matrix.sh
-
-- `C1.OPT.LONG.POSIX` category=1 feature=`--posix`
-  tests: `run_bash_invocation_option_matrix.sh`
-  note: Row-level evidence mapping assigned from requirement->case rules. Evidence run has failing/timeout tests: run_bash_invocation_option_matrix.sh
-
-- `C1.OPT.LONG.RESTRICTED` category=1 feature=`--restricted`
-  tests: `run_bash_invocation_option_matrix.sh`
-  note: Row-level evidence mapping assigned from requirement->case rules. Evidence run has failing/timeout tests: run_bash_invocation_option_matrix.sh
-
-- `C1.OPT.LONG.VERSION` category=1 feature=`--version`
-  tests: `run_bash_invocation_option_matrix.sh`
-  note: Row-level evidence mapping assigned from requirement->case rules. Evidence run has failing/timeout tests: run_bash_invocation_option_matrix.sh
 
 - `C3.EXP.003` category=3 feature=`parameter expansion $name ${name}`
   tests: `man-ash-var-ops-matrix.sh,bash-compat-param-array-hash-extended.sh`
