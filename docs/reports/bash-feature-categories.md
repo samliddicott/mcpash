@@ -2,6 +2,8 @@
 
 Source read: local `man bash` (rendered via `col -b` on 2026-03-04).
 
+Authoritative exhaustive inventory: `docs/specs/bash-man-requirements.tsv` with summary in `docs/specs/bash-man-requirements.md`.
+
 Purpose: categorize Bash features into matrix-ready implementation buckets, with `--posix` presence notes.
 
 ## Legend
