@@ -2,17 +2,13 @@
 
 Derived from: `docs/specs/bash-man-implementation-matrix.tsv`
 
-Total remaining rows (partial or missing): 171
+Total remaining rows (partial or missing): 169
 
-- Missing rows: 3
+- Missing rows: 1
 - Partial rows: 168
 
 ## Explicit Missing Features
 
-- `C3.EXP.001` feature=`brace expansion {a,b}` default=`missing` posix=`missing` tests=`bash-man-expansion-brace-locale.sh`
-  note: brace expansion currently literal.
-- `C3.EXP.029` feature=`locale translation quoting $"..."` default=`missing` posix=`missing` tests=`bash-man-expansion-brace-locale.sh`
-  note: $"..." locale translation quoting currently not implemented.
 - `C4.REDIR.012` feature=`here-string <<<word` default=`missing` posix=`missing` tests=`bash-man-redir-here-string.sh`
   note: here-string <<< currently parse-error path.
 
@@ -223,10 +219,6 @@ Total remaining rows (partial or missing): 171
   note: Row-level evidence mapping assigned from requirement->case rules. Evidence run has failing/timeout tests: run_bash_invocation_option_matrix.sh
 
 ### Category 3
-
-- `C3.EXP.001` `brace expansion {a,b}` default=`missing` posix=`missing`
-  tests: `bash-man-expansion-brace-locale.sh`
-  note: brace expansion currently literal.
 - `C3.EXP.003` `parameter expansion $name ${name}` default=`partial` posix=`partial`
   tests: `man-ash-var-ops-matrix.sh,bash-compat-param-array-hash-extended.sh`
   note: Row-level evidence mapping assigned from requirement->case rules. Evidence run has failing/timeout tests: bash-compat-param-array-hash-extended.sh
@@ -272,10 +264,6 @@ Total remaining rows (partial or missing): 171
 - `C3.EXP.026` `pathname expansion (globbing)` default=`partial` posix=`partial`
   tests: `man-ash-var-ops-matrix.sh,bash-compat-param-array-hash-extended.sh`
   note: Row-level evidence mapping assigned from requirement->case rules. Evidence run has failing/timeout tests: bash-compat-param-array-hash-extended.sh
-- `C3.EXP.029` `locale translation quoting $"..."` default=`missing` posix=`missing`
-  tests: `bash-man-expansion-brace-locale.sh`
-  note: $"..." locale translation quoting currently not implemented.
-
 ### Category 4
 
 - `C4.REDIR.012` `here-string <<<word` default=`missing` posix=`missing`

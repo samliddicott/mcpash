@@ -5,4 +5,5 @@
 set +e
 
 echo brace:a{b,c}d
-printf 'locale:%s\n' "$\"hello\""
+LC_ALL=C
+printf 'locale:%s\n' $"hello"

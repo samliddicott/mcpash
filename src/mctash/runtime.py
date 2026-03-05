@@ -2921,6 +2921,45 @@ class Runtime:
                         fields = next_fields
                         i += 2
                         continue
+            # Parse locale $"..." form represented by lexer/parser as
+            # literal '$' + double-quoted part.
+            if (
+                isinstance(part, dict)
+                and part.get("type") == "word_part.Literal"
+                and i + 1 < len(parts)
+                and isinstance(parts[i + 1], dict)
+                and parts[i + 1].get("type") == "word_part.DoubleQuoted"
+            ):
+                lit = str(part.get("tval", ""))
+                if lit.endswith("$"):
+                    prefix = lit[:-1]
+                    vals, _ = self._expand_asdl_word_part_values(parts[i + 1], quoted_context=True)
+                    if not vals:
+                        vals = [""]
+                    next_fields: list[ExpansionField] = []
+                    for base in fields:
+                        for val in vals:
+                            segs = []
+                            if prefix:
+                                segs.extend(self._asdl_literal_to_segments(prefix, quoted_context=False, source_kind=kind))
+                            segs.append(
+                                ExpansionSegment(
+                                    text=val,
+                                    quoted=True,
+                                    glob_active=False,
+                                    split_active=False,
+                                    source_kind="word_part.LocaleQuoted",
+                                )
+                            )
+                            next_fields.append(
+                                ExpansionField(
+                                    segments=base.segments + segs,
+                                    preserve_boundary=True,
+                                )
+                            )
+                    fields = next_fields
+                    i += 2
+                    continue
             if isinstance(part, dict) and part.get("type") == "word_part.Literal":
                 literal = str(part.get("tval", ""))
                 segs = self._asdl_literal_to_segments(literal, quoted_context=False, source_kind=kind)
@@ -3179,6 +3218,8 @@ class Runtime:
         if self._is_process_subst(raw_text):
             return [self._process_substitute(raw_text)]
         fields = self._asdl_word_to_expansion_fields(node)
+        if self.options.get("B", True):
+            fields = self._brace_expand_structured_fields(fields)
         if not fields:
             return []
         if not split_glob:
@@ -3190,6 +3231,76 @@ class Runtime:
         for field in split_fields:
             out.extend(self._glob_structured_field(field))
         return out
+
+    def _brace_expand_structured_fields(self, fields: list[ExpansionField]) -> list[ExpansionField]:
+        out: list[ExpansionField] = []
+        for field in fields:
+            out.extend(self._brace_expand_single_field(field))
+        return out
+
+    def _brace_expand_single_field(self, field: ExpansionField) -> list[ExpansionField]:
+        chars: list[tuple[str, bool, bool, bool, str]] = []
+        for seg in field.segments:
+            for ch in seg.text:
+                chars.append((ch, seg.quoted, seg.glob_active, seg.split_active, seg.source_kind))
+        expanded = self._brace_expand_chars(chars)
+        out: list[ExpansionField] = []
+        for item in expanded:
+            out.append(self._chars_to_structured_field(item))
+        return out
+
+    def _brace_expand_chars(
+        self, chars: list[tuple[str, bool, bool, bool, str]]
+    ) -> list[list[tuple[str, bool, bool, bool, str]]]:
+        start, end, cuts = self._find_brace_candidate(chars)
+        if start == -1 or end == -1 or not cuts:
+            return [chars]
+        parts: list[list[tuple[str, bool, bool, bool, str]]] = []
+        prev = start + 1
+        for cut in cuts:
+            parts.append(chars[prev:cut])
+            prev = cut + 1
+        parts.append(chars[prev:end])
+        out: list[list[tuple[str, bool, bool, bool, str]]] = []
+        prefix = chars[:start]
+        suffix = chars[end + 1 :]
+        for part in parts:
+            out.extend(self._brace_expand_chars(prefix + part + suffix))
+        return out
+
+    def _find_brace_candidate(
+        self, chars: list[tuple[str, bool, bool, bool, str]]
+    ) -> tuple[int, int, list[int]]:
+        i = 0
+        n = len(chars)
+        while i < n:
+            ch, quoted, _, _, _ = chars[i]
+            if quoted or ch != "{":
+                i += 1
+                continue
+            depth = 0
+            comma_pos: list[int] = []
+            j = i
+            while j < n:
+                c, c_quoted, _, _, _ = chars[j]
+                if c_quoted:
+                    j += 1
+                    continue
+                if c == "{":
+                    depth += 1
+                elif c == "}":
+                    depth -= 1
+                    if depth == 0:
+                        if comma_pos:
+                            return i, j, comma_pos
+                        break
+                    if depth < 0:
+                        break
+                elif c == "," and depth == 1:
+                    comma_pos.append(j)
+                j += 1
+            i += 1
+        return -1, -1, []
 
     def _split_structured_field(self, field: ExpansionField) -> list[ExpansionField]:
         chars: list[tuple[str, bool, bool, bool, str]] = []
