@@ -70,6 +70,10 @@ def main(argv: List[str] | None = None) -> int:
     if startup_err is not None:
         print(f"mctash: {startup_err}", file=sys.stderr)
         return 2
+    dump_mode = str(startup_changes.get("__dump_mode__", "strings"))
+    if startup_changes.get("D", False):
+        # bash: -D implies -n (parse/dump only, no execution).
+        startup_changes["n"] = True
     mode = _resolve_invocation_mode(sys.argv[0], startup_changes)
     _apply_invocation_mode(mode, startup_changes)
     if argv and argv[0] == "-c":
@@ -89,6 +93,8 @@ def main(argv: List[str] | None = None) -> int:
         rt.set_login_shell(login_shell)
         rt.set_interactive_session(interactive)
         _source_startup_files(rt, mode=mode, login_shell=login_shell, interactive=interactive)
+        if startup_changes.get("D", False):
+            return _emit_dump_strings(source, script_name or "-c", dump_mode)
         try:
             parser_impl = Parser(source, aliases=rt.aliases)
             while True:
@@ -145,7 +151,20 @@ def main(argv: List[str] | None = None) -> int:
         argv = [a for a in argv if a != "--dump-lst"]
         dump_lst = True
 
-    cli_opts, script, script_args = _split_cli_argv(argv)
+    # Re-parse startup options before script split to preserve `-s arg...` semantics.
+    startup_changes2, argv2, startup_err2 = _parse_startup_options(argv)
+    if startup_err2 is not None:
+        print(f"mctash: {startup_err2}", file=sys.stderr)
+        return 2
+    startup_changes.update(startup_changes2)
+    if startup_changes.get("D", False):
+        startup_changes["n"] = True
+    if "__dump_mode__" in startup_changes2:
+        dump_mode = str(startup_changes2.get("__dump_mode__", dump_mode))
+    mode = _resolve_invocation_mode(sys.argv[0], startup_changes)
+    _apply_invocation_mode(mode, startup_changes)
+
+    cli_opts, script, script_args = _split_cli_argv(argv2)
     shebang_args: List[str] = []
 
     if script:
@@ -156,17 +175,22 @@ def main(argv: List[str] | None = None) -> int:
         source = ""
 
     full_argv = cli_opts + shebang_args + ([script] if script else []) + script_args
-    startup_changes2, full_argv, startup_err2 = _parse_startup_options(full_argv)
-    if startup_err2 is not None:
-        print(f"mctash: {startup_err2}", file=sys.stderr)
+    startup_changes3, full_argv, startup_err3 = _parse_startup_options(full_argv)
+    if startup_err3 is not None:
+        print(f"mctash: {startup_err3}", file=sys.stderr)
         return 2
-    startup_changes.update(startup_changes2)
+    startup_changes.update(startup_changes3)
+    if startup_changes.get("D", False):
+        startup_changes["n"] = True
+    if "__dump_mode__" in startup_changes3:
+        dump_mode = str(startup_changes3.get("__dump_mode__", dump_mode))
     mode = _resolve_invocation_mode(sys.argv[0], startup_changes)
     _apply_invocation_mode(mode, startup_changes)
+    _, full_script, full_script_args = _split_cli_argv(full_argv)
     args = argparse.Namespace(
         dump_lst=dump_lst,
-        script=(full_argv[0] if full_argv and not full_argv[0].startswith("-") else None),
-        script_args=(full_argv[1:] if full_argv and not full_argv[0].startswith("-") else []),
+        script=full_script,
+        script_args=full_script_args,
     )
 
     if args.dump_lst:
@@ -195,6 +219,8 @@ def main(argv: List[str] | None = None) -> int:
 
     if args.script is None:
         source = sys.stdin.read()
+    if startup_changes.get("D", False):
+        return _emit_dump_strings(source, args.script or "-", dump_mode)
 
     try:
         parser_impl = Parser(source, aliases=rt.aliases)
@@ -267,6 +293,11 @@ def _split_cli_argv(argv: List[str]) -> Tuple[List[str], str | None, List[str]]:
     script_args: List[str] = []
     it = iter(argv)
     for arg in it:
+        if arg == "-s":
+            opts.append(arg)
+            script = None
+            script_args = list(it)
+            break
         if script is None and not arg.startswith("-"):
             script = arg
             script_args = list(it)
@@ -320,6 +351,20 @@ def _parse_startup_options(argv: List[str]) -> Tuple[Dict[str, bool], List[str],
             changes["posix"] = True
             i += 1
             continue
+        if arg == "--verbose":
+            changes["v"] = True
+            i += 1
+            continue
+        if arg == "--dump-strings":
+            changes["D"] = True
+            changes["__dump_mode__"] = "strings"
+            i += 1
+            continue
+        if arg == "--dump-po-strings":
+            changes["D"] = True
+            changes["__dump_mode__"] = "po"
+            i += 1
+            continue
         if arg == "--bash":
             changes["posix"] = False
             i += 1
@@ -356,6 +401,11 @@ def _parse_startup_options(argv: List[str]) -> Tuple[Dict[str, bool], List[str],
             for ch in chars:
                 if ch in {"c", "s"}:
                     continue
+                if ch == "D":
+                    changes["D"] = on
+                    if on:
+                        changes["__dump_mode__"] = "strings"
+                    continue
                 if ch not in VALID_STARTUP_OPTION_LETTERS:
                     return changes, out, f"illegal option -- {ch}"
                 if ch == "l":
@@ -390,6 +440,94 @@ def _apply_startup_options(rt: Runtime, changes: Dict[str, bool]) -> None:
         rt.options["E"] = False
     if rt.options.get("E", False):
         rt.options["V"] = False
+
+
+def _extract_dollar_quoted_strings(source: str) -> List[Tuple[int, str]]:
+    """Return (line, raw_text) for every $"..." occurrence in shell source."""
+    out: List[Tuple[int, str]] = []
+    i = 0
+    line = 1
+    mode = "plain"
+    while i < len(source):
+        ch = source[i]
+        if ch == "\n":
+            line += 1
+        if mode == "plain":
+            if ch == "\\":
+                i += 2
+                continue
+            if ch == "#":
+                # Shell comments begin in plain mode and run to end-of-line.
+                i += 1
+                while i < len(source) and source[i] != "\n":
+                    i += 1
+                continue
+            if ch == "'":
+                mode = "single"
+                i += 1
+                continue
+            if ch == '"':
+                mode = "double"
+                i += 1
+                continue
+            if ch == "$" and i + 1 < len(source) and source[i + 1] == '"':
+                j = i + 2
+                text: List[str] = []
+                start_line = line
+                while j < len(source):
+                    c = source[j]
+                    if c == "\n":
+                        line += 1
+                    if c == "\\" and j + 1 < len(source):
+                        text.append(c)
+                        text.append(source[j + 1])
+                        j += 2
+                        continue
+                    if c == '"':
+                        out.append((start_line, "".join(text)))
+                        i = j + 1
+                        break
+                    text.append(c)
+                    j += 1
+                else:
+                    # Unterminated quote: stop scanning at EOF.
+                    i = len(source)
+                continue
+            i += 1
+            continue
+        if mode == "single":
+            if ch == "'":
+                mode = "plain"
+            i += 1
+            continue
+        if mode == "double":
+            if ch == "\\":
+                i += 2
+                continue
+            if ch == '"':
+                mode = "plain"
+            i += 1
+            continue
+    return out
+
+
+def _escape_po_text(text: str) -> str:
+    return text.replace("\\", "\\\\").replace('"', '\\"')
+
+
+def _emit_dump_strings(source: str, source_name: str, mode: str) -> int:
+    entries = _extract_dollar_quoted_strings(source)
+    if mode == "po":
+        for line, text in entries:
+            esc = _escape_po_text(text)
+            print(f"#: {source_name}:{line}")
+            print(f'msgid "{esc}"')
+            print('msgstr ""')
+        return 0
+    for _, text in entries:
+        esc = _escape_po_text(text)
+        print(f'"{esc}"')
+    return 0
 
 
 def _source_startup_files(rt: Runtime, *, mode: str, login_shell: bool, interactive: bool) -> None:

@@ -2,21 +2,13 @@
 
 Derived from: `docs/specs/bash-man-implementation-matrix.tsv`
 
-Total remaining rows (partial or missing): 178
+Total remaining rows (partial or missing): 173
 
-- Missing rows: 9
-- Partial rows: 169
+- Missing rows: 5
+- Partial rows: 168
 
 ## Explicit Missing Features
 
-- `C1.OPT.SHORT.D` feature=`-D` default=`missing` posix=`missing` tests=`run_bash_invocation_option_matrix.sh`
-  note: -D currently rejected as illegal option.
-- `C1.OPT.LONG.DUMP_PO_STRINGS` feature=`--dump-po-strings` default=`missing` posix=`missing` tests=`run_bash_invocation_option_matrix.sh`
-  note: --dump-po-strings currently rejected as illegal option.
-- `C1.OPT.LONG.DUMP_STRINGS` feature=`--dump-strings` default=`missing` posix=`missing` tests=`run_bash_invocation_option_matrix.sh`
-  note: --dump-strings currently rejected as illegal option.
-- `C1.OPT.LONG.VERBOSE` feature=`--verbose` default=`missing` posix=`missing` tests=`run_bash_invocation_option_matrix.sh`
-  note: --verbose currently rejected as illegal option; -v exists.
 - `C2.GRAM.019` feature=`select NAME in ...; do ... done` default=`missing` posix=`missing` tests=`bash-man-grammar-select-coproc.sh`
   note: select is currently not parsed/executed as shell keyword.
 - `C2.GRAM.024` feature=`coproc command` default=`missing` posix=`missing` tests=`bash-man-grammar-select-coproc.sh`
@@ -28,15 +20,6 @@ Total remaining rows (partial or missing): 178
 - `C4.REDIR.012` feature=`here-string <<<word` default=`missing` posix=`missing` tests=`bash-man-redir-here-string.sh`
   note: here-string <<< currently parse-error path.
 
-## Failing/Timeout Evidence IDs
-
-- `bash-compat-param-array-hash-extended.sh`: status=`fail` rc=`1` sec=`0.57`
-- `bash-man-expansion-process-subst.sh`: status=`timeout` rc=`None` sec=`120.07`
-- `bash-man-redir-bash-ext.sh`: status=`fail` rc=`1` sec=`0.57`
-- `bash-man-seto-surface.sh`: status=`fail` rc=`1` sec=`1.26`
-- `bash-man-variables-surface.sh`: status=`fail` rc=`1` sec=`0.84`
-- `run_bash_invocation_option_matrix.sh`: status=`fail` rc=`1` sec=`8.39`
-
 ## Remaining Rows by Category
 
 ### Category 1
@@ -44,12 +27,6 @@ Total remaining rows (partial or missing): 178
 - `C1.OPT.LONG.DEBUGGER` `--debugger` default=`partial` posix=`partial`
   tests: `run_bash_invocation_option_matrix.sh`
   note: Row-level evidence mapping assigned from requirement->case rules. Evidence run has failing/timeout tests: run_bash_invocation_option_matrix.sh
-- `C1.OPT.LONG.DUMP_PO_STRINGS` `--dump-po-strings` default=`missing` posix=`missing`
-  tests: `run_bash_invocation_option_matrix.sh`
-  note: --dump-po-strings currently rejected as illegal option.
-- `C1.OPT.LONG.DUMP_STRINGS` `--dump-strings` default=`missing` posix=`missing`
-  tests: `run_bash_invocation_option_matrix.sh`
-  note: --dump-strings currently rejected as illegal option.
 - `C1.OPT.LONG.HELP` `--help` default=`partial` posix=`partial`
   tests: `run_bash_invocation_option_matrix.sh`
   note: Row-level evidence mapping assigned from requirement->case rules. Evidence run has failing/timeout tests: run_bash_invocation_option_matrix.sh
@@ -77,9 +54,6 @@ Total remaining rows (partial or missing): 178
 - `C1.OPT.LONG.RESTRICTED` `--restricted` default=`partial` posix=`partial`
   tests: `run_bash_invocation_option_matrix.sh`
   note: Row-level evidence mapping assigned from requirement->case rules. Evidence run has failing/timeout tests: run_bash_invocation_option_matrix.sh
-- `C1.OPT.LONG.VERBOSE` `--verbose` default=`missing` posix=`missing`
-  tests: `run_bash_invocation_option_matrix.sh`
-  note: --verbose currently rejected as illegal option; -v exists.
 - `C1.OPT.LONG.VERSION` `--version` default=`partial` posix=`partial`
   tests: `run_bash_invocation_option_matrix.sh`
   note: Row-level evidence mapping assigned from requirement->case rules. Evidence run has failing/timeout tests: run_bash_invocation_option_matrix.sh
@@ -221,9 +195,6 @@ Total remaining rows (partial or missing): 178
 - `C1.OPT.SETO.XTRACE` `xtrace` default=`partial` posix=`partial`
   tests: `bash-man-seto-surface.sh`
   note: Row-level evidence mapping assigned from requirement->case rules. Evidence run has failing/timeout tests: bash-man-seto-surface.sh
-- `C1.OPT.SHORT.D` `-D` default=`missing` posix=`missing`
-  tests: `run_bash_invocation_option_matrix.sh`
-  note: -D currently rejected as illegal option.
 - `C1.OPT.SHORT.DASHDASH` `--` default=`partial` posix=`partial`
   tests: `run_bash_invocation_option_matrix.sh,run_startup_mode_matrix.sh`
   note: Row-level evidence mapping assigned from requirement->case rules. Evidence run has failing/timeout tests: run_bash_invocation_option_matrix.sh
@@ -248,9 +219,6 @@ Total remaining rows (partial or missing): 178
 - `C1.OPT.SHORT.r` `-r` default=`partial` posix=`partial`
   tests: `run_bash_invocation_option_matrix.sh`
   note: Row-level evidence mapping assigned from requirement->case rules. Evidence run has failing/timeout tests: run_bash_invocation_option_matrix.sh
-- `C1.OPT.SHORT.s` `-s` default=`partial` posix=`partial`
-  tests: `run_bash_invocation_option_matrix.sh`
-  note: -s recognized; trailing args currently mis-handled in CLI split path.
 - `C1.OPT.SHORT.v` `-v` default=`partial` posix=`partial`
   tests: `run_bash_invocation_option_matrix.sh`
   note: Row-level evidence mapping assigned from requirement->case rules. Evidence run has failing/timeout tests: run_bash_invocation_option_matrix.sh
