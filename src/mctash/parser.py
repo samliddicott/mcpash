@@ -576,7 +576,7 @@ class Parser:
                 if (
                     next_tok
                     and next_tok.kind == "OP"
-                    and next_tok.value in ["<", ">", ">>", "<>", "<<", "<<-", ">&", "<&"]
+                    and next_tok.value in ["<", ">", ">>", "<>", "<<", "<<-", "<<<", ">&", "<&"]
                     and self._token_adjacent(tok, next_tok)
                 ):
                     fd = int(tok.value)
@@ -595,7 +595,7 @@ class Parser:
                     redirects.append(redir)
                     lst_redirects.append(lst_redir)
                     continue
-            if tok.kind == "OP" and tok.value in ["<", ">", ">>", "<>", "<<", "<<-", ">&", "<&"]:
+            if tok.kind == "OP" and tok.value in ["<", ">", ">>", "<>", "<<", "<<-", "<<<", ">&", "<&"]:
                 op = tok.value
                 if command_line is None:
                     command_line = tok.line
@@ -1307,7 +1307,7 @@ class Parser:
                 if (
                     next_tok
                     and next_tok.kind == "OP"
-                    and next_tok.value in ["<", ">", ">>", "<>", "<<", "<<-", ">&", "<&"]
+                    and next_tok.value in ["<", ">", ">>", "<>", "<<", "<<-", "<<<", ">&", "<&"]
                     and self._token_adjacent(tok, next_tok)
                 ):
                     fd = int(tok.value)
@@ -1324,7 +1324,7 @@ class Parser:
                     redirects.append(redir)
                     lst_redirects.append(lst_redir)
                     continue
-            if tok.kind == "OP" and tok.value in ["<", ">", ">>", "<>", "<<", "<<-", ">&", "<&"]:
+            if tok.kind == "OP" and tok.value in ["<", ">", ">>", "<>", "<<", "<<-", "<<<", ">&", "<&"]:
                 op_tok = tok
                 self._advance()
                 target_tok = self._peek()

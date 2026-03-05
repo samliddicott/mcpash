@@ -4175,7 +4175,7 @@ class Runtime:
 
     def _stdout_redirected_away(self, redirects: List[Redirect]) -> bool:
         for redir in redirects:
-            fd = redir.fd if redir.fd is not None else (0 if redir.op in ["<", "<<", "<&", "<>"] else 1)
+            fd = redir.fd if redir.fd is not None else (0 if redir.op in ["<", "<<", "<<<", "<&", "<>"] else 1)
             if fd != 1:
                 continue
             if redir.op in [">", ">>"]:
@@ -5834,7 +5834,7 @@ class Runtime:
         for redir in redirects:
             target_fd = redir.fd
             if target_fd is None:
-                target_fd = 0 if redir.op in ["<", "<<", "<&", "<>"] else 1
+                target_fd = 0 if redir.op in ["<", "<<", "<<<", "<&", "<>"] else 1
             target = self._expand_redir_target(redir)
             if redir.op == "<":
                 f = self._open_for_redir(target, "rb", redir.op)
@@ -5864,6 +5864,14 @@ class Runtime:
                     stderr = f
             elif redir.op == "<<":
                 content = self._expand_heredoc(redir)
+                f = tempfile.TemporaryFile()
+                f.write(content.encode("utf-8"))
+                f.seek(0)
+                to_close.append(f)
+                if target_fd == 0:
+                    stdin = f
+            elif redir.op == "<<<":
+                content = self._expand_here_string(redir)
                 f = tempfile.TemporaryFile()
                 f.write(content.encode("utf-8"))
                 f.seek(0)
@@ -5942,7 +5950,7 @@ class Runtime:
 
     def _apply_persistent_redirects(self, redirects: List[Redirect]) -> None:
         for redir in redirects:
-            fd = redir.fd if redir.fd is not None else (0 if redir.op in ["<", "<<", "<&", "<>"] else 1)
+            fd = redir.fd if redir.fd is not None else (0 if redir.op in ["<", "<<", "<<<", "<&", "<>"] else 1)
             target = self._expand_redir_target(redir)
             if redir.op == "<":
                 f = self._open_for_redir(target, "rb", redir.op)
@@ -5972,6 +5980,14 @@ class Runtime:
                 self._dup2_file(f, fd)
                 if fd >= 3:
                     self._user_fds.add(fd)
+            elif redir.op == "<<<":
+                content = self._expand_here_string(redir)
+                f = tempfile.TemporaryFile()
+                f.write(content.encode("utf-8"))
+                f.seek(0)
+                self._dup2_file(f, fd)
+                if fd >= 3:
+                    self._user_fds.add(fd)
             elif redir.op == ">&":
                 self._dup_fd(redir, is_output=True, default_fd=fd)
             elif redir.op == "<&":
@@ -5994,7 +6010,7 @@ class Runtime:
         self._fd_redirect_depth += 1
         try:
             for redir in redirects:
-                fd = redir.fd if redir.fd is not None else (0 if redir.op in ["<", "<<", "<&", "<>"] else 1)
+                fd = redir.fd if redir.fd is not None else (0 if redir.op in ["<", "<<", "<<<", "<&", "<>"] else 1)
                 target = self._expand_redir_target(redir)
                 try:
                     saved_fd = os.dup(fd)
@@ -6032,6 +6048,15 @@ class Runtime:
                         self._active_temp_fds.add(fd)
                 elif redir.op == "<<":
                     content = self._expand_heredoc(redir)
+                    f = tempfile.TemporaryFile()
+                    f.write(content.encode("utf-8"))
+                    f.seek(0)
+                    self._dup2_file(f, fd)
+                    if fd >= 3:
+                        transient_fds.add(fd)
+                        self._active_temp_fds.add(fd)
+                elif redir.op == "<<<":
+                    content = self._expand_here_string(redir)
                     f = tempfile.TemporaryFile()
                     f.write(content.encode("utf-8"))
                     f.seek(0)
@@ -7119,6 +7144,10 @@ class Runtime:
         if not redir.here_doc_expand:
             return content
         return self._expand_heredoc_unquoted(content)
+
+    def _expand_here_string(self, redir: Redirect) -> str:
+        target = self._expand_redir_target(redir)
+        return ("" if target is None else target) + "\n"
 
     def _expand_heredoc_unquoted(self, text: str) -> str:
         out: List[str] = []

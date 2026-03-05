@@ -23,7 +23,7 @@ class Assignment:
 
 @dataclass
 class Redirect:
-    op: str  # "<", ">", ">>", "<<"
+    op: str  # "<", ">", ">>", "<<", "<<<"
     target: str
     fd: Optional[int] = None
     here_doc: Optional[str] = None

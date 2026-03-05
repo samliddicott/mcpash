@@ -4,5 +4,5 @@
 
 set +e
 
-read -r hs <<< "hello world"
+read -r hs <<< "hello_world"
 printf 'hs:%s\n' "$hs"

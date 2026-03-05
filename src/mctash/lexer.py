@@ -23,6 +23,7 @@ OPERATORS = {
     ">>",
     "<>",
     "<<",
+    "<<<",
     "<<-",
     ">&",
     "<&",
@@ -551,7 +552,7 @@ def _scan_command_sub(source: str, start: int) -> tuple[str, int]:
             while i < len(source) and source[i] != "\n":
                 i += 1
             continue
-        if source.startswith("<<-", i) or source.startswith("<<", i):
+        if source.startswith("<<-", i) or (source.startswith("<<", i) and not source.startswith("<<<", i)):
             new_i = _skip_heredoc_in_command_sub(source, i)
             if new_i > i:
                 i = new_i
@@ -635,7 +636,7 @@ def _scan_command_sub_from_lparen(source: str, lparen_idx: int) -> tuple[str, in
             while i < len(source) and source[i] != "\n":
                 i += 1
             continue
-        if source.startswith("<<-", i) or source.startswith("<<", i):
+        if source.startswith("<<-", i) or (source.startswith("<<", i) and not source.startswith("<<<", i)):
             new_i = _skip_heredoc_in_command_sub(source, i)
             if new_i > i:
                 i = new_i

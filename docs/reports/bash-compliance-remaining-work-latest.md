@@ -2,15 +2,14 @@
 
 Derived from: `docs/specs/bash-man-implementation-matrix.tsv`
 
-Total remaining rows (partial or missing): 169
+Total remaining rows (partial or missing): 168
 
-- Missing rows: 1
+- Missing rows: 0
 - Partial rows: 168
 
 ## Explicit Missing Features
 
-- `C4.REDIR.012` feature=`here-string <<<word` default=`missing` posix=`missing` tests=`bash-man-redir-here-string.sh`
-  note: here-string <<< currently parse-error path.
+None.
 
 ## Remaining Rows by Category
 
@@ -265,10 +264,6 @@ Total remaining rows (partial or missing): 169
   tests: `man-ash-var-ops-matrix.sh,bash-compat-param-array-hash-extended.sh`
   note: Row-level evidence mapping assigned from requirement->case rules. Evidence run has failing/timeout tests: bash-compat-param-array-hash-extended.sh
 ### Category 4
-
-- `C4.REDIR.012` `here-string <<<word` default=`missing` posix=`missing`
-  tests: `bash-man-redir-here-string.sh`
-  note: here-string <<< currently parse-error path.
 - `C4.REDIR.013` `redirect stdout+stderr &>word` default=`partial` posix=`partial`
   tests: `bash-man-redir-bash-ext.sh`
   note: Row-level evidence mapping assigned from requirement->case rules. Evidence run has failing/timeout tests: bash-man-redir-bash-ext.sh
