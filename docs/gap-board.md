@@ -77,6 +77,7 @@ Reference summary source: `docs/posix-shall-trace.md`.
 | Bucket | Status | Next concrete step |
 |---|---|---|
 | Requirement-level trace completeness (all "shall" rows) | partial | Continue adding explicit case-id links for every remaining row in `docs/posix-shall-trace.md`.
+| Category-bucket gate closure (man-bash categories 1..9) | covered | `tests/compat/run_bash_category_bucket_matrix.sh` (`make category-buckets-matrix`) now enforces all buckets as green gates in declared scope.
 | Grammar production closure | covered | `docs/grammar-production-checklist.md`, `tests/diff/cases/man-ash-grammar-negative.sh`, `tests/diff/cases/man-ash-grammar-reserved.sh`, `tests/diff/cases/man-ash-grammar-word-matrix.sh`, `tests/diff/cases/man-ash-prefix-suffix.sh`.
 | Threaded-runtime parity checks | covered | Core cwd/fd/var isolation cases are covered (`man-ash-thread-cwd.sh`, `man-ash-thread-fd.sh`, `man-ash-thread-vars.sh`, `man-ash-thread-pipeline-cwd.sh`, `man-ash-thread-pipeline-fd.sh`) plus fallback-diag/process-subst regressions (`thread_unshare_fallback_diag`, `thread_unshare_forced_fail_diag`, `process_subst_*`, `thread_combined_bg_pipeline_process_subst`, `thread_multi_job_concurrency_isolation`, `thread_high_load_concurrency_isolation`, `thread_long_running_mixed_stress`, `monitor_mode_noninteractive_diag`, `monitor_mode_interactive_pty`, `monitor_mode_interactive_jobs_fg` in `tests/regressions/run.sh`) for declared Linux comparator scope.
 
