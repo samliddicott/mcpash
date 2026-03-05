@@ -19,12 +19,7 @@ Current state snapshot:
 
 - Matrix rows: 398
 - Default lane: covered=398 partial=0 missing=0
-- Posix lane: covered=384 partial=0 missing=0 out_of_scope=14
-
-Current `--posix` out-of-scope rows (interactive-only):
-
-- `C7.INT.01`..`C7.INT.10`
-- `C8.JOB.03`, `C8.JOB.07`, `C8.JOB.11`, `C8.JOB.12`
+- Posix lane: covered=398 partial=0 missing=0 out_of_scope=0
 
 ## Gate A: Functional Closure (Required)
 
@@ -119,4 +114,3 @@ For release notes / milestone closure:
 - Gates A-F: `PASS/FAIL`
 - Known exclusions: `<list>`
 - Next milestone focus: `<text>`
-

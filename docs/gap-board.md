@@ -76,13 +76,21 @@ Reference summary source: `docs/posix-shall-trace.md`.
 
 Status:
 
-- The previous POSIX-lane interactive exclusions are now in scope and tracked as `partial` until strict closure.
-- Active plan: `docs/plans/007-posix-interactive-and-job-control-closure.md`.
+- Closed.
+- Active plan completed: `docs/plans/007-posix-interactive-and-job-control-closure.md`.
 
-Rows reopened for closure:
+Rows closed in this pass:
 
 - `C7.INT.01`..`C7.INT.10`
 - `C8.JOB.03`, `C8.JOB.07`, `C8.JOB.11`, `C8.JOB.12`
+
+Evidence gates:
+
+- `STRICT=1 make interactive-ux-matrix`
+- `STRICT=1 make completion-interactive-matrix`
+- `STRICT=1 make jobs-interactive-matrix`
+- `STRICT=1 make trap-noninteractive-matrix`
+- `STRICT=1 make trap-interactive-matrix`
 
 ## Untested/Backlog Buckets
 

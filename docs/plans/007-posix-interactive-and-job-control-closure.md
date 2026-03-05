@@ -96,3 +96,13 @@ Rows in scope:
   - `docs/specs/bash-man-implementation-matrix.md`
   - `docs/reports/bash-posix-partials-latest.md`
   - `docs/reports/bash-compliance-remaining-work-latest.md`
+
+## Completion Snapshot
+
+Completed on: 2026-03-05
+
+Result:
+
+- `C7.INT.01`..`C7.INT.10` are `covered` in POSIX lane.
+- `C8.JOB.03`, `C8.JOB.07`, `C8.JOB.11`, `C8.JOB.12` are `covered` in POSIX lane.
+- Matrix status is now `covered=398` for both default and `--posix` lanes.
