@@ -3,21 +3,21 @@
 .	covered	man-bash-posix-05-dot-source	dot/source path, arg passing, and missing-file status
 alias	covered	man-bash-posix-04-misc-builtins	basic alias/unalias behavior
 bg	covered	man-bash-posix-10-jobs-fg-bg-interactive	non-interactive baseline statuses + jobs list probe
-bind	out_of_scope		line editor builtin; interactive/readline domain
+bind	partial	bash-builtin-completion	interactive/readline semantics partially covered; strict PTY matrix in `run_completion_interactive_matrix.sh`
 break	covered	man-bash-posix-06-loop-control	outside-loop status + nested-level behavior
 builtin	covered	man-bash-posix-07-builtin-dispatch	builtin dispatch + function shadow bypass
 caller	out_of_scope		bash extension; no mctash posix target yet
 cd	covered	man-bash-posix-02-path-command	basic transitions
 command	covered	man-bash-posix-02-path-command	command -v + missing command status
-compgen	out_of_scope		bash completion extension
-complete	out_of_scope		bash completion extension
-compopt	out_of_scope		bash completion extension
+compgen	covered	bash-builtin-completion	non-interactive generation/status paths covered
+complete	covered	bash-builtin-completion	spec add/remove/print status paths covered
+compopt	covered	bash-builtin-completion	option set/unset status paths covered
 continue	covered	man-bash-posix-06-loop-control	outside-loop status + nested-level behavior
 declare	covered	man-bash-posix-08-declare-posix-policy	posix lane assertions under explicit BASH_COMPAT
-dirs	out_of_scope		bash directory stack extension
-disown	out_of_scope		bash jobs extension
+dirs	covered	bash-builtin-dirstack	core directory stack listing/index behavior covered
+disown	covered	bash-builtin-disown	core jobspec/nohup/remove status behavior covered
 echo	covered	man-bash-posix-04-misc-builtins	basic output
-enable	out_of_scope		bash builtin toggling extension
+enable	covered	bash-builtin-enable	disable/reenable and dispatch status behavior covered
 eval	covered	man-bash-posix-04-misc-builtins	basic eval assignment
 exec	covered	man-bash-posix-04-misc-builtins	fd exec form (non-replacing)
 exit	covered	man-bash-posix-09-return-exit	exit status via subshell path
@@ -27,20 +27,20 @@ fc	covered	man-ash-fc	temporary bash comparator policy accepted for fc
 fg	covered	man-bash-posix-10-jobs-fg-bg-interactive	non-interactive baseline statuses + jobs list probe
 getopts	covered	man-bash-posix-01-core-state	basic option parse loop
 hash	covered	man-bash-posix-02-path-command	reset, insert, miss
-help	out_of_scope		bash help text surface
+help	covered	bash-builtin-help	core help status behavior covered
 history	out_of_scope		interactive history extension
 jobs	covered	man-bash-posix-10-jobs-fg-bg-interactive	jobs/jobs -p baseline plus bg/fg/wait statuses
 kill	covered	man-bash-posix-03-io-signals	kill -0 sanity path
 let	out_of_scope		bash arithmetic builtin extension
-local	out_of_scope		bash function-local extension
+local	covered	bash-builtin-declare-typeset-local	function-local declaration scope behavior covered
 logout	out_of_scope		login-shell session extension
-mapfile	out_of_scope		bash extension (readarray alias)
-popd	out_of_scope		bash directory stack extension
+mapfile	covered	bash-compat-mapfile-readarray	bash-compat array ingest surface covered
+popd	covered	bash-builtin-dirstack	core stack pop/index behavior covered
 printf	covered	man-bash-posix-04-misc-builtins	basic formatting path
-pushd	out_of_scope		bash directory stack extension
+pushd	covered	bash-builtin-dirstack	core push/swap/index behavior covered
 pwd	covered	man-bash-posix-02-path-command	basic pwd output
 read	covered	man-bash-posix-03-io-signals	basic split semantics
-readarray	out_of_scope		bash extension
+readarray	covered	bash-compat-mapfile-readarray	alias of mapfile covered in bash-compat lane
 readonly	covered	man-bash-posix-01-core-state	readonly + unset protection
 return	covered	man-bash-posix-09-return-exit	function return status propagation
 set	covered	man-bash-posix-01-core-state	argument and option flow
@@ -53,7 +53,7 @@ times	covered	man-bash-posix-04-misc-builtins	smoke output line
 trap	covered	man-bash-posix-03-io-signals	set/clear + delivery smoke
 true	covered	man-bash-posix-04-misc-builtins	status behavior
 type	covered	man-bash-posix-02-path-command	builtin + missing status
-typeset	out_of_scope		bash/ksh extension alias of declare
+typeset	covered	bash-builtin-declare-typeset-local	alias of declare covered
 ulimit	covered	man-bash-posix-04-misc-builtins	query path
 umask	covered	man-bash-posix-04-misc-builtins	roundtrip path
 unalias	covered	man-bash-posix-04-misc-builtins	unalias missing status
