@@ -17,8 +17,8 @@ Total requirements: 398
 - unknown: 0
 
 ### mctash --posix lane
-- covered: 384
-- partial: 14
+- covered: 394
+- partial: 4
 - missing: 0
 - out_of_scope: 0
 - unknown: 0
@@ -31,7 +31,7 @@ Total requirements: 398
 - Category 4: total=21, fully covered=21, remaining(partial/missing)=0, posix out_of_scope=0
 - Category 5: total=61, fully covered=61, remaining(partial/missing)=0, posix out_of_scope=0
 - Category 6: total=79, fully covered=79, remaining(partial/missing)=0, posix out_of_scope=0
-- Category 7: total=10, fully covered=0, remaining(partial/missing)=10, posix out_of_scope=0
+- Category 7: total=10, fully covered=10, remaining(partial/missing)=0, posix out_of_scope=0
 - Category 8: total=12, fully covered=8, remaining(partial/missing)=4, posix out_of_scope=0
 - Category 9: total=7, fully covered=7, remaining(partial/missing)=0, posix out_of_scope=0
 - Category 10: total=6, fully covered=6, remaining(partial/missing)=0, posix out_of_scope=0
