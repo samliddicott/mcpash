@@ -1376,10 +1376,27 @@ class Runtime:
                 )
             except FileNotFoundError:
                 print(self._diag_msg(DiagnosticKey.COMMAND_NOT_FOUND, name=argv[0]), file=sys.stderr)
-                return 127
+                # In a pipeline, failed exec of one stage doesn't prevent
+                # sibling stages from running; emulate by inserting a process
+                # that exits with the expected status.
+                proc = subprocess.Popen(
+                    ["sh", "-c", "exit 127"],
+                    stdin=stdin,
+                    stdout=stdout,
+                    stderr=stderr,
+                    env=cmd_env,
+                    preexec_fn=self._preexec_reset_signals,
+                )
             except OSError as e:
                 self._print_stderr(self._diag_msg(DiagnosticKey.ERRNO_NAME, name=argv[0], error=str(e.strerror)))
-                return 126
+                proc = subprocess.Popen(
+                    ["sh", "-c", "exit 126"],
+                    stdin=stdin,
+                    stdout=stdout,
+                    stderr=stderr,
+                    env=cmd_env,
+                    preexec_fn=self._preexec_reset_signals,
+                )
             finally:
                 for f in to_close:
                     try:
