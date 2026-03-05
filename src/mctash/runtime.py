@@ -903,10 +903,10 @@ class Runtime:
             if self._diag.style != "bash" and self.c_string_mode and line > 0 and len(self.source_stack) <= 1:
                 line = line - 1
         if self._diag.style == "bash":
-            if context:
-                prefix = f"{prefix}: {context}"
             if line is not None:
                 prefix = f"{prefix}: line {line}"
+            if context:
+                prefix = f"{prefix}: {context}"
         else:
             if context:
                 prefix = f"{prefix}: {context}"
@@ -3135,8 +3135,10 @@ class Runtime:
         pat: list[str] = []
         for seg in field.segments:
             for ch in seg.text:
-                if seg.glob_active and ch in {"*", "?", "["}:
-                    has_active_glob = True
+                if seg.glob_active:
+                    if ch in {"*", "?", "["}:
+                        has_active_glob = True
+                    # Preserve full unquoted glob pattern text (including ']').
                     pat.append(ch)
                     continue
                 if ch == "*":
