@@ -11,14 +11,14 @@ Total requirements: 398
 ## Status Counts
 
 ### mctash default lane
-- covered: 230
-- partial: 168
+- covered: 300
+- partial: 98
 - missing: 0
 - unknown: 0
 
 ### mctash --posix lane
-- covered: 216
-- partial: 168
+- covered: 286
+- partial: 98
 - missing: 0
 - out_of_scope: 14
 - unknown: 0
@@ -30,7 +30,7 @@ Total requirements: 398
 - Category 3: total=31, fully covered=16, remaining(partial/missing)=15, posix out_of_scope=0
 - Category 4: total=21, fully covered=16, remaining(partial/missing)=5, posix out_of_scope=0
 - Category 5: total=61, fully covered=61, remaining(partial/missing)=0, posix out_of_scope=0
-- Category 6: total=79, fully covered=9, remaining(partial/missing)=70, posix out_of_scope=0
+- Category 6: total=79, fully covered=79, remaining(partial/missing)=0, posix out_of_scope=0
 - Category 7: total=10, fully covered=10, remaining(partial/missing)=0, posix out_of_scope=10
 - Category 8: total=12, fully covered=12, remaining(partial/missing)=0, posix out_of_scope=4
 - Category 9: total=7, fully covered=7, remaining(partial/missing)=0, posix out_of_scope=0

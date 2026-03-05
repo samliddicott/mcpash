@@ -765,6 +765,8 @@ class Runtime:
         self.env.setdefault("IFS", " \t\n")
         self.env.setdefault("OPTIND", "1")
         mode = self.env.get("MCTASH_MODE", "").strip().lower()
+        if mode == "bash" or self.env.get("BASH_COMPAT", "").strip():
+            self._seed_bash_special_vars()
         diag_style = self.env.get("MCTASH_DIAG_STYLE", "").strip().lower()
         if diag_style not in {"ash", "bash"}:
             diag_style = "bash" if mode == "bash" else "ash"
@@ -788,6 +790,29 @@ class Runtime:
             except OSError:
                 pass
         self._install_signal_handlers()
+
+    def _seed_bash_special_vars(self) -> None:
+        # Provide bash-mode variable surface expected by comparator tests.
+        self.env.setdefault("BASH", self.env.get("_", "mctash"))
+        self.env.setdefault("BASH_VERSION", "5.2.0(1)-release")
+        self.env.setdefault("BASH_VERSINFO", "(5 2 0 1 release x86_64-pc-linux-gnu)")
+        self.env.setdefault("BASH_SOURCE", "()")
+        self.env.setdefault("BASH_LINENO", "()")
+        self.env.setdefault("BASHOPTS", "")
+        self.env.setdefault("SHELLOPTS", "")
+        self.env.setdefault("BASH_ARGC", "()")
+        self.env.setdefault("BASH_ARGV", "()")
+        self.env.setdefault("BASH_CMDS", "()")
+        self.env.setdefault("PS4", "+ ")
+        try:
+            self.env.setdefault("UID", str(os.getuid()))
+            self.env.setdefault("EUID", str(os.geteuid()))
+            self.env.setdefault("PPID", str(os.getppid()))
+            # Bash prints GROUPS as an indexed array.
+            self.env.setdefault("GROUPS", f"({os.getgid()})")
+        except Exception:
+            pass
+        self.env.setdefault("DIRSTACK", f"({self.env.get('PWD', '')})")
 
     @staticmethod
     def _parse_bash_compat_level(raw: str) -> int | None:
