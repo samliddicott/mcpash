@@ -1,6 +1,6 @@
 # Gap Board
 
-Date: 2026-03-03
+Date: 2026-03-05
 
 Purpose:
 
@@ -71,6 +71,18 @@ Reference summary source: `docs/posix-shall-trace.md`.
 | Bash builtin extension tranche (`typeset/local`, `mapfile/readarray`, `enable/help`, `dirs/pushd/popd`, `disown`) | covered | `tests/diff/cases/bash-builtin-declare-typeset-local.sh`, `tests/diff/cases/bash-compat-mapfile-readarray.sh`, `tests/diff/cases/bash-builtin-enable.sh`, `tests/diff/cases/bash-builtin-help.sh`, `tests/diff/cases/bash-builtin-dirstack.sh`, `tests/diff/cases/bash-builtin-disown.sh`, `tests/compat/run_bash_builtin_matrix.sh` | Builtin parity lane now has dedicated matrix gate (`make bash-builtin-matrix`) with memory/time limits. |
 | Execution/environment/errors/signals/jobs category lane | covered | `tests/diff/cases/man-bash-posix-13-exec-errors-signals-jobs.sh`, `tests/diff/cases/man-bash-posix-14-env-exec-flow.sh`, `tests/compat/run_bash_posix_man_matrix.sh` | Adds explicit category-5 parity checks for command lookup/exec statuses, trap/wait/job paths, environment propagation, and pipeline exec-failure flow. |
 | Completion/readline interactive semantics (`bind/complete/compgen/compopt`) | covered | `tests/diff/cases/bash-builtin-completion.sh`, `tests/compat/run_completion_interactive_matrix.sh`, `tests/compat/run_interactive_ux_matrix.sh` | Covered for declared comparator scope: non-interactive behavior plus strict PTY marker checks for bind/query, completion status paths, prompt command, history bang expansion, and prompt expansion markers. |
+
+## POSIX Lane In-Scope Interactive Closure
+
+Status:
+
+- The previous POSIX-lane interactive exclusions are now in scope and tracked as `partial` until strict closure.
+- Active plan: `docs/plans/007-posix-interactive-and-job-control-closure.md`.
+
+Rows reopened for closure:
+
+- `C7.INT.01`..`C7.INT.10`
+- `C8.JOB.03`, `C8.JOB.07`, `C8.JOB.11`, `C8.JOB.12`
 
 ## Untested/Backlog Buckets
 
