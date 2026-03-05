@@ -530,6 +530,8 @@ class Runtime:
         "cd",
         "read",
         "set",
+        "declare",
+        "typeset",
         "shift",
         "getopts",
         "alias",
@@ -570,6 +572,11 @@ class Runtime:
         "local",
         "eval",
         "declare",
+        "typeset",
+        "mapfile",
+        "readarray",
+        "enable",
+        "help",
         "[",
         "[[",
         "test",
@@ -663,6 +670,7 @@ class Runtime:
         self._py_import_counter: int = 0
         self._var_attrs: Dict[str, set[str]] = {k: {"exported"} for k in self.env.keys()}
         self._typed_vars: Dict[str, object] = {}
+        self.disabled_builtins: set[str] = set()
         self._bash_compat_level: int | None = self._parse_bash_compat_level(self.env.get("BASH_COMPAT", ""))
         self._frame_stack: List[Dict[str, object]] = []
         self._call_stack: List[str] = []
@@ -1021,7 +1029,7 @@ class Runtime:
                     sc = node.pipelines[0].commands[0]
                     argv = self._expand_argv(sc.argv)
                     argv = self._expand_aliases(argv)
-                    if argv and argv[0] not in self.BUILTINS and not self._has_function(argv[0]):
+                    if argv and not self._is_builtin_enabled(argv[0]) and not self._has_function(argv[0]):
                         cmd_env = dict(self.env)
                         for scope in self.local_stack:
                             for k, v in scope.items():
@@ -1246,7 +1254,7 @@ class Runtime:
             if not argv:
                 return False
             name = argv[0]
-            if name in self.BUILTINS or self._has_function(name):
+            if self._is_builtin_enabled(name) or self._has_function(name):
                 return False
         return True
 
@@ -1780,7 +1788,7 @@ class Runtime:
             ):
                 argv = self._expand_asdl_simple_argv(cmd)
                 argv = self._expand_aliases(argv)
-                if argv and argv[0] not in self.BUILTINS and not self._has_function(argv[0]):
+                if argv and not self._is_builtin_enabled(argv[0]) and not self._has_function(argv[0]):
                     cmd_env = dict(self.env)
                     for scope in self.local_stack:
                         for k, v in scope.items():
@@ -2084,7 +2092,8 @@ class Runtime:
                 return status
             return 0
 
-        argv_assigns = self._argv_assignment_words(argv)
+        declaration_cmds = {"declare", "typeset", "local", "readonly", "export"}
+        argv_assigns = None if (argv and argv[0] in declaration_cmds) else self._argv_assignment_words(argv)
         if argv_assigns is not None:
             saved_env = self.env
             try:
@@ -2114,6 +2123,12 @@ class Runtime:
             self._cmd_sub_used = False
 
         name = argv[0]
+        if name in {"declare", "typeset", "local"} and assign_pairs:
+            for assign in assign_pairs:
+                aname = str(assign.get("name") or "")
+                aop = str(assign.get("op") or "=")
+                aval = self._asdl_rhs_word_to_text(assign.get("val") or {})
+                argv.append(f"{aname}{aop}{aval}")
         assign_names = {str(a.get("name") or "") for a in assign_pairs}
         if self._has_function(name):
             saved_env = dict(self.env)
@@ -2142,7 +2157,7 @@ class Runtime:
                         merged.pop(k, None)
                 self.env = merged
             return status
-        if name in self.BUILTINS:
+        if self._is_builtin_enabled(name):
             is_special = name in self.SPECIAL_BUILTINS
             if is_special:
                 self.env = local_env
@@ -3580,7 +3595,7 @@ class Runtime:
         if not argv:
             return False
         name = argv[0]
-        return name in self.BUILTINS or self._has_function(name)
+        return self._is_builtin_enabled(name) or self._has_function(name)
 
     def _exec_pipeline_inprocess(self, node: Pipeline) -> int:
         data: bytes | None = None
@@ -3733,7 +3748,7 @@ class Runtime:
                         cmd_env[assign.name] = value
             finally:
                 self.env = saved_env
-        if self._has_function(name) or name in self.BUILTINS:
+        if self._has_function(name) or self._is_builtin_enabled(name):
             saved_env = self.env
             self.env = cmd_env
             if capture and self._stdout_redirected_away(cmd.redirects):
@@ -4057,7 +4072,8 @@ class Runtime:
                 return 0
             if not argv:
                 return 0
-            argv_assigns = self._argv_assignment_words(argv)
+            declaration_cmds = {"declare", "typeset", "local", "readonly", "export"}
+            argv_assigns = None if (argv and argv[0] in declaration_cmds) else self._argv_assignment_words(argv)
             if argv_assigns is not None:
                 saved_env2 = self.env
                 try:
@@ -4088,6 +4104,9 @@ class Runtime:
             if self._cmd_sub_used:
                 self._cmd_sub_used = False
             name = argv[0]
+            if name in {"declare", "typeset", "local"} and node.assignments:
+                for a in node.assignments:
+                    argv.append(f"{a.name}{a.op}{a.value}")
             assign_names = {a.name for a in node.assignments}
             if self._has_function(name):
                 saved_env = dict(self.env)
@@ -4115,7 +4134,7 @@ class Runtime:
                             merged.pop(k, None)
                     self.env = merged
                 return status
-            if name in self.BUILTINS:
+            if self._is_builtin_enabled(name):
                 is_special = name in self.SPECIAL_BUILTINS
                 if is_special:
                     self.env = local_env
@@ -4356,8 +4375,10 @@ class Runtime:
             return self._run_local(argv[1:])
         if name == "eval":
             return self._run_eval(argv[1:])
-        if name == "declare":
-            return self._run_declare(argv[1:])
+        if name in {"declare", "typeset"}:
+            return self._run_declare(argv[1:], cmd_name=name)
+        if name in {"mapfile", "readarray"}:
+            return self._run_mapfile(argv[1:])
         if name == "set":
             return self._run_set(argv[1:])
         if name == "export":
@@ -4382,11 +4403,15 @@ class Runtime:
             return self._run_command_builtin(argv[1:])
         if name == "builtin":
             return self._run_builtin_builtin(argv[1:])
+        if name == "enable":
+            return self._run_enable(argv[1:])
+        if name == "help":
+            return self._run_help(argv[1:])
         if name == "exec":
             if len(argv) <= 1:
                 return 0
             cmd = argv[1:]
-            if cmd[0] in self.BUILTINS:
+            if self._is_builtin_enabled(cmd[0]):
                 status = self._run_builtin(cmd[0], cmd)
                 raise SystemExit(status)
             if self._has_function(cmd[0]):
@@ -4569,6 +4594,9 @@ class Runtime:
 
     def _has_function(self, name: str) -> bool:
         return name in self.functions_asdl or name in self.functions
+
+    def _is_builtin_enabled(self, name: str) -> bool:
+        return name in self.BUILTINS and name not in self.disabled_builtins
 
     def _function_names(self) -> list[str]:
         return sorted(set(self.functions.keys()) | set(self.functions_asdl.keys()))
@@ -7341,26 +7369,7 @@ class Runtime:
         self.env[name] = value
 
     def _run_local(self, args: List[str]) -> int:
-        if not self.local_stack:
-            self._report_error("not in a function", line=self.current_line, context="local")
-            return 1
-        for arg in args:
-            if "=" in arg:
-                name, value = arg.split("=", 1)
-                op = "="
-                if name.endswith("+"):
-                    op = "+="
-                    name = name[:-1]
-                expanded = self._expand_assignment_word(value)
-                if op == "+=":
-                    current = self._get_var(name)
-                    self._set_local(name, current + expanded)
-                else:
-                    self._set_local(name, expanded)
-            else:
-                if arg not in self.local_stack[-1]:
-                    self._set_local(arg, "")
-        return 0
+        return self._run_declare(args, cmd_name="local", local_scope=True)
 
     def _run_eval(self, args: List[str]) -> int:
         source = " ".join(args)
@@ -7376,7 +7385,10 @@ class Runtime:
             raise SystemExit(status if status != 0 else 2)
         return status
 
-    def _run_declare(self, args: List[str]) -> int:
+    def _run_declare(self, args: List[str], cmd_name: str = "declare", local_scope: bool = False) -> int:
+        if local_scope and not self.local_stack:
+            self._report_error("not in a function", line=self.current_line, context=cmd_name)
+            return 1
         if not args:
             return 0
 
@@ -7384,6 +7396,10 @@ class Runtime:
         print_vars = False
         declare_array = False
         declare_assoc = False
+        declare_integer = False
+        declare_export = False
+        declare_readonly = False
+        force_global = False
         idx = 0
         while idx < len(args):
             arg = args[idx]
@@ -7401,8 +7417,16 @@ class Runtime:
                     declare_array = True
                 elif ch == "A":
                     declare_assoc = True
+                elif ch == "i":
+                    declare_integer = True
+                elif ch == "x":
+                    declare_export = True
+                elif ch == "r":
+                    declare_readonly = True
+                elif ch == "g":
+                    force_global = True
                 else:
-                    self._report_error(f"illegal option -{ch}", line=self.current_line, context="declare")
+                    self._report_error(f"illegal option -{ch}", line=self.current_line, context=cmd_name)
                     return 2
             idx += 1
 
@@ -7423,7 +7447,7 @@ class Runtime:
             status = 0
             for name in names:
                 if not self._is_valid_name(name):
-                    self._report_error(f"not found: {name}", line=self.current_line, context="declare")
+                    self._report_error(f"not found: {name}", line=self.current_line, context=cmd_name)
                     status = 1
                     continue
                 attrs = self._var_attrs.get(name, set())
@@ -7438,31 +7462,52 @@ class Runtime:
                     print(f"declare -- {name}='{value}'")
             return status
 
+        effective_local_scope = local_scope and not force_global
+        attr_flags: dict[str, bool] = {}
+        if declare_array:
+            attr_flags["array"] = True
+        if declare_assoc:
+            attr_flags["assoc"] = True
+        if declare_integer:
+            attr_flags["integer"] = True
+        if declare_export:
+            attr_flags["exported"] = True
+        if declare_readonly:
+            attr_flags["readonly"] = True
+
         if declare_assoc:
             if not self._bash_feature_enabled("declare_assoc"):
-                self._report_error("declare -A requires BASH_COMPAT to be set", line=self.current_line, context="declare")
+                self._report_error("declare -A requires BASH_COMPAT to be set", line=self.current_line, context=cmd_name)
                 return 2
-            for spec in names:
-                if "=" in spec:
-                    name, value = spec.split("=", 1)
-                    self._declare_var(name, value, assoc=True)
-                    continue
-                name = spec
-                self._declare_var(name, self._get_var(name), assoc=True)
-            return 0
 
         if declare_array:
             if not self._bash_feature_enabled("declare_array"):
-                self._report_error("declare -a requires BASH_COMPAT to be set", line=self.current_line, context="declare")
+                self._report_error("declare -a requires BASH_COMPAT to be set", line=self.current_line, context=cmd_name)
                 return 2
-            for spec in names:
-                if "=" in spec:
-                    name, value = spec.split("=", 1)
-                    self._declare_var(name, value, array=True)
-                    continue
+
+        for spec in names:
+            if "=" in spec:
+                name, value = spec.split("=", 1)
+                op = "="
+                if name.endswith("+"):
+                    op = "+="
+                    name = name[:-1]
+                if not self._is_valid_name(name):
+                    self._report_error(f"{name}: not a valid identifier", line=self.current_line, context=cmd_name)
+                    return 1
+                expanded = self._expand_assignment_word(value)
+                if op == "+=":
+                    expanded = self._get_var(name) + expanded
+                self._declare_var(name, expanded, local_scope=effective_local_scope, **attr_flags)
+            else:
                 name = spec
-                self._declare_var(name, self._get_var(name), array=True)
-            return 0
+                if not self._is_valid_name(name):
+                    self._report_error(f"{name}: not a valid identifier", line=self.current_line, context=cmd_name)
+                    return 1
+                base_value = self._get_var(name)
+                if effective_local_scope and name not in self.local_stack[-1]:
+                    base_value = ""
+                self._declare_var(name, base_value, local_scope=effective_local_scope, **attr_flags)
 
         return 0
 
@@ -8428,8 +8473,15 @@ class Runtime:
                 else:
                     self.env[name] = coerced
 
-    def _declare_var(self, name: str, value: str = "", **flags: object) -> None:
-        self._assign_shell_var(name, value)
+    def _declare_var(self, name: str, value: str = "", local_scope: bool = False, **flags: object) -> None:
+        if local_scope and self.local_stack:
+            if name in self.readonly_vars:
+                raise RuntimeError(self._diag_msg(DiagnosticKey.READONLY_VAR, name=name))
+            value = self._coerce_var_value(name, value)
+            self._typed_vars.pop(name, None)
+            self.local_stack[-1][name] = value
+        else:
+            self._assign_shell_var(name, value)
         if flags:
             self._set_var_attrs(name, **flags)
 
@@ -8809,6 +8861,226 @@ class Runtime:
             self.env[name] = value
         return 0 if ok else 1
 
+    def _run_mapfile(self, args: List[str]) -> int:
+        delim = "\n"
+        trim = False
+        max_count: int | None = None
+        skip = 0
+        origin = 0
+        fd = 0
+        i = 0
+        array_name = "MAPFILE"
+
+        while i < len(args):
+            a = args[i]
+            if a == "--":
+                i += 1
+                break
+            if not a.startswith("-") or a == "-":
+                break
+            if a in {"-t"}:
+                trim = True
+                i += 1
+                continue
+            if a in {"-d", "-n", "-s", "-O", "-u"}:
+                if i + 1 >= len(args):
+                    self._report_error(f"mapfile: option requires an argument -- {a[1:]}")
+                    return 2
+                val = args[i + 1]
+                i += 2
+                if a == "-d":
+                    delim = "\0" if val == "" else val[0]
+                elif a == "-n":
+                    try:
+                        max_count = max(0, int(val, 10))
+                    except ValueError:
+                        self._report_error("mapfile: invalid line count")
+                        return 2
+                elif a == "-s":
+                    try:
+                        skip = max(0, int(val, 10))
+                    except ValueError:
+                        self._report_error("mapfile: invalid skip count")
+                        return 2
+                elif a == "-O":
+                    try:
+                        origin = int(val, 10)
+                    except ValueError:
+                        self._report_error("mapfile: invalid origin")
+                        return 2
+                    if origin < 0:
+                        self._report_error("mapfile: origin must be non-negative")
+                        return 1
+                elif a == "-u":
+                    try:
+                        fd = int(val, 10)
+                    except ValueError:
+                        self._report_error("mapfile: invalid file descriptor")
+                        return 2
+                    if fd < 0:
+                        self._report_error("mapfile: invalid file descriptor")
+                        return 2
+                continue
+            self._report_error(f"mapfile: invalid option {a}")
+            return 2
+
+        if i < len(args):
+            array_name = args[i]
+            i += 1
+        if i < len(args):
+            self._report_error("mapfile: too many arguments")
+            return 2
+        if not self._is_valid_name(array_name):
+            self._report_error(f"mapfile: {array_name}: not a valid identifier")
+            return 1
+
+        try:
+            if fd == 0 and isinstance(sys.stdin, io.StringIO):
+                stream = sys.stdin
+                close_stream = False
+            else:
+                stream = os.fdopen(os.dup(fd), "r", encoding="utf-8", errors="surrogateescape")
+                close_stream = True
+        except OSError:
+            self._report_error(f"mapfile: {fd}: invalid file descriptor")
+            return 1
+
+        lines: list[str] = []
+        dropped = 0
+        buf: list[str] = []
+        try:
+            while True:
+                ch = stream.read(1)
+                if ch == "":
+                    if buf:
+                        rec = "".join(buf)
+                        if dropped < skip:
+                            dropped += 1
+                        else:
+                            lines.append(rec if trim else rec)
+                    break
+                if ch == delim:
+                    rec = "".join(buf)
+                    if not trim:
+                        rec += ch
+                    if dropped < skip:
+                        dropped += 1
+                    else:
+                        lines.append(rec)
+                        if max_count is not None and len(lines) >= max_count:
+                            break
+                    buf = []
+                else:
+                    buf.append(ch)
+            if close_stream:
+                stream.close()
+        except OSError:
+            if close_stream:
+                try:
+                    stream.close()
+                except OSError:
+                    pass
+            return 1
+
+        current = self._typed_vars.get(array_name)
+        arr: list[object] = list(current) if isinstance(current, list) else []
+        if origin > len(arr):
+            arr.extend([None] * (origin - len(arr)))
+        for idx, item in enumerate(lines):
+            pos = origin + idx
+            if pos >= len(arr):
+                arr.append(item)
+            else:
+                arr[pos] = item
+        self._typed_vars[array_name] = arr
+        self._set_var_attrs(array_name, array=True)
+        vis = self._array_visible_values(arr)
+        self._set_subscript_projection(array_name, vis[0] if vis else "")
+        return 0
+
+    def _run_enable(self, args: List[str]) -> int:
+        disable = False
+        print_mode = False
+        show_all = False
+        special_only = False
+        i = 0
+        while i < len(args):
+            a = args[i]
+            if a == "--":
+                i += 1
+                break
+            if not a.startswith("-") or a == "-":
+                break
+            for ch in a[1:]:
+                if ch == "n":
+                    disable = True
+                elif ch == "p":
+                    print_mode = True
+                elif ch == "a":
+                    show_all = True
+                elif ch == "s":
+                    special_only = True
+                else:
+                    self._report_error(f"enable: invalid option -{ch}")
+                    return 2
+            i += 1
+
+        names = args[i:]
+
+        def _name_iter() -> list[str]:
+            if special_only:
+                src = sorted(self.SPECIAL_BUILTINS)
+            else:
+                src = sorted(self.BUILTINS)
+            if show_all:
+                return src
+            return [n for n in src if self._is_builtin_enabled(n)]
+
+        if print_mode or (not names):
+            for n in _name_iter():
+                prefix = "enable -n" if n in self.disabled_builtins else "enable"
+                print(f"{prefix} {n}")
+            if not names:
+                return 0
+
+        status = 0
+        for n in names:
+            if n not in self.BUILTINS:
+                self._report_error(f"enable: {n}: not a shell builtin")
+                status = 1
+                continue
+            if disable:
+                self.disabled_builtins.add(n)
+            else:
+                self.disabled_builtins.discard(n)
+        return status
+
+    def _run_help(self, args: List[str]) -> int:
+        help_map = {
+            "declare": "declare: set variable attributes and values",
+            "typeset": "typeset: alias of declare",
+            "local": "local: create function-local variables",
+            "mapfile": "mapfile: read lines into an indexed array",
+            "readarray": "readarray: alias of mapfile",
+            "enable": "enable: enable or disable shell builtins",
+            "help": "help: display builtin help",
+        }
+        if not args:
+            print("Shell builtins:")
+            print(" ".join(sorted(self.BUILTINS)))
+            return 0
+        status = 0
+        for name in args:
+            if name in help_map:
+                print(help_map[name])
+                continue
+            if name in self.BUILTINS:
+                print(f"{name}: shell builtin")
+                continue
+            self._report_error(f"help: no help topics match `{name}'")
+            status = 1
+        return status
+
     def _fd_ready_now(self, fd: int) -> bool:
         if fd == 0 and isinstance(sys.stdin, io.StringIO):
             pos = sys.stdin.tell()
@@ -9051,7 +9323,7 @@ class Runtime:
                     if self._has_function(name):
                         print(name)
                         return 0
-                    if name in self.BUILTINS:
+                    if self._is_builtin_enabled(name):
                         print(name)
                         return 0
                     path = self._find_in_path(name, lookup_path)
@@ -9062,7 +9334,7 @@ class Runtime:
                 if self._has_function(name):
                     print(name)
                     return 0
-                if name in self.BUILTINS:
+                if self._is_builtin_enabled(name):
                     print(name)
                     return 0
                 path = self._find_in_path(name, lookup_path)
@@ -9075,7 +9347,7 @@ class Runtime:
         cmd = args[i:]
         if not cmd:
             return 0
-        if cmd[0] in self.BUILTINS:
+        if self._is_builtin_enabled(cmd[0]):
             try:
                 return self._run_builtin(cmd[0], cmd)
             except SystemExit as e:
@@ -9099,7 +9371,7 @@ class Runtime:
         if not cmd:
             return 1
         name = cmd[0]
-        if name not in self.BUILTINS:
+        if not self._is_builtin_enabled(name):
             self._report_error(f"builtin: {name}: not a shell builtin", line=self.current_line)
             return 1
         try:
@@ -9156,7 +9428,7 @@ class Runtime:
                         print(self._format_ast_function(name, ast_body), flush=True)
                     except Exception:
                         print(self._format_asdl_function(name, body), flush=True)
-            elif name in self.BUILTINS:
+            elif self._is_builtin_enabled(name):
                 print(f"{name} is a shell builtin", flush=True)
             else:
                 path = self._find_in_path(name)
