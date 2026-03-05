@@ -38,7 +38,7 @@ Case link notation:
 | `${#@}` and `${#*}` length follows joined positional expansion semantics | Verified | `tests/regressions/run.sh` (`param_len_special_at_star`) | Aligned with ash/dash behavior using IFS-joined positional text length. |
 | Command substitution result participates correctly in later expansion phases | Covered | `tests/busybox/ash_test/ash-psubst/tick*.tests`, `tests/oil/oils-master/spec/smoke.test.sh` (`command sub`), `tests/diff/cases/man-ash-word-nesting.sh`, `tests/diff/cases/man-ash-word-nesting-matrix.sh` | Covered for ash/POSIX in-scope nesting forms; deeper combinatorics continue via corpus + differential matrices. |
 | Field splitting uses `IFS` rules and preserves/elides fields appropriately | Verified | `tests/busybox/ash_test/ash-vars/var_wordsplit_ifs*.tests`, `tests/busybox/ash_test/ash-z_slow/many_ifs.tests`, `tests/oil/oils-master/spec/word-split.test.sh`, `tests/diff/cases/man-ash-read-ifs-matrix.sh`, `tests/diff/cases/man-ash-read-option-probe.sh` | Includes hard edge cases for `read`/`IFS` interactions and option-surface probes for this ash comparator target. |
-| Pathname expansion (globbing) occurs after splitting and follows pattern semantics | Partial | `tests/busybox/ash_test/ash-glob/glob*.tests`, `tests/busybox/ash_test/ash-vars/param_glob.tests`, `tests/regressions/run.sh` (`asdl_argv_braced_default_unquoted_glob_semantics`, `asdl_param_pattern_arg_quoted_vs_unquoted_semantics`) | Covered for ash corpus patterns; formal full-space proof remains open. |
+| Pathname expansion (globbing) occurs after splitting and follows pattern semantics | Covered | `tests/busybox/ash_test/ash-glob/glob*.tests`, `tests/busybox/ash_test/ash-vars/param_glob.tests`, `tests/regressions/run.sh` (`asdl_argv_braced_default_unquoted_glob_semantics`, `asdl_param_pattern_arg_quoted_vs_unquoted_semantics`), `tests/diff/cases/man-ash-glob-matrix.sh`, `tests/diff/cases/man-ash-glob-full-matrix.sh` | Differential matrix now covers character classes, dotfiles, slash-segment matching, no-match literal retention, and `set -f` (`noglob`) behavior. |
 
 ### Word-Expansion Divergence Register (ASDL Runtime)
 
@@ -57,7 +57,7 @@ Diagnostic policy note:
 |---|---|---|---|
 | Single quotes preserve literal characters until closing quote | Verified | `tests/busybox/ash_test/ash-quoting/squote_in_varexp.tests`, `tests/oil/oils-master/spec/shell-grammar.test.sh` | Includes literalization and embedding behavior. |
 | Double quotes preserve most literal characters while allowing parameter/command/arithmetic expansion | Verified | `tests/busybox/ash_test/ash-quoting/*.tests`, `tests/oil/oils-master/spec/var-sub.test.sh`, `tests/oil/oils-master/spec/shell-grammar.test.sh` | Expansion in quoted contexts is broadly exercised. |
-| Backslash escaping obeys quoting context and newline-continuation rules | Partial | `tests/busybox/ash_test/ash-parsing/bkslash_newline*.tests`, `tests/busybox/ash_test/ash-parsing/escape*.tests`, `tests/oil/oils-master/spec/shell-grammar.test.sh` | Covered in parser suites; not yet exhaustively traced by requirement row. |
+| Backslash escaping obeys quoting context and newline-continuation rules | Covered | `tests/busybox/ash_test/ash-parsing/bkslash_newline*.tests`, `tests/busybox/ash_test/ash-parsing/escape*.tests`, `tests/oil/oils-master/spec/shell-grammar.test.sh`, `tests/diff/cases/man-ash-grammar-word-matrix.sh` | Differential matrix now adds explicit continuation/word-boundary checks alongside corpus coverage. |
 
 ## 2.3 Token Recognition
 
