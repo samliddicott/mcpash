@@ -571,20 +571,19 @@ class Runtime:
     SPECIAL_BUILTINS = {
         ":",
         ".",
-        "source",
-        "local",
         "break",
         "continue",
         "eval",
+        "exec",
         "exit",
         "export",
         "readonly",
         "return",
         "set",
         "shift",
+        "times",
         "trap",
         "unset",
-        "getopts",
     }
     BUILTINS = {
         "cd",
@@ -4837,6 +4836,52 @@ class Runtime:
         if name == "exec":
             if len(argv) <= 1:
                 return 0
+            exec_argv0: str | None = None
+            exec_login = False
+            exec_clear_env = False
+            i = 1
+            while i < len(argv):
+                a = argv[i]
+                if a == "--":
+                    i += 1
+                    break
+                if a == "-a":
+                    if i + 1 >= len(argv):
+                        self._print_stderr("exec: option requires an argument -- a")
+                        return 2
+                    exec_argv0 = argv[i + 1]
+                    i += 2
+                    continue
+                if a == "-l":
+                    exec_login = True
+                    i += 1
+                    continue
+                if a == "-c":
+                    exec_clear_env = True
+                    i += 1
+                    continue
+                if a.startswith("-") and a != "-" and set(a[1:]).issubset({"c", "l"}):
+                    exec_login = exec_login or ("l" in a[1:])
+                    exec_clear_env = exec_clear_env or ("c" in a[1:])
+                    i += 1
+                    continue
+                break
+            if i > 1:
+                cmd = argv[i:]
+                if not cmd:
+                    return 0
+                if exec_login:
+                    base = exec_argv0 if exec_argv0 is not None else os.path.basename(cmd[0])
+                    exec_argv0 = "-" + base.lstrip("-")
+                status = self._run_external(
+                    cmd,
+                    dict(self.env),
+                    [],
+                    context="exec",
+                    argv0_override=exec_argv0,
+                    clear_env=exec_clear_env,
+                )
+                raise SystemExit(status)
             if len(argv) == 2:
                 spec = argv[1]
                 m_open = re.match(r"^\{([A-Za-z_][A-Za-z0-9_]*)\}(<>|>>|>|<)(.*)$", spec)
@@ -4939,7 +4984,11 @@ class Runtime:
             return self._run_test(name, argv[1:])
         if name == "exit":
             if len(argv) > 1:
-                code = int(argv[1])
+                try:
+                    code = int(argv[1], 10)
+                except ValueError:
+                    self._report_error(f"exit: {argv[1]}: numeric argument required", line=self.current_line)
+                    raise SystemExit(2)
             elif self._trap_entry_status is not None:
                 code = self._trap_entry_status
                 if code == 0 and self.last_nonzero_status != 0:
@@ -4949,7 +4998,11 @@ class Runtime:
             raise SystemExit(code)
         if name == "return":
             if len(argv) > 1:
-                code = int(argv[1])
+                try:
+                    code = int(argv[1], 10)
+                except ValueError:
+                    self._report_error(f"return: {argv[1]}: numeric argument required", line=self.current_line)
+                    return 2
             elif self._trap_entry_status is not None:
                 code = self._trap_entry_status
                 if code == 0 and self.last_nonzero_status != 0:
@@ -5311,6 +5364,8 @@ class Runtime:
         env: Dict[str, str],
         redirects: List[Redirect],
         context: str | None = None,
+        argv0_override: str | None = None,
+        clear_env: bool = False,
     ) -> int:
         if not argv:
             return 127
@@ -5332,7 +5387,9 @@ class Runtime:
                         self._report_error(msg, line=self.current_line, context=context)
                         return 127
                     exec_argv = [resolved] + argv[1:]
-                child_env = dict(env)
+                if argv0_override is not None and exec_argv:
+                    exec_argv[0] = argv0_override
+                child_env = {} if clear_env else dict(env)
                 # If we're directly exec'ing a shebang script, propagate the script
                 # basename so the child mctash can mirror ash-like /proc/$pid/comm.
                 path0 = resolved
@@ -5348,6 +5405,7 @@ class Runtime:
                     job_id = getattr(self._thread_ctx, "job_id", None)
                     proc = subprocess.Popen(
                         exec_argv,
+                        executable=resolved if argv0_override is not None else None,
                         env=child_env,
                         start_new_session=bool(isinstance(job_id, int)),
                         preexec_fn=self._preexec_reset_signals,
@@ -8069,6 +8127,7 @@ class Runtime:
             return 0
 
         show_funcs = False
+        show_func_defs = False
         print_vars = False
         declare_array = False
         declare_assoc = False
@@ -8087,6 +8146,8 @@ class Runtime:
             for ch in arg[1:]:
                 if ch == "F":
                     show_funcs = True
+                elif ch == "f":
+                    show_func_defs = True
                 elif ch == "p":
                     print_vars = True
                 elif ch == "a":
@@ -8120,6 +8181,27 @@ class Runtime:
             for name in self._function_names():
                 print(name)
             return 0
+        if show_func_defs:
+            status = 0
+            func_names = names if names else self._function_names()
+            for name in func_names:
+                if not self._has_function(name):
+                    status = 1
+                    continue
+                body = self.functions_asdl.get(name)
+                if isinstance(body, dict):
+                    try:
+                        ast_body = self._asdl_to_ast_list(body)
+                        print(self._format_ast_function(name, ast_body), flush=True)
+                    except Exception:
+                        print(self._format_asdl_function(name, body), flush=True)
+                else:
+                    ast_body = self.functions.get(name)
+                    if ast_body is not None:
+                        print(self._format_ast_function(name, ast_body), flush=True)
+                    else:
+                        status = 1
+            return status
 
         if print_vars:
             if not names:
@@ -10744,28 +10826,90 @@ class Runtime:
     def _run_type(self, args: List[str]) -> int:
         if not args:
             return 1
+        if self._bash_compat_level is None:
+            if any(a.startswith("-") and a != "-" for a in args):
+                return 127
+            status = 0
+            for name in args:
+                if name in self.aliases:
+                    print(f"{name} is an alias for {self.aliases[name]}", flush=True)
+                elif self._has_function(name):
+                    print(f"{name} is a function", flush=True)
+                    body = self.functions_asdl.get(name)
+                    if isinstance(body, dict):
+                        try:
+                            ast_body = self._asdl_to_ast_list(body)
+                            print(self._format_ast_function(name, ast_body), flush=True)
+                        except Exception:
+                            print(self._format_asdl_function(name, body), flush=True)
+                elif self._is_builtin_enabled(name):
+                    print(f"{name} is a shell builtin", flush=True)
+                else:
+                    path = self._find_in_path(name)
+                    if path:
+                        print(f"{name} is {path}", flush=True)
+                    else:
+                        self._report_error(self._diag_msg(DiagnosticKey.TYPE_NOT_FOUND, name=name), line=self.current_line)
+                        status = 1
+            return status
+        mode_t = False
+        mode_a = False
+        i = 0
+        while i < len(args):
+            a = args[i]
+            if a == "--":
+                i += 1
+                break
+            if not a.startswith("-") or a == "-":
+                break
+            for ch in a[1:]:
+                if ch == "t":
+                    mode_t = True
+                elif ch == "a":
+                    mode_a = True
+                else:
+                    self._report_error(self._diag_msg(DiagnosticKey.INVALID_OPTION, cmd="type", opt=f"-{ch}"))
+                    return 2
+            i += 1
+        args = args[i:]
+        if not args:
+            return 1
         status = 0
         for name in args:
+            hits: list[tuple[str, str]] = []
             if name in self.aliases:
-                print(f"{name} is an alias for {self.aliases[name]}", flush=True)
-            elif self._has_function(name):
-                print(f"{name} is a function", flush=True)
-                body = self.functions_asdl.get(name)
-                if isinstance(body, dict):
-                    try:
-                        ast_body = self._asdl_to_ast_list(body)
-                        print(self._format_ast_function(name, ast_body), flush=True)
-                    except Exception:
-                        print(self._format_asdl_function(name, body), flush=True)
-            elif self._is_builtin_enabled(name):
-                print(f"{name} is a shell builtin", flush=True)
-            else:
-                path = self._find_in_path(name)
-                if path:
-                    print(f"{name} is {path}", flush=True)
+                hits.append(("alias", self.aliases[name]))
+            if self._has_function(name):
+                hits.append(("function", ""))
+            if self._is_builtin_enabled(name):
+                hits.append(("builtin", ""))
+            path = self._find_in_path(name)
+            if path:
+                hits.append(("file", path))
+            if not hits:
+                self._report_error(self._diag_msg(DiagnosticKey.TYPE_NOT_FOUND, name=name), line=self.current_line)
+                status = 1
+                continue
+            show_hits = hits if mode_a else hits[:1]
+            for kind, data in show_hits:
+                if mode_t:
+                    print(kind, flush=True)
+                    continue
+                if kind == "alias":
+                    print(f"{name} is an alias for {data}", flush=True)
+                elif kind == "function":
+                    print(f"{name} is a function", flush=True)
+                    body = self.functions_asdl.get(name)
+                    if isinstance(body, dict):
+                        try:
+                            ast_body = self._asdl_to_ast_list(body)
+                            print(self._format_ast_function(name, ast_body), flush=True)
+                        except Exception:
+                            print(self._format_asdl_function(name, body), flush=True)
+                elif kind == "builtin":
+                    print(f"{name} is a shell builtin", flush=True)
                 else:
-                    self._report_error(self._diag_msg(DiagnosticKey.TYPE_NOT_FOUND, name=name), line=self.current_line)
-                    status = 1
+                    print(f"{name} is {data}", flush=True)
         return status
 
     def _format_ast_function(self, name: str, body: ListNode) -> str:

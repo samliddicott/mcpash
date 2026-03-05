@@ -35,10 +35,9 @@ core_cases=(
   ifs-posix.tests
   comsub-posix.tests
   set-e.tests
-)
-info_cases=(
   builtins.tests
 )
+info_cases=()
 cases=("${core_cases[@]}" "${info_cases[@]}")
 
 summary="$RDIR/summary.tsv"
@@ -49,10 +48,14 @@ for c in "${cases[@]}"; do
   if [[ "$c" == "ifs-posix.tests" ]]; then
     case_timeout=120
   fi
+  case_bash_compat_env=()
+  if [[ "$c" == "builtins.tests" ]]; then
+    case_bash_compat_env=(BASH_COMPAT=50)
+  fi
   b_out="$RDIR/bash/${c}.out"; b_err="$RDIR/bash/${c}.err"; b_rc=0
   m_out="$RDIR/mctash/${c}.out"; m_err="$RDIR/mctash/${c}.err"; m_rc=0
-  ( cd "$TROOT" && timeout -k 5 "$case_timeout" env THIS_SH="$RDIR/bash_posix_wrapper.sh" bash --posix "./$c" >"$b_out" 2>"$b_err" ) || b_rc=$?
-  ( cd "$TROOT" && timeout -k 5 "$case_timeout" env THIS_SH="$RDIR/mctash_posix_wrapper.sh" PYTHONPATH="$ROOT/src" MCTASH_MODE=posix MCTASH_DIAG_STYLE=bash MCTASH_MAX_VMEM_KB=786432 python3 -m mctash --posix "./$c" >"$m_out" 2>"$m_err" ) || m_rc=$?
+  ( cd "$TROOT" && timeout -k 5 "$case_timeout" env "${case_bash_compat_env[@]}" THIS_SH="$RDIR/bash_posix_wrapper.sh" bash --posix "./$c" >"$b_out" 2>"$b_err" ) || b_rc=$?
+  ( cd "$TROOT" && timeout -k 5 "$case_timeout" env "${case_bash_compat_env[@]}" THIS_SH="$RDIR/mctash_posix_wrapper.sh" PYTHONPATH="$ROOT/src" MCTASH_MODE=posix MCTASH_DIAG_STYLE=bash MCTASH_MAX_VMEM_KB=786432 python3 -m mctash --posix "./$c" >"$m_out" 2>"$m_err" ) || m_rc=$?
   out_m=0; err_m=0
   err_left="$b_err"; err_right="$m_err"
   if [[ "$c" == "posixpipe.tests" ]]; then
@@ -129,16 +132,15 @@ f'Generated: {now}',
 'Comparator baseline: GNU bash `--posix` (baserock mirror corpus, `bash-5.1-testing`)',
 'Target: `mctash --posix`',
 '',
-'## Lane Split',
+'## Scope',
 '',
-'- Core lane: strict POSIX-focused files (gating)',
-'- Info lane: extension-heavy file(s) used as drift signal only',
+'- All listed upstream cases are now strict gating scope.',
 '',
 '## Summary',
 '',
 f'- core full parity: {core_full}/{len(core)}',
 f'- core failing rows: {core_fail}',
-f'- info full parity: {info_full}/{len(info)}',
+'- info lane: removed (no non-gating carve-out)',
 '',
 '## Case Results',
 '',
@@ -162,6 +164,6 @@ PY
 if awk -F'\t' '($2=="core" && ($3!=$4 || $5!=0 || $6!=0)) {exit 1}' "$summary"; then
   echo "[PASS] bash posix upstream core lane"
 else
-  echo "[FAIL] bash posix upstream core lane" >&2
+  echo "[FAIL] bash posix upstream core lane (including builtins.tests)" >&2
   exit 1
 fi
