@@ -582,6 +582,11 @@ class Runtime:
         "dirs",
         "pushd",
         "popd",
+        "disown",
+        "bind",
+        "complete",
+        "compgen",
+        "compopt",
         "[",
         "[[",
         "test",
@@ -677,6 +682,8 @@ class Runtime:
         self._typed_vars: Dict[str, object] = {}
         self.disabled_builtins: set[str] = set()
         self._dir_stack: list[str] = [self.env.get("PWD", os.getcwd())]
+        self._disowned_nohup: set[int] = set()
+        self._completion_specs: dict[str, dict[str, object]] = {}
         self._bash_compat_level: int | None = self._parse_bash_compat_level(self.env.get("BASH_COMPAT", ""))
         self._frame_stack: List[Dict[str, object]] = []
         self._call_stack: List[str] = []
@@ -4420,6 +4427,16 @@ class Runtime:
             return self._run_pushd(argv[1:])
         if name == "popd":
             return self._run_popd(argv[1:])
+        if name == "disown":
+            return self._run_disown(argv[1:])
+        if name == "complete":
+            return self._run_complete(argv[1:])
+        if name == "compgen":
+            return self._run_compgen(argv[1:])
+        if name == "compopt":
+            return self._run_compopt(argv[1:])
+        if name == "bind":
+            return self._run_bind(argv[1:])
         if name == "exec":
             if len(argv) <= 1:
                 return 0
@@ -9230,6 +9247,242 @@ class Runtime:
             self.env["PWD"] = os.getcwd()
             self._sync_dir_stack_current()
         self._print_dirs(self._dir_stack)
+        return 0
+
+    def _run_disown(self, args: List[str]) -> int:
+        mark_nohup = False
+        all_jobs = False
+        running_only = False
+        targets: list[str] = []
+        i = 0
+        while i < len(args):
+            a = args[i]
+            if a == "--":
+                targets.extend(args[i + 1 :])
+                break
+            if a.startswith("-") and a != "-":
+                for ch in a[1:]:
+                    if ch == "h":
+                        mark_nohup = True
+                    elif ch == "a":
+                        all_jobs = True
+                    elif ch == "r":
+                        running_only = True
+                    else:
+                        return 2
+                i += 1
+                continue
+            targets.append(a)
+            i += 1
+
+        all_job_ids = sorted(set(self._bg_jobs.keys()) | set(self._bg_status.keys()))
+        chosen: list[int] = []
+        if targets:
+            for tok in targets:
+                jid = self._resolve_job_id(tok)
+                if jid is None or jid not in all_job_ids:
+                    return 1
+                chosen.append(jid)
+        elif all_jobs or running_only:
+            chosen = all_job_ids
+        else:
+            if self._last_bg_job is None or self._last_bg_job not in all_job_ids:
+                return 1
+            chosen = [self._last_bg_job]
+
+        if running_only:
+            running_set = {jid for jid, th in self._bg_jobs.items() if th.is_alive()}
+            chosen = [jid for jid in chosen if jid in running_set]
+
+        for jid in chosen:
+            if mark_nohup:
+                self._disowned_nohup.add(jid)
+                continue
+            self._bg_jobs.pop(jid, None)
+            self._bg_status.pop(jid, None)
+            pid = self._bg_pids.pop(jid, None)
+            self._bg_started_at.pop(jid, None)
+            self._disowned_nohup.discard(jid)
+            if pid is not None:
+                self._bg_pid_to_job.pop(pid, None)
+            if self._last_bg_job == jid:
+                remain = sorted(set(self._bg_jobs.keys()) | set(self._bg_status.keys()))
+                self._last_bg_job = remain[-1] if remain else None
+                self._last_bg_pid = self._bg_pids.get(self._last_bg_job) if self._last_bg_job is not None else None
+        return 0
+
+    def _run_complete(self, args: List[str]) -> int:
+        print_mode = False
+        remove_mode = False
+        wordlist: str | None = None
+        action: str | None = None
+        comp_opts: set[str] = set()
+        names: list[str] = []
+        i = 0
+        takes_arg = {"-A", "-G", "-W", "-F", "-C", "-X", "-P", "-S", "-o"}
+        while i < len(args):
+            a = args[i]
+            if a == "--":
+                names = args[i + 1 :]
+                break
+            if not a.startswith("-") or a == "-":
+                names = args[i:]
+                break
+            if a == "-p":
+                print_mode = True
+                i += 1
+                continue
+            if a == "-r":
+                remove_mode = True
+                i += 1
+                continue
+            if a in takes_arg:
+                if i + 1 >= len(args):
+                    return 2
+                v = args[i + 1]
+                if a == "-W":
+                    wordlist = v
+                elif a == "-A":
+                    action = v
+                elif a == "-o":
+                    comp_opts.add(v)
+                i += 2
+                continue
+            # accept common flag clusters used by bash complete
+            if all(ch in "abcdefgjksuvDEI" for ch in a[1:]):
+                i += 1
+                continue
+            return 2
+        else:
+            names = []
+
+        if print_mode:
+            if names:
+                ok = 0
+                for n in names:
+                    spec = self._completion_specs.get(n)
+                    if spec is None:
+                        ok = 1
+                        continue
+                    wl = spec.get("W")
+                    if isinstance(wl, str):
+                        print(f"complete -W {shlex.quote(wl)} {n}")
+                    else:
+                        print(f"complete {n}")
+                return ok
+            for n in sorted(self._completion_specs):
+                spec = self._completion_specs[n]
+                wl = spec.get("W")
+                if isinstance(wl, str):
+                    print(f"complete -W {shlex.quote(wl)} {n}")
+                else:
+                    print(f"complete {n}")
+            return 0
+
+        if remove_mode:
+            if not names:
+                self._completion_specs.clear()
+                return 0
+            for n in names:
+                self._completion_specs.pop(n, None)
+            return 0
+
+        if not names:
+            return 2
+        for n in names:
+            self._completion_specs[n] = {"W": wordlist, "A": action, "o": set(comp_opts)}
+        return 0
+
+    def _run_compgen(self, args: List[str]) -> int:
+        action: str | None = None
+        want_builtin = False
+        word = ""
+        i = 0
+        while i < len(args):
+            a = args[i]
+            if a == "-b":
+                want_builtin = True
+                i += 1
+                continue
+            if a == "-A":
+                if i + 1 >= len(args):
+                    return 2
+                action = args[i + 1]
+                i += 2
+                continue
+            if a.startswith("-"):
+                i += 1
+                continue
+            word = a
+            i += 1
+            break
+
+        candidates: list[str]
+        mode = "builtin" if want_builtin else (action or "")
+        if mode in {"builtin", "b"}:
+            candidates = sorted(self.BUILTINS)
+        elif mode == "alias":
+            candidates = sorted(self.aliases.keys())
+        elif mode == "function":
+            candidates = self._function_names()
+        elif mode == "keyword":
+            candidates = sorted({"if", "then", "else", "elif", "fi", "for", "in", "do", "done", "case", "esac", "while", "until", "{", "}"})
+        elif mode == "command":
+            candidates = sorted(set(self.BUILTINS) | set(self._function_names()))
+        else:
+            # Bash defaults to filename generation without explicit action.
+            # Keep non-interactive behavior simple and return success.
+            return 0
+        out = [c for c in candidates if c.startswith(word)]
+        for c in out:
+            print(c)
+        return 0 if out else 1
+
+    def _run_compopt(self, args: List[str]) -> int:
+        i = 0
+        names: list[str] = []
+        while i < len(args):
+            a = args[i]
+            if a in {"-o", "+o"}:
+                if i + 1 >= len(args):
+                    return 2
+                i += 2
+                continue
+            if a in {"-D", "-E", "-I"}:
+                i += 1
+                continue
+            if a.startswith("-"):
+                return 2
+            names.extend(args[i:])
+            break
+        if not names:
+            return 1
+        for n in names:
+            if n not in self._completion_specs:
+                return 1
+        return 0
+
+    def _run_bind(self, args: List[str]) -> int:
+        readline_funcs = ["abort", "accept-line", "alias-expand-line", "self-insert"]
+        i = 0
+        while i < len(args):
+            a = args[i]
+            if a == "-l":
+                for f in readline_funcs:
+                    print(f)
+                return 0
+            if a == "-q":
+                if i + 1 >= len(args):
+                    return 2
+                return 0 if args[i + 1] in readline_funcs else 1
+            if a == "-r":
+                if i + 1 >= len(args):
+                    return 2
+                return 0
+            if a.startswith("-"):
+                # Accept a small non-interactive subset.
+                return 2
+            i += 1
         return 0
 
     def _fd_ready_now(self, fd: int) -> bool:
