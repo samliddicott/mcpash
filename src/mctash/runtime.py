@@ -756,6 +756,7 @@ class Runtime:
         self._active_temp_fds: set[int] = set()
         self._getopts_state: tuple[tuple[str, ...], int, int] | None = None
         self._procsub_paths: set[str] = set()
+        self._procsub_threads: list[threading.Thread] = []
         self._line_offset: int = 0
         self._last_eval_hard_error: bool = False
         self._pipeline_input_latency: float | None = None
@@ -1290,7 +1291,9 @@ class Runtime:
                     break
                 time.sleep(0.001)
             return 0
-        return self._exec_and_or(item.node)
+        status = self._exec_and_or(item.node)
+        self._drain_process_subst()
+        return status
 
     def _exec_asdl_list_item(self, item: dict[str, Any]) -> int:
         t = item.get("type")
@@ -1301,10 +1304,22 @@ class Runtime:
                 raise RuntimeError("invalid ASDL sentence node")
             if term == "&":
                 return self._exec_asdl_background(child)
-            return self._exec_asdl_list_item(child)
+            status = self._exec_asdl_list_item(child)
+            self._drain_process_subst()
+            return status
         if t != "command.AndOr":
             raise RuntimeError(f"invalid ASDL list item: {t}")
-        return self._exec_asdl_and_or(item)
+        status = self._exec_asdl_and_or(item)
+        self._drain_process_subst()
+        return status
+
+    def _drain_process_subst(self) -> None:
+        if not self._procsub_threads:
+            return
+        pending = self._procsub_threads
+        self._procsub_threads = []
+        for th in pending:
+            th.join(timeout=2.0)
 
     def _exec_asdl_and_or(self, node: dict[str, Any], track_status: bool = True) -> int:
         pipes = node.get("children") or []
@@ -3296,7 +3311,9 @@ class Runtime:
         chars: list[tuple[str, bool, bool, bool, str]] = []
         for seg in field.segments:
             for ch in seg.text:
-                chars.append((ch, seg.quoted, seg.glob_active, seg.split_active, seg.source_kind))
+                chars.append((ch, seg.split_active, seg.glob_active, seg.quoted, seg.source_kind))
+        if not chars:
+            return [field]
         expanded = self._brace_expand_chars(chars)
         out: list[ExpansionField] = []
         for item in expanded:
@@ -3336,7 +3353,7 @@ class Runtime:
             comma_pos: list[int] = []
             j = i
             while j < n:
-                c, c_quoted, _, _, _ = chars[j]
+                c, _, _, c_quoted, _ = chars[j]
                 if c_quoted:
                     j += 1
                     continue
@@ -11191,9 +11208,13 @@ class Runtime:
 
         def _runner() -> None:
             try:
+                payload = b""
+                with open(fifo_path, "rb", buffering=0) as fifo:
+                    payload = fifo.read()
                 subprocess.run(
-                    ["bash", "-c", f"{body} < \"$1\"", "mctash-psubst", fifo_path],
+                    ["bash", "-c", body],
                     env=env,
+                    input=payload,
                     check=False,
                 )
             finally:
@@ -11203,5 +11224,7 @@ class Runtime:
                     pass
                 self._procsub_paths.discard(fifo_path)
 
-        threading.Thread(target=_runner, daemon=True).start()
+        th = threading.Thread(target=_runner, daemon=True)
+        self._procsub_threads.append(th)
+        th.start()
         return fifo_path

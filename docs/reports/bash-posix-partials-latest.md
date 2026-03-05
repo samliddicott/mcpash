@@ -2,76 +2,15 @@
 
 Source: `docs/specs/bash-man-implementation-matrix.tsv`
 
-Total partial rows in `mctash --posix`: **31**
+Total partial rows in `mctash --posix`: **16**
 
 ## Counts by Category
 
-- Category 3: 15
 - Category 4: 5
 - Category 10: 6
 - Category 11: 5
 
 ## Rows
-
-- `C3.EXP.003` category=3 feature=`parameter expansion $name ${name}`
-  tests: `man-ash-var-ops-matrix.sh,bash-compat-param-array-hash-extended.sh`
-  note: Row-level evidence mapping assigned from requirement->case rules. Evidence run has failing/timeout tests: bash-compat-param-array-hash-extended.sh
-
-- `C3.EXP.004` category=3 feature=`special parameters $* $@ $# $? $- $$ $! $0`
-  tests: `man-ash-var-ops-matrix.sh,bash-compat-param-array-hash-extended.sh`
-  note: Row-level evidence mapping assigned from requirement->case rules. Evidence run has failing/timeout tests: bash-compat-param-array-hash-extended.sh
-
-- `C3.EXP.005` category=3 feature=`positional parameters $1..${N}`
-  tests: `man-ash-var-ops-matrix.sh,bash-compat-param-array-hash-extended.sh`
-  note: Row-level evidence mapping assigned from requirement->case rules. Evidence run has failing/timeout tests: bash-compat-param-array-hash-extended.sh
-
-- `C3.EXP.006` category=3 feature=`parameter default operators ${v-word} ${v:-word}`
-  tests: `man-ash-var-ops-matrix.sh,bash-compat-param-array-hash-extended.sh`
-  note: Row-level evidence mapping assigned from requirement->case rules. Evidence run has failing/timeout tests: bash-compat-param-array-hash-extended.sh
-
-- `C3.EXP.007` category=3 feature=`parameter assign operators ${v=word} ${v:=word}`
-  tests: `man-ash-var-ops-matrix.sh,bash-compat-param-array-hash-extended.sh`
-  note: Row-level evidence mapping assigned from requirement->case rules. Evidence run has failing/timeout tests: bash-compat-param-array-hash-extended.sh
-
-- `C3.EXP.008` category=3 feature=`parameter error operators ${v?word} ${v:?word}`
-  tests: `man-ash-var-ops-matrix.sh,bash-compat-param-array-hash-extended.sh`
-  note: Row-level evidence mapping assigned from requirement->case rules. Evidence run has failing/timeout tests: bash-compat-param-array-hash-extended.sh
-
-- `C3.EXP.009` category=3 feature=`parameter alternate operators ${v+word} ${v:+word}`
-  tests: `man-ash-var-ops-matrix.sh,bash-compat-param-array-hash-extended.sh`
-  note: Row-level evidence mapping assigned from requirement->case rules. Evidence run has failing/timeout tests: bash-compat-param-array-hash-extended.sh
-
-- `C3.EXP.015` category=3 feature=`case modification ${v^} ${v^^} ${v,} ${v,,}`
-  tests: `man-ash-var-ops-matrix.sh,bash-compat-param-array-hash-extended.sh`
-  note: Row-level evidence mapping assigned from requirement->case rules. Evidence run has failing/timeout tests: bash-compat-param-array-hash-extended.sh
-
-- `C3.EXP.016` category=3 feature=`transformation operator ${v@op}`
-  tests: `man-ash-var-ops-matrix.sh,bash-compat-param-array-hash-extended.sh`
-  note: Row-level evidence mapping assigned from requirement->case rules. Evidence run has failing/timeout tests: bash-compat-param-array-hash-extended.sh
-
-- `C3.EXP.017` category=3 feature=`indirection ${!name}`
-  tests: `man-ash-var-ops-matrix.sh,bash-compat-param-array-hash-extended.sh`
-  note: Row-level evidence mapping assigned from requirement->case rules. Evidence run has failing/timeout tests: bash-compat-param-array-hash-extended.sh
-
-- `C3.EXP.018` category=3 feature=`name expansion ${!prefix*} ${!prefix@}`
-  tests: `man-ash-var-ops-matrix.sh,bash-compat-param-array-hash-extended.sh`
-  note: Row-level evidence mapping assigned from requirement->case rules. Evidence run has failing/timeout tests: bash-compat-param-array-hash-extended.sh
-
-- `C3.EXP.019` category=3 feature=`array subscript expansion ${a[i]} ${a[@]} ${a[*]}`
-  tests: `man-ash-var-ops-matrix.sh,bash-compat-param-array-hash-extended.sh`
-  note: Row-level evidence mapping assigned from requirement->case rules. Evidence run has failing/timeout tests: bash-compat-param-array-hash-extended.sh
-
-- `C3.EXP.020` category=3 feature=`array slicing ${a[@]:o:l}`
-  tests: `man-ash-var-ops-matrix.sh,bash-compat-param-array-hash-extended.sh`
-  note: Row-level evidence mapping assigned from requirement->case rules. Evidence run has failing/timeout tests: bash-compat-param-array-hash-extended.sh
-
-- `C3.EXP.024` category=3 feature=`process substitution <(cmd) >(cmd)`
-  tests: `bash-man-expansion-process-subst.sh`
-  note: Row-level evidence mapping assigned from requirement->case rules. Evidence run has failing/timeout tests: bash-man-expansion-process-subst.sh
-
-- `C3.EXP.026` category=3 feature=`pathname expansion (globbing)`
-  tests: `man-ash-var-ops-matrix.sh,bash-compat-param-array-hash-extended.sh`
-  note: Row-level evidence mapping assigned from requirement->case rules. Evidence run has failing/timeout tests: bash-compat-param-array-hash-extended.sh
 
 - `C4.REDIR.013` category=4 feature=`redirect stdout+stderr &>word`
   tests: `bash-man-redir-bash-ext.sh`

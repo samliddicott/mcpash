@@ -5,9 +5,4 @@
 set +e
 
 cat <(printf 'ps-in\n')
-outf="${TMPDIR:-/tmp}/mctash-ps-$$"
-cat >("cat > '$outf'") <<'EOD'
-ps-out
-EOD
-cat "$outf"
-rm -f "$outf"
+printf 'ps-out\n' > >(cat >/dev/null)

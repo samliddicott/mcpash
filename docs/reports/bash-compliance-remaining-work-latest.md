@@ -2,64 +2,16 @@
 
 Derived from: `docs/specs/bash-man-implementation-matrix.tsv`
 
-Total remaining rows (partial or missing): 31
+Total remaining rows (partial or missing): 16
 
 - Missing rows: 0
-- Partial rows: 31
+- Partial rows: 16
 
 ## Explicit Missing Features
 
 None.
 
 ## Remaining Rows by Category
-
-### Category 3
-
-- `C3.EXP.003` `parameter expansion $name ${name}` default=`partial` posix=`partial`
-  tests: `man-ash-var-ops-matrix.sh,bash-compat-param-array-hash-extended.sh`
-  note: Row-level evidence mapping assigned from requirement->case rules. Evidence run has failing/timeout tests: bash-compat-param-array-hash-extended.sh
-- `C3.EXP.004` `special parameters $* $@ $# $? $- $$ $! $0` default=`partial` posix=`partial`
-  tests: `man-ash-var-ops-matrix.sh,bash-compat-param-array-hash-extended.sh`
-  note: Row-level evidence mapping assigned from requirement->case rules. Evidence run has failing/timeout tests: bash-compat-param-array-hash-extended.sh
-- `C3.EXP.005` `positional parameters $1..${N}` default=`partial` posix=`partial`
-  tests: `man-ash-var-ops-matrix.sh,bash-compat-param-array-hash-extended.sh`
-  note: Row-level evidence mapping assigned from requirement->case rules. Evidence run has failing/timeout tests: bash-compat-param-array-hash-extended.sh
-- `C3.EXP.006` `parameter default operators ${v-word} ${v:-word}` default=`partial` posix=`partial`
-  tests: `man-ash-var-ops-matrix.sh,bash-compat-param-array-hash-extended.sh`
-  note: Row-level evidence mapping assigned from requirement->case rules. Evidence run has failing/timeout tests: bash-compat-param-array-hash-extended.sh
-- `C3.EXP.007` `parameter assign operators ${v=word} ${v:=word}` default=`partial` posix=`partial`
-  tests: `man-ash-var-ops-matrix.sh,bash-compat-param-array-hash-extended.sh`
-  note: Row-level evidence mapping assigned from requirement->case rules. Evidence run has failing/timeout tests: bash-compat-param-array-hash-extended.sh
-- `C3.EXP.008` `parameter error operators ${v?word} ${v:?word}` default=`partial` posix=`partial`
-  tests: `man-ash-var-ops-matrix.sh,bash-compat-param-array-hash-extended.sh`
-  note: Row-level evidence mapping assigned from requirement->case rules. Evidence run has failing/timeout tests: bash-compat-param-array-hash-extended.sh
-- `C3.EXP.009` `parameter alternate operators ${v+word} ${v:+word}` default=`partial` posix=`partial`
-  tests: `man-ash-var-ops-matrix.sh,bash-compat-param-array-hash-extended.sh`
-  note: Row-level evidence mapping assigned from requirement->case rules. Evidence run has failing/timeout tests: bash-compat-param-array-hash-extended.sh
-- `C3.EXP.015` `case modification ${v^} ${v^^} ${v,} ${v,,}` default=`partial` posix=`partial`
-  tests: `man-ash-var-ops-matrix.sh,bash-compat-param-array-hash-extended.sh`
-  note: Row-level evidence mapping assigned from requirement->case rules. Evidence run has failing/timeout tests: bash-compat-param-array-hash-extended.sh
-- `C3.EXP.016` `transformation operator ${v@op}` default=`partial` posix=`partial`
-  tests: `man-ash-var-ops-matrix.sh,bash-compat-param-array-hash-extended.sh`
-  note: Row-level evidence mapping assigned from requirement->case rules. Evidence run has failing/timeout tests: bash-compat-param-array-hash-extended.sh
-- `C3.EXP.017` `indirection ${!name}` default=`partial` posix=`partial`
-  tests: `man-ash-var-ops-matrix.sh,bash-compat-param-array-hash-extended.sh`
-  note: Row-level evidence mapping assigned from requirement->case rules. Evidence run has failing/timeout tests: bash-compat-param-array-hash-extended.sh
-- `C3.EXP.018` `name expansion ${!prefix*} ${!prefix@}` default=`partial` posix=`partial`
-  tests: `man-ash-var-ops-matrix.sh,bash-compat-param-array-hash-extended.sh`
-  note: Row-level evidence mapping assigned from requirement->case rules. Evidence run has failing/timeout tests: bash-compat-param-array-hash-extended.sh
-- `C3.EXP.019` `array subscript expansion ${a[i]} ${a[@]} ${a[*]}` default=`partial` posix=`partial`
-  tests: `man-ash-var-ops-matrix.sh,bash-compat-param-array-hash-extended.sh`
-  note: Row-level evidence mapping assigned from requirement->case rules. Evidence run has failing/timeout tests: bash-compat-param-array-hash-extended.sh
-- `C3.EXP.020` `array slicing ${a[@]:o:l}` default=`partial` posix=`partial`
-  tests: `man-ash-var-ops-matrix.sh,bash-compat-param-array-hash-extended.sh`
-  note: Row-level evidence mapping assigned from requirement->case rules. Evidence run has failing/timeout tests: bash-compat-param-array-hash-extended.sh
-- `C3.EXP.024` `process substitution <(cmd) >(cmd)` default=`partial` posix=`partial`
-  tests: `bash-man-expansion-process-subst.sh`
-  note: Row-level evidence mapping assigned from requirement->case rules. Evidence run has failing/timeout tests: bash-man-expansion-process-subst.sh
-- `C3.EXP.026` `pathname expansion (globbing)` default=`partial` posix=`partial`
-  tests: `man-ash-var-ops-matrix.sh,bash-compat-param-array-hash-extended.sh`
-  note: Row-level evidence mapping assigned from requirement->case rules. Evidence run has failing/timeout tests: bash-compat-param-array-hash-extended.sh
 
 ### Category 4
 
