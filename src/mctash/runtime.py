@@ -1308,7 +1308,7 @@ class Runtime:
                 print(self._diag_msg(DiagnosticKey.COMMAND_NOT_FOUND, name=argv[0]), file=sys.stderr)
                 return 127
             except OSError as e:
-                print(f"{argv[0]}: {e.strerror}", file=sys.stderr)
+                self._print_stderr(self._diag_msg(DiagnosticKey.ERRNO_NAME, name=argv[0], error=str(e.strerror)))
                 return 126
             finally:
                 for f in to_close:
@@ -3580,7 +3580,7 @@ class Runtime:
             except OSError as e:
                 if getattr(e, "errno", None) == 8 and os.path.isfile(argv[0]) and len(node.commands) == 1:
                     return self._run_source(argv[0], argv[1:])
-                print(f"{argv[0]}: {e.strerror}", file=sys.stderr)
+                self._print_stderr(self._diag_msg(DiagnosticKey.ERRNO_NAME, name=argv[0], error=str(e.strerror)))
                 return 126
             finally:
                 for f in to_close:
@@ -4797,7 +4797,7 @@ class Runtime:
         if not argv:
             return 127
         if argv[0] == "":
-            self._report_error(": Permission denied", line=self.current_line, context=context)
+            self._report_error(self._diag_msg(DiagnosticKey.PERMISSION_DENIED), line=self.current_line, context=context)
             return 127
         try:
             with self._redirected_fds(redirects):
@@ -4849,16 +4849,28 @@ class Runtime:
                     self._report_error(msg, line=self.current_line, context=context)
                     return 127
                 except PermissionError:
-                    self._report_error(f"{argv[0]}: Permission denied", line=self.current_line, context=context)
+                    self._report_error(
+                        self._diag_msg(DiagnosticKey.PERMISSION_DENIED_NAME, name=argv[0]),
+                        line=self.current_line,
+                        context=context,
+                    )
                     return 126
                 except OSError as e:
                     eno = getattr(e, "errno", None)
                     if eno == 8 and os.path.isfile(resolved):
                         return self._run_source(resolved, argv[1:])
                     if eno == 36:
-                        self._report_error(f"{argv[0]}: File name too long", line=self.current_line, context=context)
+                        self._report_error(
+                            self._diag_msg(DiagnosticKey.FILE_NAME_TOO_LONG_NAME, name=argv[0]),
+                            line=self.current_line,
+                            context=context,
+                        )
                         return 127
-                    self._report_error(f"{argv[0]}: {e.strerror}", line=self.current_line, context=context)
+                    self._report_error(
+                        self._diag_msg(DiagnosticKey.ERRNO_NAME, name=argv[0], error=str(e.strerror)),
+                        line=self.current_line,
+                        context=context,
+                    )
                     return 126
                 except KeyboardInterrupt:
                     return 130
@@ -4938,7 +4950,7 @@ class Runtime:
 
     def _run_unalias(self, args: List[str]) -> int:
         if not args:
-            print("unalias: usage: unalias [-a] name ...", file=sys.stderr)
+            self._print_stderr(self._diag_msg(DiagnosticKey.UNALIAS_USAGE))
             return 2
         if args[0] == "-a":
             self.aliases.clear()
@@ -5059,7 +5071,11 @@ class Runtime:
             token = args[0] if args else "%%"
             if not token.startswith("%"):
                 token = f"%{token}"
-            self._report_error(f"job {token} not created under job control", line=self.current_line, context="fg")
+            self._report_error(
+                self._diag_msg(DiagnosticKey.JOB_NOT_UNDER_CONTROL, token=token),
+                line=self.current_line,
+                context="fg",
+            )
             return 2
         job_id = self._resolve_job_id(args[0] if args else None)
         if job_id is None:
@@ -5080,7 +5096,11 @@ class Runtime:
             token = args[0] if args else "%%"
             if not token.startswith("%"):
                 token = f"%{token}"
-            self._report_error(f"job {token} not created under job control", line=self.current_line, context="bg")
+            self._report_error(
+                self._diag_msg(DiagnosticKey.JOB_NOT_UNDER_CONTROL, token=token),
+                line=self.current_line,
+                context="bg",
+            )
             return 2
         job_id = self._resolve_job_id(args[0] if args else None)
         if job_id is None:
@@ -6720,9 +6740,17 @@ class Runtime:
         if proc.returncode != 0 or (err_text.strip() != "") or not saw_result:
             err = err_text.lower()
             if "division by 0" in err or "divide by 0" in err:
-                self._report_error("divide by zero", line=self.current_line, context=context)
+                self._report_error(
+                    self._diag_msg(DiagnosticKey.ARITH_DIVIDE_BY_ZERO),
+                    line=self.current_line,
+                    context=context,
+                )
             else:
-                self._report_error("arithmetic syntax error", line=self.current_line, context=context)
+                self._report_error(
+                    self._diag_msg(DiagnosticKey.ARITH_SYNTAX_ERROR),
+                    line=self.current_line,
+                    context=context,
+                )
             raise ArithExpansionFailure(2)
         return result
 
@@ -7417,7 +7445,7 @@ class Runtime:
 
     def _run_declare(self, args: List[str], cmd_name: str = "declare", local_scope: bool = False) -> int:
         if local_scope and not self.local_stack:
-            self._report_error("not in a function", line=self.current_line, context=cmd_name)
+            self._report_error(self._diag_msg(DiagnosticKey.NOT_IN_FUNCTION), line=self.current_line, context=cmd_name)
             return 1
         if not args:
             return 0
@@ -7456,7 +7484,11 @@ class Runtime:
                 elif ch == "g":
                     force_global = True
                 else:
-                    self._report_error(f"illegal option -{ch}", line=self.current_line, context=cmd_name)
+                    self._report_error(
+                        self._diag_msg(DiagnosticKey.ILLEGAL_OPTION, opt=f"-{ch}"),
+                        line=self.current_line,
+                        context=cmd_name,
+                    )
                     return 2
             idx += 1
 
@@ -7477,7 +7509,11 @@ class Runtime:
             status = 0
             for name in names:
                 if not self._is_valid_name(name):
-                    self._report_error(f"not found: {name}", line=self.current_line, context=cmd_name)
+                    self._report_error(
+                        self._diag_msg(DiagnosticKey.DECLARE_NOT_FOUND, name=name),
+                        line=self.current_line,
+                        context=cmd_name,
+                    )
                     status = 1
                     continue
                 attrs = self._var_attrs.get(name, set())
@@ -7507,12 +7543,20 @@ class Runtime:
 
         if declare_assoc:
             if not self._bash_feature_enabled("declare_assoc"):
-                self._report_error("declare -A requires BASH_COMPAT to be set", line=self.current_line, context=cmd_name)
+                self._report_error(
+                    self._diag_msg(DiagnosticKey.REQUIRES_BASH_COMPAT, feature="declare -A"),
+                    line=self.current_line,
+                    context=cmd_name,
+                )
                 return 2
 
         if declare_array:
             if not self._bash_feature_enabled("declare_array"):
-                self._report_error("declare -a requires BASH_COMPAT to be set", line=self.current_line, context=cmd_name)
+                self._report_error(
+                    self._diag_msg(DiagnosticKey.REQUIRES_BASH_COMPAT, feature="declare -a"),
+                    line=self.current_line,
+                    context=cmd_name,
+                )
                 return 2
 
         for spec in names:
@@ -7523,7 +7567,10 @@ class Runtime:
                     op = "+="
                     name = name[:-1]
                 if not self._is_valid_name(name):
-                    self._report_error(f"{name}: not a valid identifier", line=self.current_line, context=cmd_name)
+                    self._report_error(
+                        self._diag_msg(DiagnosticKey.NOT_VALID_IDENTIFIER, cmd=cmd_name, name=name),
+                        line=self.current_line,
+                    )
                     return 1
                 expanded = self._expand_assignment_word(value)
                 if op == "+=":
@@ -7532,7 +7579,10 @@ class Runtime:
             else:
                 name = spec
                 if not self._is_valid_name(name):
-                    self._report_error(f"{name}: not a valid identifier", line=self.current_line, context=cmd_name)
+                    self._report_error(
+                        self._diag_msg(DiagnosticKey.NOT_VALID_IDENTIFIER, cmd=cmd_name, name=name),
+                        line=self.current_line,
+                    )
                     return 1
                 base_value = self._get_var(name)
                 if effective_local_scope and name not in self.local_stack[-1]:
@@ -7544,7 +7594,7 @@ class Runtime:
     def _run_set(self, args: List[str]) -> int:
         def _set_option(opt: str, enabled: bool) -> int:
             if opt == "m" and enabled and not os.isatty(0):
-                self._report_error("set: can't access tty; job control turned off", line=self.current_line, context=None)
+                self._report_error(self._diag_msg(DiagnosticKey.SET_CANT_ACCESS_TTY), line=self.current_line, context=None)
                 self.options["m"] = False
                 return 0
             self.options[opt] = enabled
@@ -7631,7 +7681,11 @@ class Runtime:
                 idx += 1
                 continue
             if arg.startswith("-"):
-                self._report_error(f"illegal option {arg}", line=self.current_line, context="export")
+                self._report_error(
+                    self._diag_msg(DiagnosticKey.ILLEGAL_OPTION, opt=arg),
+                    line=self.current_line,
+                    context="export",
+                )
                 return 2
             break
         status = 0
@@ -7692,7 +7746,11 @@ class Runtime:
                 break
             if arg.startswith("-"):
                 if arg == "-":
-                    self._report_error("-: bad variable name", line=self.current_line, context="unset")
+                    self._report_error(
+                        self._diag_msg(DiagnosticKey.UNSET_BAD_VARIABLE_NAME),
+                        line=self.current_line,
+                        context="unset",
+                    )
                     return 2
                 valid = True
                 for ch in arg[1:]:
@@ -7704,7 +7762,11 @@ class Runtime:
                         valid = False
                         break
                 if not valid:
-                    self._report_error(f"illegal option {arg}", line=self.current_line, context="unset")
+                    self._report_error(
+                        self._diag_msg(DiagnosticKey.ILLEGAL_OPTION, opt=arg),
+                        line=self.current_line,
+                        context="unset",
+                    )
                     return 2
                 idx += 1
                 continue
@@ -7767,10 +7829,18 @@ class Runtime:
             try:
                 n = int(args[0])
             except ValueError:
-                self._report_error(f"Illegal number: {args[0]}", line=self.current_line, context="shift")
+                self._report_error(
+                    self._diag_msg(DiagnosticKey.SHIFT_ILLEGAL_NUMBER, value=args[0]),
+                    line=self.current_line,
+                    context="shift",
+                )
                 raise SystemExit(2)
         if n < 0:
-            self._report_error(f"Illegal number: {n}", line=self.current_line, context="shift")
+            self._report_error(
+                self._diag_msg(DiagnosticKey.SHIFT_ILLEGAL_NUMBER, value=str(n)),
+                line=self.current_line,
+                context="shift",
+            )
             raise SystemExit(2)
         if n > len(self.positional):
             return 1
@@ -7806,12 +7876,20 @@ class Runtime:
 
     def _run_getopts(self, args: List[str]) -> int:
         if len(args) < 2:
-            self._report_error("usage: getopts optstring var [arg ...]", line=self.current_line, context="getopts")
+            self._report_error(
+                self._diag_msg(DiagnosticKey.USAGE_GETOPTS),
+                line=self.current_line,
+                context="getopts",
+            )
             return 2
         optspec = args[0]
         var_name = args[1]
         if not self._is_valid_name(var_name):
-            self._report_error(f"{var_name}: bad variable name", line=self.current_line, context="getopts")
+            self._report_error(
+                self._diag_msg(DiagnosticKey.BAD_VARIABLE_NAME, name=var_name),
+                line=self.current_line,
+                context="getopts",
+            )
             return 2
         argv = args[2:] if len(args) > 2 else list(self.positional)
         argv_sig = tuple(argv)
@@ -7872,7 +7950,7 @@ class Runtime:
                 optind += 1
                 pos = 1
             if not silent and self._get_var("OPTERR") != "0":
-                print(f"Illegal option -{ch}", file=sys.stderr)
+                self._print_stderr(self._diag_msg(DiagnosticKey.GETOPTS_ILLEGAL_OPTION, opt=ch))
             return finish(0, "?", ch if silent else "")
 
         needs_arg = idx + 1 < len(optspec) and optspec[idx + 1] == ":"
@@ -7892,7 +7970,7 @@ class Runtime:
             if silent:
                 return finish(0, ":", ch)
             if self._get_var("OPTERR") != "0":
-                print(f"No arg for -{ch} option", file=sys.stderr)
+                self._print_stderr(self._diag_msg(DiagnosticKey.GETOPTS_NO_ARG, opt=ch))
             return finish(0, "?", "")
 
         if pos >= len(arg):
@@ -7924,12 +8002,12 @@ class Runtime:
                 if ch == "p":
                     print_mode = True
                     continue
-                self._report_error(f"shopt: invalid option -- {ch}")
+                self._report_error(self._diag_msg(DiagnosticKey.INVALID_OPTION, cmd="shopt", opt=f"-{ch}"))
                 return 2
             i += 1
         names = args[i:]
         if set_mode and unset_mode:
-            self._report_error("shopt: cannot set and unset in same invocation")
+            self._report_error(self._diag_msg(DiagnosticKey.SHOPT_CONFLICT))
             return 2
         if not names:
             for name in sorted(self._shopts.keys()):
@@ -7942,7 +8020,7 @@ class Runtime:
         status = 0
         for name in names:
             if name not in self._shopts:
-                self._report_error(f"shopt: invalid shell option name: {name}")
+                self._report_error(self._diag_msg(DiagnosticKey.SHOPT_INVALID_NAME, name=name))
                 status = 1
                 continue
             if set_mode:
@@ -8042,7 +8120,7 @@ class Runtime:
         except OSError as e:
             if getattr(e, "errno", None) == 32:
                 return 1
-            print(f"ash: write error: {e.strerror}", file=sys.stderr)
+            self._print_stderr(self._diag_msg(DiagnosticKey.WRITE_ERROR, error=str(e.strerror)))
             return 1
 
     def _encode_printf_output(self, text: str) -> bytes:
@@ -8091,7 +8169,7 @@ class Runtime:
             if a == "-v":
                 if i + 1 >= len(args):
                     self._report_error(
-                        f"usage: {entry_name} [-e] [-x] [--no-dedent] [-v VAR] [-r VAR] [CODE]",
+                        self._diag_msg(DiagnosticKey.PY_USAGE, entry=entry_name),
                         line=self.current_line,
                         context=entry_name,
                     )
@@ -8102,7 +8180,7 @@ class Runtime:
             if a == "-t":
                 if i + 1 >= len(args):
                     self._report_error(
-                        f"usage: {entry_name} [-e] [-x] [--no-dedent] [-v VAR] [-r VAR] [-t VAR] [-u VAR] [CODE]",
+                        self._diag_msg(DiagnosticKey.PY_USAGE, entry=entry_name),
                         line=self.current_line,
                         context=entry_name,
                     )
@@ -8113,7 +8191,7 @@ class Runtime:
             if a == "-u":
                 if i + 1 >= len(args):
                     self._report_error(
-                        f"usage: {entry_name} [-e] [-x] [--no-dedent] [-v VAR] [-r VAR] [-t VAR] [-u VAR] [CODE]",
+                        self._diag_msg(DiagnosticKey.PY_USAGE, entry=entry_name),
                         line=self.current_line,
                         context=entry_name,
                     )
@@ -8124,7 +8202,7 @@ class Runtime:
             if a == "-r":
                 if i + 1 >= len(args):
                     self._report_error(
-                        f"usage: {entry_name} [-e] [-x] [--no-dedent] [-v VAR] [-r VAR] [-t VAR] [-u VAR] [CODE]",
+                        self._diag_msg(DiagnosticKey.PY_USAGE, entry=entry_name),
                         line=self.current_line,
                         context=entry_name,
                     )
@@ -8132,7 +8210,11 @@ class Runtime:
                 return_var = args[i + 1]
                 i += 2
                 continue
-            self._report_error(f"illegal option {a}", line=self.current_line, context=entry_name)
+            self._report_error(
+                self._diag_msg(DiagnosticKey.ILLEGAL_OPTION, opt=a),
+                line=self.current_line,
+                context=entry_name,
+            )
             return 2
         payload = args[i:]
         if structured_exc:
@@ -8240,18 +8322,30 @@ class Runtime:
     def _run_from_import(self, args: List[str]) -> int:
         # Syntax: from <module|path.py> import <name|*> [as alias]
         if len(args) < 3:
-            self._report_error("usage: from MOD import NAME [as ALIAS]", line=self.current_line, context="from")
+            self._report_error(
+                self._diag_msg(DiagnosticKey.USAGE_FROM_IMPORT),
+                line=self.current_line,
+                context="from",
+            )
             return 2
         mod_ref = args[0]
         if args[1] != "import":
-            self._report_error("usage: from MOD import NAME [as ALIAS]", line=self.current_line, context="from")
+            self._report_error(
+                self._diag_msg(DiagnosticKey.USAGE_FROM_IMPORT),
+                line=self.current_line,
+                context="from",
+            )
             return 2
         name = args[2]
         alias = None
         if len(args) >= 5 and args[3] == "as":
             alias = args[4]
         elif len(args) > 3:
-            self._report_error("usage: from MOD import NAME [as ALIAS]", line=self.current_line, context="from")
+            self._report_error(
+                self._diag_msg(DiagnosticKey.USAGE_FROM_IMPORT),
+                line=self.current_line,
+                context="from",
+            )
             return 2
         try:
             mod = self._load_py_module(mod_ref)
@@ -8265,7 +8359,11 @@ class Runtime:
                         self._install_python_callable(k, obj, wrapper_target=k, create_wrapper=True)
                 return 0
             if not hasattr(mod, name):
-                self._report_error(f"{name}: not found in module {mod_ref}", line=self.current_line, context="from")
+                self._report_error(
+                    self._diag_msg(DiagnosticKey.FROM_NOT_FOUND, name=name, module=mod_ref),
+                    line=self.current_line,
+                    context="from",
+                )
                 return 1
             obj = getattr(mod, name)
             out_name = alias or name
@@ -8275,7 +8373,11 @@ class Runtime:
                 self._py_globals[out_name] = obj
             return 0
         except Exception as e:
-            self._report_error(f"{type(e).__name__}: {e}", line=self.current_line, context="from")
+            self._report_error(
+                self._diag_msg(DiagnosticKey.FROM_EXCEPTION, etype=type(e).__name__, msg=str(e)),
+                line=self.current_line,
+                context="from",
+            )
             return 1
 
     def _load_py_module(self, ref: str):
@@ -8658,7 +8760,7 @@ class Runtime:
         except OSError as e:
             if getattr(e, "errno", None) == 32:
                 return 1
-            print(f"ash: write error: {e.strerror}", file=sys.stderr)
+            self._print_stderr(self._diag_msg(DiagnosticKey.WRITE_ERROR, error=str(e.strerror)))
             return 1
 
     def _run_read(self, args: List[str]) -> int:
@@ -8689,11 +8791,11 @@ class Runtime:
                 continue
             if a == "-a" or a.startswith("-a"):
                 if self._bash_compat_level is None:
-                    self._report_error("read: Illegal option -a")
+                    self._report_error(self._diag_msg(DiagnosticKey.READ_ILLEGAL_OPTION, opt="-a"))
                     return 2
                 if a == "-a":
                     if i + 1 >= len(args):
-                        self._report_error("read: option requires an argument -- a")
+                        self._report_error(self._diag_msg(DiagnosticKey.READ_OPTION_REQUIRES_ARG, opt="a"))
                         return 2
                     array_name = args[i + 1]
                     i += 2
@@ -8704,7 +8806,7 @@ class Runtime:
             if a == "-p" or a.startswith("-p"):
                 if a == "-p":
                     if i + 1 >= len(args):
-                        self._report_error("read: option requires an argument -- p")
+                        self._report_error(self._diag_msg(DiagnosticKey.READ_OPTION_REQUIRES_ARG, opt="p"))
                         return 2
                     prompt = args[i + 1]
                     i += 2
@@ -8714,12 +8816,12 @@ class Runtime:
                 continue
             if a == "-n" or a.startswith("-n"):
                 if self._bash_compat_level is None:
-                    self._report_error("read: Illegal option -n")
+                    self._report_error(self._diag_msg(DiagnosticKey.READ_ILLEGAL_OPTION, opt="-n"))
                     return 2
                 val = None
                 if a == "-n":
                     if i + 1 >= len(args):
-                        self._report_error("read: option requires an argument -- n")
+                        self._report_error(self._diag_msg(DiagnosticKey.READ_OPTION_REQUIRES_ARG, opt="n"))
                         return 2
                     val = args[i + 1]
                     i += 2
@@ -8729,18 +8831,18 @@ class Runtime:
                 try:
                     n_chars = max(0, int(val))
                 except ValueError:
-                    self._report_error("read: Illegal number")
+                    self._report_error(self._diag_msg(DiagnosticKey.READ_ILLEGAL_NUMBER))
                     return 2
                 exact_chars = False
                 continue
             if a == "-N" or a.startswith("-N"):
                 if self._bash_compat_level is None:
-                    self._report_error("read: Illegal option -N")
+                    self._report_error(self._diag_msg(DiagnosticKey.READ_ILLEGAL_OPTION, opt="-N"))
                     return 2
                 val = None
                 if a == "-N":
                     if i + 1 >= len(args):
-                        self._report_error("read: option requires an argument -- N")
+                        self._report_error(self._diag_msg(DiagnosticKey.READ_OPTION_REQUIRES_ARG, opt="N"))
                         return 2
                     val = args[i + 1]
                     i += 2
@@ -8750,18 +8852,18 @@ class Runtime:
                 try:
                     n_chars = max(0, int(val))
                 except ValueError:
-                    self._report_error("read: Illegal number")
+                    self._report_error(self._diag_msg(DiagnosticKey.READ_ILLEGAL_NUMBER))
                     return 2
                 exact_chars = True
                 continue
             if a == "-d" or a.startswith("-d"):
                 if self._bash_compat_level is None:
-                    self._report_error("read: Illegal option -d")
+                    self._report_error(self._diag_msg(DiagnosticKey.READ_ILLEGAL_OPTION, opt="-d"))
                     return 2
                 val = None
                 if a == "-d":
                     if i + 1 >= len(args):
-                        self._report_error("read: option requires an argument -- d")
+                        self._report_error(self._diag_msg(DiagnosticKey.READ_OPTION_REQUIRES_ARG, opt="d"))
                         return 2
                     val = args[i + 1]
                     i += 2
@@ -8772,12 +8874,12 @@ class Runtime:
                 continue
             if a == "-t" or a.startswith("-t"):
                 if self._bash_compat_level is None:
-                    self._report_error("read: Illegal option -t")
+                    self._report_error(self._diag_msg(DiagnosticKey.READ_ILLEGAL_OPTION, opt="-t"))
                     return 2
                 val = None
                 if a == "-t":
                     if i + 1 >= len(args):
-                        self._report_error("read: option requires an argument -- t")
+                        self._report_error(self._diag_msg(DiagnosticKey.READ_OPTION_REQUIRES_ARG, opt="t"))
                         return 2
                     val = args[i + 1]
                     i += 2
@@ -8787,19 +8889,19 @@ class Runtime:
                 try:
                     timeout_sec = float(val)
                 except ValueError:
-                    self._report_error("read: Illegal number")
+                    self._report_error(self._diag_msg(DiagnosticKey.READ_ILLEGAL_NUMBER))
                     return 2
                 if timeout_sec < 0:
                     timeout_sec = 0.0
                 continue
             if a == "-u" or a.startswith("-u"):
                 if self._bash_compat_level is None:
-                    self._report_error("read: Illegal option -u")
+                    self._report_error(self._diag_msg(DiagnosticKey.READ_ILLEGAL_OPTION, opt="-u"))
                     return 2
                 val = None
                 if a == "-u":
                     if i + 1 >= len(args):
-                        self._report_error("read: option requires an argument -- u")
+                        self._report_error(self._diag_msg(DiagnosticKey.READ_OPTION_REQUIRES_ARG, opt="u"))
                         return 2
                     val = args[i + 1]
                     i += 2
@@ -8809,32 +8911,32 @@ class Runtime:
                 try:
                     fd = int(val, 10)
                 except ValueError:
-                    self._report_error("read: Illegal number")
+                    self._report_error(self._diag_msg(DiagnosticKey.READ_ILLEGAL_NUMBER))
                     return 2
                 if fd < 0:
-                    self._report_error("read: Illegal file descriptor")
+                    self._report_error(self._diag_msg(DiagnosticKey.READ_ILLEGAL_FD))
                     return 2
                 continue
             if a == "-s":
                 if self._bash_compat_level is None:
-                    self._report_error("read: Illegal option -s")
+                    self._report_error(self._diag_msg(DiagnosticKey.READ_ILLEGAL_OPTION, opt="-s"))
                     return 2
                 i += 1
                 continue
             if a == "-e":
                 if self._bash_compat_level is None:
-                    self._report_error("read: Illegal option -e")
+                    self._report_error(self._diag_msg(DiagnosticKey.READ_ILLEGAL_OPTION, opt="-e"))
                     return 2
                 edit_mode = True
                 i += 1
                 continue
             if a == "-i" or a.startswith("-i"):
                 if self._bash_compat_level is None:
-                    self._report_error("read: Illegal option -i")
+                    self._report_error(self._diag_msg(DiagnosticKey.READ_ILLEGAL_OPTION, opt="-i"))
                     return 2
                 if a == "-i":
                     if i + 1 >= len(args):
-                        self._report_error("read: option requires an argument -- i")
+                        self._report_error(self._diag_msg(DiagnosticKey.READ_OPTION_REQUIRES_ARG, opt="i"))
                         return 2
                     init_text = args[i + 1]
                     i += 2
@@ -8842,7 +8944,7 @@ class Runtime:
                     init_text = a[2:]
                     i += 1
                 continue
-            self._report_error(f"read: unknown option {a}")
+            self._report_error(self._diag_msg(DiagnosticKey.READ_UNKNOWN_OPTION, opt=a))
             return 2
         else:
             names = []
@@ -9785,7 +9887,7 @@ class Runtime:
             return 1
         name = cmd[0]
         if not self._is_builtin_enabled(name):
-            self._report_error(f"builtin: {name}: not a shell builtin", line=self.current_line)
+            self._report_error(self._diag_msg(DiagnosticKey.BUILTIN_NOT_SHELL_BUILTIN, name=name), line=self.current_line)
             return 1
         try:
             return self._run_builtin(name, [name] + cmd[1:])
@@ -9816,7 +9918,11 @@ class Runtime:
             key = self._normalize_signal_spec(sig)
             if key is None:
                 line = (self.current_line + 1) if self.current_line is not None else None
-                self._report_error(f"{sig}: invalid signal specification", line=line, context="trap")
+                self._report_error(
+                    self._diag_msg(DiagnosticKey.INVALID_SIGNAL_SPEC, sig=sig),
+                    line=line,
+                    context="trap",
+                )
                 status = 1
                 continue
             if action in ["-", "0"]:
@@ -10068,7 +10174,11 @@ class Runtime:
         last = "0"
         for expr in args:
             if "$" in expr:
-                self._report_error("arithmetic syntax error", line=self.current_line, context="let")
+                self._report_error(
+                    self._diag_msg(DiagnosticKey.ARITH_SYNTAX_ERROR),
+                    line=self.current_line,
+                    context="let",
+                )
                 return 2
             try:
                 last = self._expand_arith(expr, context="let")
