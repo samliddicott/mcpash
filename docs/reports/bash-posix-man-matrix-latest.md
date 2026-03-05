@@ -1,13 +1,13 @@
 # Bash POSIX Man-Page Matrix
 
-Generated: 2026-03-05 09:00:48Z
+Generated: 2026-03-05 17:10:52Z
 
 ## Summary
 
-- covered builtins: 53
-- partial builtins: 1
-- out-of-scope builtins: 6
-- executed case files: 18
+- covered builtins: 60
+- partial builtins: 0
+- out-of-scope builtins: 0
+- executed case files: 22
 - matrix exit code: 0
 - mismatch lines detected: 0
 
@@ -31,19 +31,16 @@ Generated: 2026-03-05 09:00:48Z
 - man-bash-posix-08-declare-posix-policy.sh
 - man-bash-posix-09-return-exit.sh
 - man-bash-posix-10-jobs-fg-bg-interactive.sh
+- man-bash-posix-11-extension-builtins-core.sh
+- man-bash-posix-12-history-suspend-logout.sh
+- man-bash-posix-13-exec-errors-signals-jobs.sh
+- man-bash-posix-14-env-exec-flow.sh
 
 ## Partial/Uncovered Builtins
 
-- bind: interactive/readline semantics partially covered; strict PTY matrix in `run_completion_interactive_matrix.sh`
 
 ## Out of Scope for POSIX Parity Lane
 
-- caller: bash extension; no mctash posix target yet
-- history: interactive history extension
-- let: bash arithmetic builtin extension
-- logout: login-shell session extension
-- shopt: bash extension; mctash has scoped variant
-- suspend: interactive job control extension
 
 ## Mismatch Extract
 
