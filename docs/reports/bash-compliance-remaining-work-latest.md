@@ -2,17 +2,13 @@
 
 Derived from: `docs/specs/bash-man-implementation-matrix.tsv`
 
-Total remaining rows (partial or missing): 173
+Total remaining rows (partial or missing): 171
 
-- Missing rows: 5
+- Missing rows: 3
 - Partial rows: 168
 
 ## Explicit Missing Features
 
-- `C2.GRAM.019` feature=`select NAME in ...; do ... done` default=`missing` posix=`missing` tests=`bash-man-grammar-select-coproc.sh`
-  note: select is currently not parsed/executed as shell keyword.
-- `C2.GRAM.024` feature=`coproc command` default=`missing` posix=`missing` tests=`bash-man-grammar-select-coproc.sh`
-  note: coproc is currently not parsed/executed as shell keyword.
 - `C3.EXP.001` feature=`brace expansion {a,b}` default=`missing` posix=`missing` tests=`bash-man-expansion-brace-locale.sh`
   note: brace expansion currently literal.
 - `C3.EXP.029` feature=`locale translation quoting $"..."` default=`missing` posix=`missing` tests=`bash-man-expansion-brace-locale.sh`
@@ -225,15 +221,6 @@ Total remaining rows (partial or missing): 173
 - `C1.OPT.SHORT.x` `-x` default=`partial` posix=`partial`
   tests: `run_bash_invocation_option_matrix.sh`
   note: Row-level evidence mapping assigned from requirement->case rules. Evidence run has failing/timeout tests: run_bash_invocation_option_matrix.sh
-
-### Category 2
-
-- `C2.GRAM.019` `select NAME in ...; do ... done` default=`missing` posix=`missing`
-  tests: `bash-man-grammar-select-coproc.sh`
-  note: select is currently not parsed/executed as shell keyword.
-- `C2.GRAM.024` `coproc command` default=`missing` posix=`missing`
-  tests: `bash-man-grammar-select-coproc.sh`
-  note: coproc is currently not parsed/executed as shell keyword.
 
 ### Category 3
 

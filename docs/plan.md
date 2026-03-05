@@ -64,6 +64,7 @@ Exit Criteria
 - CI setup with deterministic test runs.
 - Performance profiling of parsing and execution paths.
 - Threading model investigation (threads vs fork), with per-thread CWD and FD isolation requirements.
+- Coprocess policy: keep `coproc` process-backed (child process boundary) even where other runtime paths are thread-oriented, to preserve shell-visible FD/signal/job semantics.
 - License-aligned research: if MIT/BSD/Apache is chosen, evaluate permissive shell implementations (e.g., `dash`/`ash` derivatives, `toysh`) for reusable components or reference.
 
 ## Testing

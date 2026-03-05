@@ -27,6 +27,18 @@ This project intentionally uses a threaded execution model in places where tradi
   - BusyBox harness wrapper applies per-process virtual-memory limit (`ulimit -Sv`, default `MCTASH_MAX_VMEM_KB=262144`).
   - Policy: if limit trips, stop and investigate leak/regression before increasing the limit.
 
+## Coprocess (`coproc`) execution policy
+
+- `coproc` is treated as a process-backed isolation boundary even in thread-oriented runtime areas.
+- Parent shell receives pipe endpoints + pid metadata (`NAME[0]`, `NAME[1]`, `NAME_PID`) while coprocess payload executes in a child process context.
+- Rationale:
+  - FD and signal/job semantics for coprocesses are process-scoped in shell behavior.
+  - Pure in-process/thread execution would risk semantic drift and descriptor lifetime bugs.
+- Internal vs external payload:
+  - External payloads may execute directly in child process (`exec` path).
+  - Shell compound/function payloads are rendered/evaluated in child shell context.
+- This policy is intentional and should remain stable unless a semantics-equivalent threaded design is proven.
+
 ## Known deviation classes
 
 1. Process/job-control internals

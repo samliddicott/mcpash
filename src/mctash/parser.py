@@ -6,6 +6,7 @@ from .ast_nodes import (
     Assignment,
     CaseCommand,
     CaseItem,
+    CoprocCommand,
     Command,
     ForCommand,
     FunctionDef,
@@ -17,6 +18,7 @@ from .ast_nodes import (
     Redirect,
     RedirectCommand,
     Script,
+    SelectCommand,
     SimpleCommand,
     SubshellCommand,
     WhileCommand,
@@ -46,6 +48,8 @@ from .lst_nodes import (
     LstScript,
     LstShAssignmentCommand,
     LstSimpleCommand,
+    LstSelectCommand,
+    LstCoprocCommand,
     LstSubshellCommand,
     LstWhileCommand,
     LstWord,
@@ -73,6 +77,8 @@ RESERVED_WORDS = {
     "esac",
     "while",
     "until",
+    "select",
+    "coproc",
     "function",
 }
 
@@ -498,8 +504,14 @@ class Parser:
         if self._is_word(tok) and tok.value == "for":
             command, lst_command = self.parse_for()
             return self._maybe_wrap_redirects(command, lst_command)
+        if self._is_word(tok) and tok.value == "select":
+            command, lst_command = self.parse_select()
+            return self._maybe_wrap_redirects(command, lst_command)
         if self._is_word(tok) and tok.value == "case":
             command, lst_command = self.parse_case()
+            return self._maybe_wrap_redirects(command, lst_command)
+        if self._is_word(tok) and tok.value == "coproc":
+            command, lst_command = self.parse_coproc()
             return self._maybe_wrap_redirects(command, lst_command)
         if tok and ((tok.kind == "OP" and tok.value == "{") or (self._is_word(tok) and tok.value == "{")):
             command, lst_command = self.parse_group()
@@ -957,6 +969,88 @@ class Parser:
                 explicit_in=explicit_in,
             ),
         )
+
+    def parse_select(self) -> tuple[SelectCommand, LstSelectCommand]:
+        tok = self._advance()
+        if tok is None or not self._is_word(tok) or tok.value != "select":
+            raise ParseError(f"expected select at {self._where(tok)}")
+        name_tok = self._advance()
+        if name_tok is None or not self._is_word(name_tok):
+            raise ParseError(f"expected name at {self._where(name_tok)}")
+        if not self._is_valid_func_name(name_tok.value):
+            raise ParseError(f"invalid select variable name at {self._where(name_tok)}")
+        items: List[Word] = []
+        lst_items: List = []
+        explicit_in = False
+        while True:
+            tok = self._peek()
+            if tok and tok.kind == "OP" and tok.value == "\n":
+                self._advance()
+                continue
+            break
+        tok = self._peek()
+        if tok and self._is_word(tok) and tok.value == "in":
+            explicit_in = True
+            self._advance()
+            while True:
+                tok = self._peek()
+                if tok is None:
+                    break
+                if tok.kind == "OP" and tok.value in [";", "\n"]:
+                    break
+                if self._is_word(tok):
+                    items.append(Word(tok.value))
+                    lst_items.append(
+                        self._resolve_word(
+                            parse_word(tok.value, line=tok.line, col=tok.col, index=tok.index)
+                        )
+                    )
+                    self._advance()
+                    continue
+                break
+        tok = self._peek()
+        if tok and tok.kind == "OP" and tok.value == ";":
+            self._advance()
+        while True:
+            tok = self._peek()
+            if tok and tok.kind == "OP" and tok.value == "\n":
+                self._advance()
+                continue
+            break
+        do_tok = self._advance()
+        if do_tok is None or not self._is_word(do_tok) or do_tok.value != "do":
+            raise ParseError(f"expected do at {self._where(do_tok)}")
+        body, lst_body = self.parse_compound_list({"done"})
+        done_tok = self._advance()
+        if done_tok is None or not self._is_word(done_tok) or done_tok.value != "done":
+            raise ParseError(f"expected done at {self._where(done_tok)}")
+        return (
+            SelectCommand(name=name_tok.value, items=items, body=body, explicit_in=explicit_in),
+            LstSelectCommand(
+                name=name_tok.value,
+                items=lst_items,
+                body=LstDoGroup(body=lst_body),
+                explicit_in=explicit_in,
+            ),
+        )
+
+    def parse_coproc(self) -> tuple[CoprocCommand, LstCoprocCommand]:
+        tok = self._advance()
+        if tok is None or not self._is_word(tok) or tok.value != "coproc":
+            raise ParseError(f"expected coproc at {self._where(tok)}")
+        name: str | None = None
+        next_tok = self._peek()
+        if (
+            self._is_word(next_tok)
+            and next_tok.value not in RESERVED_WORDS
+            and self._is_valid_func_name(next_tok.value)
+        ):
+            lookahead = self._peek_n(1)
+            if lookahead is not None:
+                name = next_tok.value
+                self._advance()
+        child, lst_child = self.parse_command()
+        return CoprocCommand(name=name, child=child), LstCoprocCommand(name=name, child=lst_child)
 
     def parse_case(self) -> tuple[CaseCommand, LstCaseCommand]:
         tok = self._advance()

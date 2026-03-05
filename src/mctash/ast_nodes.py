@@ -86,6 +86,14 @@ class ForCommand:
 
 
 @dataclass
+class SelectCommand:
+    name: str
+    items: List[Word]
+    body: "ListNode"
+    explicit_in: bool = False
+
+
+@dataclass
 class CaseItem:
     patterns: List[str]
     body: "ListNode"
@@ -97,6 +105,12 @@ class CaseCommand:
     items: List[CaseItem]
 
 
+@dataclass
+class CoprocCommand:
+    name: str | None
+    child: "Command"
+
+
 Command = Union[
     SimpleCommand,
     RedirectCommand,
@@ -106,7 +120,9 @@ Command = Union[
     FunctionDef,
     SubshellCommand,
     ForCommand,
+    SelectCommand,
     CaseCommand,
+    CoprocCommand,
 ]
 
 

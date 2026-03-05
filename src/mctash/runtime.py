@@ -727,6 +727,7 @@ class Runtime:
         self._bg_pids: Dict[int, int] = {}
         self._bg_pid_to_job: Dict[int, int] = {}
         self._bg_started_at: Dict[int, float] = {}
+        self._coproc_procs: Dict[int, subprocess.Popen] = {}
         self._thread_ctx = threading.local()
         self._fd_redirect_depth: int = 0
         self._force_broken_pipe: bool = False
@@ -1531,6 +1532,98 @@ class Runtime:
                 return status
             finally:
                 self._loop_depth -= 1
+        if t == "command.Select":
+            var_name = str(node.get("iter_name") or "")
+            iterable = node.get("iterable") or {}
+            explicit_in = bool(node.get("explicit_in", False))
+            if explicit_in:
+                items: list[str] = []
+                for w in (iterable.get("words") or []):
+                    self._validate_asdl_word_bad_subst(w)
+                    items.extend(self._expand_asdl_word_fields(w, split_glob=True))
+            else:
+                items = list(self.positional)
+            body = self._asdl_do_group_children(node.get("body") or {})
+            status = 0
+            self._loop_depth += 1
+            try:
+                while True:
+                    for i, item in enumerate(items, start=1):
+                        self._print_stderr(f"{i}) {item}")
+                    prompt = self._get_var("PS3") or "#? "
+                    try:
+                        sys.stderr.write(prompt)
+                        sys.stderr.flush()
+                    except Exception:
+                        pass
+                    line = sys.stdin.readline()
+                    if line == "":
+                        return 1
+                    reply = line.rstrip("\n")
+                    self._set_var("REPLY", reply)
+                    selected = ""
+                    if reply.isdigit():
+                        idx = int(reply)
+                        if 1 <= idx <= len(items):
+                            selected = items[idx - 1]
+                    self._set_var(var_name, selected)
+                    try:
+                        status = self._exec_asdl_command_list(body)
+                        self._run_pending_traps()
+                    except ContinueLoop as e:
+                        if e.count > 1:
+                            raise ContinueLoop(e.count - 1)
+                        continue
+                    except BreakLoop as e:
+                        if e.count > 1:
+                            raise BreakLoop(e.count - 1)
+                        break
+                return status
+            finally:
+                self._loop_depth -= 1
+        if t == "command.Coproc":
+            name = str(node.get("name") or "COPROC")
+            child = node.get("child") or {}
+            script = self._asdl_command_to_sh_source(child)
+            proc = subprocess.Popen(
+                ["bash", "-c", script],
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=None,
+                text=False,
+                preexec_fn=self._preexec_reset_signals,
+            )
+            if proc.stdout is None or proc.stdin is None:
+                return 1
+            read_fd = os.dup(proc.stdout.fileno())
+            write_fd = os.dup(proc.stdin.fileno())
+            if read_fd >= 3:
+                self._user_fds.add(read_fd)
+            if write_fd >= 3:
+                self._user_fds.add(write_fd)
+            self._typed_vars[name] = [str(read_fd), str(write_fd)]
+            self._set_var_attrs(name, array=True)
+            self._set_subscript_projection(name, str(read_fd))
+            self._set_var(f"{name}_PID", str(proc.pid))
+
+            job_id = self._next_job_id
+            self._next_job_id += 1
+            self._last_bg_job = job_id
+            self._last_bg_pid = proc.pid
+            self._bg_pids[job_id] = proc.pid
+            self._bg_pid_to_job[proc.pid] = job_id
+            self._bg_started_at[job_id] = time.time()
+            self._coproc_procs[job_id] = proc
+
+            def _wait_coproc() -> None:
+                rc = proc.wait()
+                self._bg_status[job_id] = rc
+                self._coproc_procs.pop(job_id, None)
+
+            th = threading.Thread(target=_wait_coproc, daemon=True)
+            self._bg_jobs[job_id] = th
+            th.start()
+            return 0
         if t == "command.Case":
             to_match = node.get("to_match") or {}
             value_word = to_match.get("word") if isinstance(to_match, dict) else {}
@@ -10398,6 +10491,31 @@ class Runtime:
     def _format_asdl_command_for_type(self, node: dict[str, Any], indent: int) -> list[str]:
         pad = " " * indent
         t = node.get("type")
+        if t == "command.CommandList":
+            return self._format_asdl_command_list(node.get("children") or [], indent)
+        if t == "command.Sentence":
+            child = node.get("child") or {}
+            lines = self._format_asdl_command_for_type(child, indent)
+            term = self._asdl_token_text(node.get("terminator"))
+            if term == "&" and lines:
+                lines[-1] = lines[-1] + " &"
+            return lines
+        if t == "command.AndOr":
+            pipes = node.get("children") or []
+            ops = node.get("ops") or []
+            if not pipes:
+                return [pad + ":;"]
+            parts: list[str] = []
+            for i, p in enumerate(pipes):
+                seg = self._format_asdl_command_for_type(p, 0)
+                txt = " ".join(line.strip().rstrip(";") for line in seg if line.strip())
+                if txt:
+                    parts.append(txt)
+                if i < len(ops):
+                    op = self._asdl_token_text(ops[i])
+                    if op:
+                        parts.append(op)
+            return [pad + (" ".join(parts) if parts else ":") + ";"]
         if t == "command.Simple":
             words = [self._asdl_word_to_text(w) for w in (node.get("words") or [])]
             assigns: list[str] = []
@@ -10476,6 +10594,13 @@ class Runtime:
             lead = "! " if neg else ""
             return [pad + lead + " ".join(parts) + ";"]
         return [pad + ":" + ";"]
+
+    def _asdl_command_to_sh_source(self, node: dict[str, Any]) -> str:
+        """Best-effort shell source for spawning helper subprocesses (e.g. coproc)."""
+        lines = self._format_asdl_command_for_type(node, 0)
+        if not lines:
+            return ":"
+        return "\n".join(lines)
 
     def _run_let(self, args: List[str]) -> int:
         if not args:

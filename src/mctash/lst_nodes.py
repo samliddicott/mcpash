@@ -137,6 +137,14 @@ class LstForCommand:
 
 
 @dataclass
+class LstSelectCommand:
+    name: str
+    items: List[LstWord]
+    body: "LstDoGroup"
+    explicit_in: bool = False
+
+
+@dataclass
 class LstDoGroup:
     body: "LstListNode"
 
@@ -151,6 +159,12 @@ class LstCaseItem:
 class LstCaseCommand:
     value: LstWord
     items: List[LstCaseItem]
+
+
+@dataclass
+class LstCoprocCommand:
+    name: str | None
+    child: "LstCommand"
 
 
 @dataclass
@@ -174,7 +188,9 @@ LstCommand = Union[
     LstFunctionDef,
     LstSubshellCommand,
     LstForCommand,
+    LstSelectCommand,
     LstCaseCommand,
+    LstCoprocCommand,
     LstControlFlowCommand,
     LstShAssignmentCommand,
 ]

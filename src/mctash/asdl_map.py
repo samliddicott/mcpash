@@ -15,6 +15,7 @@ from .lst_nodes import (
     LstDoGroup,
     LstDoubleQuotedPart,
     LstForCommand,
+    LstSelectCommand,
     LstFunctionDef,
     LstGroupCommand,
     LstIfCommand,
@@ -30,6 +31,7 @@ from .lst_nodes import (
     LstSingleQuotedPart,
     LstSimpleCommand,
     LstSubshellCommand,
+    LstCoprocCommand,
     LstWhileCommand,
     LstWord,
     LstWordPart,
@@ -109,8 +111,12 @@ def _lst_command_to_command(node) -> Dict[str, Any]:
         }
     if isinstance(node, LstForCommand):
         return _for_command(node)
+    if isinstance(node, LstSelectCommand):
+        return _select_command(node)
     if isinstance(node, LstCaseCommand):
         return _case_command(node)
+    if isinstance(node, LstCoprocCommand):
+        return _coproc_command(node)
     if isinstance(node, LstControlFlowCommand):
         return {
             "type": "command.ControlFlow",
@@ -244,6 +250,19 @@ def _for_command(node: LstForCommand) -> Dict[str, Any]:
     }
 
 
+def _select_command(node: LstSelectCommand) -> Dict[str, Any]:
+    return {
+        "type": "command.Select",
+        "iter_name": node.name,
+        "explicit_in": node.explicit_in,
+        "iterable": {
+            "type": "for_iter.Words",
+            "words": [word(w) for w in node.items],
+        },
+        "body": _do_group(node.body),
+    }
+
+
 def _do_group(node: LstDoGroup) -> Dict[str, Any]:
     return {
         "type": "command.DoGroup",
@@ -258,6 +277,14 @@ def _case_command(node: LstCaseCommand) -> Dict[str, Any]:
         "type": "command.Case",
         "to_match": {"type": "case_arg.Word", "word": word(node.value)},
         "arms": [_case_arm(item) for item in node.items],
+    }
+
+
+def _coproc_command(node: LstCoprocCommand) -> Dict[str, Any]:
+    return {
+        "type": "command.Coproc",
+        "name": node.name,
+        "child": _lst_command_to_command(node.child),
     }
 
 
