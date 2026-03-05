@@ -13,6 +13,14 @@ if [[ ! -f "$COVERAGE" ]]; then
 fi
 
 mapfile -t CASES < <(awk -F'\t' '($0 !~ /^#/ && $2=="covered" && $3!="") {print $3}' "$COVERAGE" | sort -u)
+EXTRA_CASES=(
+  man-bash-posix-13-exec-errors-signals-jobs
+  man-bash-posix-14-env-exec-flow
+)
+for ec in "${EXTRA_CASES[@]}"; do
+  CASES+=("$ec")
+done
+mapfile -t CASES < <(printf '%s\n' "${CASES[@]}" | awk 'NF' | sort -u)
 if [[ ${#CASES[@]} -eq 0 ]]; then
   echo "no covered cases mapped in $COVERAGE" >&2
   exit 2
