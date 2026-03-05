@@ -50,8 +50,12 @@ echo "$compat_rc" > "$LOGDIR/bash_compat.rc"
 interactive_rc=0
 if [[ "$STRICT" == "1" ]]; then
   set +e
-  timeout -k 5 "$ROW_TIMEOUT" "$ROOT/tests/compat/run_completion_interactive_matrix.sh" >"$LOGDIR/interactive.out" 2>&1
-  interactive_rc=$?
+  timeout -k 5 "$ROW_TIMEOUT" "$ROOT/tests/compat/run_completion_interactive_matrix.sh" >"$LOGDIR/interactive-completion.out" 2>&1
+  ic_rc=$?
+  timeout -k 5 "$ROW_TIMEOUT" "$ROOT/tests/compat/run_interactive_ux_matrix.sh" >"$LOGDIR/interactive-ux.out" 2>&1
+  iu_rc=$?
+  interactive_rc=0
+  [[ "$ic_rc" -eq 0 && "$iu_rc" -eq 0 ]] || interactive_rc=1
   set -e
 fi
 echo "$interactive_rc" > "$LOGDIR/interactive.rc"

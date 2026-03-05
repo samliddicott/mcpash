@@ -3,7 +3,7 @@
 .	covered	man-bash-posix-05-dot-source	dot/source path, arg passing, and missing-file status
 alias	covered	man-bash-posix-04-misc-builtins	basic alias/unalias behavior
 bg	covered	man-bash-posix-10-jobs-fg-bg-interactive	non-interactive baseline statuses + jobs list probe
-bind	partial	bash-builtin-completion	interactive/readline semantics partially covered; strict PTY matrix in `run_completion_interactive_matrix.sh`
+bind	covered	bash-builtin-completion	interactive completion/readline status paths covered via strict PTY matrices (`run_completion_interactive_matrix.sh`, `run_interactive_ux_matrix.sh`) within declared scope
 break	covered	man-bash-posix-06-loop-control	outside-loop status + nested-level behavior
 builtin	covered	man-bash-posix-07-builtin-dispatch	builtin dispatch + function shadow bypass
 caller	covered	man-bash-posix-11-extension-builtins-core	caller stack-frame query surface covered

@@ -465,6 +465,55 @@ def _configure_line_editor(rt: Runtime) -> None:
         pass
 
 
+def _expand_prompt(rt: Runtime, prompt: str) -> str:
+    out: list[str] = []
+    i = 0
+    user = os.environ.get("USER", "")
+    host = os.uname().nodename.split(".")[0] if hasattr(os, "uname") else ""
+    cwd = rt.env.get("PWD", os.getcwd())
+    home = rt.env.get("HOME", "")
+    while i < len(prompt):
+        ch = prompt[i]
+        if ch != "\\" or i + 1 >= len(prompt):
+            out.append(ch)
+            i += 1
+            continue
+        nxt = prompt[i + 1]
+        if nxt == "u":
+            out.append(user)
+        elif nxt == "h":
+            out.append(host)
+        elif nxt == "w":
+            if home and cwd.startswith(home):
+                rel = "~" + cwd[len(home) :]
+                out.append(rel)
+            else:
+                out.append(cwd)
+        elif nxt == "$":
+            out.append("#" if os.geteuid() == 0 else "$")
+        else:
+            out.append(nxt)
+        i += 2
+    return "".join(out)
+
+
+def _expand_history_bang(rt: Runtime, line: str) -> tuple[str | None, str | None]:
+    txt = line.rstrip("\n")
+    if not txt.startswith("!"):
+        return txt, None
+    if txt == "!!":
+        idx = rt._history_resolve("-1")
+    elif txt.startswith("!-") and txt[2:].isdigit():
+        idx = rt._history_resolve("-" + txt[2:])
+    elif txt[1:].isdigit():
+        idx = rt._history_resolve(txt[1:])
+    else:
+        return txt, None
+    if idx is None or idx < 0 or idx >= len(rt._history):
+        return None, "event not found"
+    return rt._history[idx], None
+
+
 def _run_interactive(rt: Runtime) -> int:
     _configure_line_editor(rt)
     buffer: List[str] = []
@@ -472,8 +521,15 @@ def _run_interactive(rt: Runtime) -> int:
     eof_count = 0
     while True:
         try:
-            prompt = rt.env.get("PS2", "> ") if buffer else rt.env.get("PS1", "$ ")
-            line = input(prompt)
+            if not buffer:
+                pcmd = rt.env.get("PROMPT_COMMAND", "")
+                if pcmd:
+                    try:
+                        rt._eval_source(pcmd, propagate_exit=False, propagate_return=False, parse_context="prompt")
+                    except Exception:
+                        pass
+            prompt_raw = rt.env.get("PS2", "> ") if buffer else rt.env.get("PS1", "$ ")
+            line = input(_expand_prompt(rt, prompt_raw))
             eof_count = 0
         except EOFError:
             if rt.options.get("I", False) and os.isatty(0):
@@ -490,6 +546,18 @@ def _run_interactive(rt: Runtime) -> int:
             rt.last_status = status
             buffer.clear()
             continue
+        if not buffer:
+            expanded, err = _expand_history_bang(rt, line + "\n")
+            if err is not None:
+                print(err, file=sys.stderr)
+                status = 1
+                rt.last_status = status
+                rt.last_nonzero_status = status
+                rt._trap_status_hint = status
+                continue
+            if expanded is not None and expanded != line:
+                print(expanded)
+                line = expanded
         buffer.append(line + "\n")
         src = "".join(buffer)
         complete, hard_err = _try_parse_complete(src, rt.aliases)
