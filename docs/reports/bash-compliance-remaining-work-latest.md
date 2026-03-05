@@ -2,10 +2,10 @@
 
 Derived from: `docs/specs/bash-man-implementation-matrix.tsv`
 
-Total remaining rows (partial or missing): 98
+Total remaining rows (partial or missing): 52
 
 - Missing rows: 0
-- Partial rows: 98
+- Partial rows: 52
 
 ## Explicit Missing Features
 
@@ -78,144 +78,6 @@ None.
 - `C1.OPT.LONG.VERSION` `--version` default=`partial` posix=`partial`
   tests: `run_bash_invocation_option_matrix.sh`
   note: Row-level evidence mapping assigned from requirement->case rules. Evidence run has failing/timeout tests: run_bash_invocation_option_matrix.sh
-- `C1.OPT.SET.a` `-a` default=`partial` posix=`partial`
-  tests: `bash-man-seto-surface.sh`
-  note: Row-level evidence mapping assigned from requirement->case rules. Evidence run has failing/timeout tests: bash-man-seto-surface.sh
-- `C1.OPT.SET.b` `-b` default=`partial` posix=`partial`
-  tests: `bash-man-seto-surface.sh`
-  note: Row-level evidence mapping assigned from requirement->case rules. Evidence run has failing/timeout tests: bash-man-seto-surface.sh
-- `C1.OPT.SET.e` `-e` default=`partial` posix=`partial`
-  tests: `bash-man-seto-surface.sh`
-  note: Row-level evidence mapping assigned from requirement->case rules. Evidence run has failing/timeout tests: bash-man-seto-surface.sh
-- `C1.OPT.SET.f` `-f` default=`partial` posix=`partial`
-  tests: `bash-man-seto-surface.sh`
-  note: Row-level evidence mapping assigned from requirement->case rules. Evidence run has failing/timeout tests: bash-man-seto-surface.sh
-- `C1.OPT.SET.h` `-h` default=`partial` posix=`partial`
-  tests: `bash-man-seto-surface.sh`
-  note: Row-level evidence mapping assigned from requirement->case rules. Evidence run has failing/timeout tests: bash-man-seto-surface.sh
-- `C1.OPT.SET.k` `-k` default=`partial` posix=`partial`
-  tests: `bash-man-seto-surface.sh`
-  note: Row-level evidence mapping assigned from requirement->case rules. Evidence run has failing/timeout tests: bash-man-seto-surface.sh
-- `C1.OPT.SET.m` `-m` default=`partial` posix=`partial`
-  tests: `bash-man-seto-surface.sh`
-  note: Row-level evidence mapping assigned from requirement->case rules. Evidence run has failing/timeout tests: bash-man-seto-surface.sh
-- `C1.OPT.SET.n` `-n` default=`partial` posix=`partial`
-  tests: `bash-man-seto-surface.sh`
-  note: Row-level evidence mapping assigned from requirement->case rules. Evidence run has failing/timeout tests: bash-man-seto-surface.sh
-- `C1.OPT.SET.p` `-p` default=`partial` posix=`partial`
-  tests: `bash-man-seto-surface.sh`
-  note: Row-level evidence mapping assigned from requirement->case rules. Evidence run has failing/timeout tests: bash-man-seto-surface.sh
-- `C1.OPT.SET.t` `-t` default=`partial` posix=`partial`
-  tests: `bash-man-seto-surface.sh`
-  note: Row-level evidence mapping assigned from requirement->case rules. Evidence run has failing/timeout tests: bash-man-seto-surface.sh
-- `C1.OPT.SET.u` `-u` default=`partial` posix=`partial`
-  tests: `bash-man-seto-surface.sh`
-  note: Row-level evidence mapping assigned from requirement->case rules. Evidence run has failing/timeout tests: bash-man-seto-surface.sh
-- `C1.OPT.SET.v` `-v` default=`partial` posix=`partial`
-  tests: `bash-man-seto-surface.sh`
-  note: Row-level evidence mapping assigned from requirement->case rules. Evidence run has failing/timeout tests: bash-man-seto-surface.sh
-- `C1.OPT.SET.x` `-x` default=`partial` posix=`partial`
-  tests: `bash-man-seto-surface.sh`
-  note: Row-level evidence mapping assigned from requirement->case rules. Evidence run has failing/timeout tests: bash-man-seto-surface.sh
-- `C1.OPT.SET.B` `-B` default=`partial` posix=`partial`
-  tests: `bash-man-seto-surface.sh`
-  note: Row-level evidence mapping assigned from requirement->case rules. Evidence run has failing/timeout tests: bash-man-seto-surface.sh
-- `C1.OPT.SET.C` `-C` default=`partial` posix=`partial`
-  tests: `bash-man-seto-surface.sh`
-  note: Row-level evidence mapping assigned from requirement->case rules. Evidence run has failing/timeout tests: bash-man-seto-surface.sh
-- `C1.OPT.SET.E` `-E` default=`partial` posix=`partial`
-  tests: `bash-man-seto-surface.sh`
-  note: Row-level evidence mapping assigned from requirement->case rules. Evidence run has failing/timeout tests: bash-man-seto-surface.sh
-- `C1.OPT.SET.H` `-H` default=`partial` posix=`partial`
-  tests: `bash-man-seto-surface.sh`
-  note: Row-level evidence mapping assigned from requirement->case rules. Evidence run has failing/timeout tests: bash-man-seto-surface.sh
-- `C1.OPT.SET.P` `-P` default=`partial` posix=`partial`
-  tests: `bash-man-seto-surface.sh`
-  note: Row-level evidence mapping assigned from requirement->case rules. Evidence run has failing/timeout tests: bash-man-seto-surface.sh
-- `C1.OPT.SET.T` `-T` default=`partial` posix=`partial`
-  tests: `bash-man-seto-surface.sh`
-  note: Row-level evidence mapping assigned from requirement->case rules. Evidence run has failing/timeout tests: bash-man-seto-surface.sh
-- `C1.OPT.SETO.ALLEXPORT` `allexport` default=`partial` posix=`partial`
-  tests: `bash-man-seto-surface.sh`
-  note: Row-level evidence mapping assigned from requirement->case rules. Evidence run has failing/timeout tests: bash-man-seto-surface.sh
-- `C1.OPT.SETO.BRACEEXPAND` `braceexpand` default=`partial` posix=`partial`
-  tests: `bash-man-seto-surface.sh`
-  note: Row-level evidence mapping assigned from requirement->case rules. Evidence run has failing/timeout tests: bash-man-seto-surface.sh
-- `C1.OPT.SETO.EMACS` `emacs` default=`partial` posix=`partial`
-  tests: `bash-man-seto-surface.sh`
-  note: Row-level evidence mapping assigned from requirement->case rules. Evidence run has failing/timeout tests: bash-man-seto-surface.sh
-- `C1.OPT.SETO.ERREXIT` `errexit` default=`partial` posix=`partial`
-  tests: `bash-man-seto-surface.sh`
-  note: Row-level evidence mapping assigned from requirement->case rules. Evidence run has failing/timeout tests: bash-man-seto-surface.sh
-- `C1.OPT.SETO.ERRTRACE` `errtrace` default=`partial` posix=`partial`
-  tests: `bash-man-seto-surface.sh`
-  note: Row-level evidence mapping assigned from requirement->case rules. Evidence run has failing/timeout tests: bash-man-seto-surface.sh
-- `C1.OPT.SETO.FUNCTRACE` `functrace` default=`partial` posix=`partial`
-  tests: `bash-man-seto-surface.sh`
-  note: Row-level evidence mapping assigned from requirement->case rules. Evidence run has failing/timeout tests: bash-man-seto-surface.sh
-- `C1.OPT.SETO.HASHALL` `hashall` default=`partial` posix=`partial`
-  tests: `bash-man-seto-surface.sh`
-  note: Row-level evidence mapping assigned from requirement->case rules. Evidence run has failing/timeout tests: bash-man-seto-surface.sh
-- `C1.OPT.SETO.HISTEXPAND` `histexpand` default=`partial` posix=`partial`
-  tests: `bash-man-seto-surface.sh`
-  note: Row-level evidence mapping assigned from requirement->case rules. Evidence run has failing/timeout tests: bash-man-seto-surface.sh
-- `C1.OPT.SETO.HISTORY` `history` default=`partial` posix=`partial`
-  tests: `bash-man-seto-surface.sh`
-  note: Row-level evidence mapping assigned from requirement->case rules. Evidence run has failing/timeout tests: bash-man-seto-surface.sh
-- `C1.OPT.SETO.IGNOREEOF` `ignoreeof` default=`partial` posix=`partial`
-  tests: `bash-man-seto-surface.sh`
-  note: Row-level evidence mapping assigned from requirement->case rules. Evidence run has failing/timeout tests: bash-man-seto-surface.sh
-- `C1.OPT.SETO.INTERACTIVE_COMMENTS` `interactive-comments` default=`partial` posix=`partial`
-  tests: `bash-man-seto-surface.sh`
-  note: Row-level evidence mapping assigned from requirement->case rules. Evidence run has failing/timeout tests: bash-man-seto-surface.sh
-- `C1.OPT.SETO.KEYWORD` `keyword` default=`partial` posix=`partial`
-  tests: `bash-man-seto-surface.sh`
-  note: Row-level evidence mapping assigned from requirement->case rules. Evidence run has failing/timeout tests: bash-man-seto-surface.sh
-- `C1.OPT.SETO.MONITOR` `monitor` default=`partial` posix=`partial`
-  tests: `bash-man-seto-surface.sh`
-  note: Row-level evidence mapping assigned from requirement->case rules. Evidence run has failing/timeout tests: bash-man-seto-surface.sh
-- `C1.OPT.SETO.NOCLOBBER` `noclobber` default=`partial` posix=`partial`
-  tests: `bash-man-seto-surface.sh`
-  note: Row-level evidence mapping assigned from requirement->case rules. Evidence run has failing/timeout tests: bash-man-seto-surface.sh
-- `C1.OPT.SETO.NOEXEC` `noexec` default=`partial` posix=`partial`
-  tests: `bash-man-seto-surface.sh`
-  note: Row-level evidence mapping assigned from requirement->case rules. Evidence run has failing/timeout tests: bash-man-seto-surface.sh
-- `C1.OPT.SETO.NOGLOB` `noglob` default=`partial` posix=`partial`
-  tests: `bash-man-seto-surface.sh`
-  note: Row-level evidence mapping assigned from requirement->case rules. Evidence run has failing/timeout tests: bash-man-seto-surface.sh
-- `C1.OPT.SETO.NOLOG` `nolog` default=`partial` posix=`partial`
-  tests: `bash-man-seto-surface.sh`
-  note: Row-level evidence mapping assigned from requirement->case rules. Evidence run has failing/timeout tests: bash-man-seto-surface.sh
-- `C1.OPT.SETO.NOTIFY` `notify` default=`partial` posix=`partial`
-  tests: `bash-man-seto-surface.sh`
-  note: Row-level evidence mapping assigned from requirement->case rules. Evidence run has failing/timeout tests: bash-man-seto-surface.sh
-- `C1.OPT.SETO.NOUNSET` `nounset` default=`partial` posix=`partial`
-  tests: `bash-man-seto-surface.sh`
-  note: Row-level evidence mapping assigned from requirement->case rules. Evidence run has failing/timeout tests: bash-man-seto-surface.sh
-- `C1.OPT.SETO.ONECMD` `onecmd` default=`partial` posix=`partial`
-  tests: `bash-man-seto-surface.sh`
-  note: Row-level evidence mapping assigned from requirement->case rules. Evidence run has failing/timeout tests: bash-man-seto-surface.sh
-- `C1.OPT.SETO.PHYSICAL` `physical` default=`partial` posix=`partial`
-  tests: `bash-man-seto-surface.sh`
-  note: Row-level evidence mapping assigned from requirement->case rules. Evidence run has failing/timeout tests: bash-man-seto-surface.sh
-- `C1.OPT.SETO.PIPEFAIL` `pipefail` default=`partial` posix=`partial`
-  tests: `bash-man-seto-surface.sh`
-  note: Row-level evidence mapping assigned from requirement->case rules. Evidence run has failing/timeout tests: bash-man-seto-surface.sh
-- `C1.OPT.SETO.POSIX` `posix` default=`partial` posix=`partial`
-  tests: `bash-man-seto-surface.sh`
-  note: Row-level evidence mapping assigned from requirement->case rules. Evidence run has failing/timeout tests: bash-man-seto-surface.sh
-- `C1.OPT.SETO.PRIVILEGED` `privileged` default=`partial` posix=`partial`
-  tests: `bash-man-seto-surface.sh`
-  note: Row-level evidence mapping assigned from requirement->case rules. Evidence run has failing/timeout tests: bash-man-seto-surface.sh
-- `C1.OPT.SETO.VERBOSE` `verbose` default=`partial` posix=`partial`
-  tests: `bash-man-seto-surface.sh`
-  note: Row-level evidence mapping assigned from requirement->case rules. Evidence run has failing/timeout tests: bash-man-seto-surface.sh
-- `C1.OPT.SETO.VI` `vi` default=`partial` posix=`partial`
-  tests: `bash-man-seto-surface.sh`
-  note: Row-level evidence mapping assigned from requirement->case rules. Evidence run has failing/timeout tests: bash-man-seto-surface.sh
-- `C1.OPT.SETO.XTRACE` `xtrace` default=`partial` posix=`partial`
-  tests: `bash-man-seto-surface.sh`
-  note: Row-level evidence mapping assigned from requirement->case rules. Evidence run has failing/timeout tests: bash-man-seto-surface.sh
 
 ### Category 3
 

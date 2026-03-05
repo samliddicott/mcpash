@@ -482,30 +482,52 @@ class Runtime:
     _thread_diag_lock = threading.Lock()
     _thread_diag_emitted: set[str] = set()
     SET_O_LIST_ORDER: List[str] = [
-        "errexit",
-        "noglob",
-        "ignoreeof",
-        "interactive",
-        "monitor",
-        "noexec",
-        "stdin",
-        "xtrace",
-        "verbose",
-        "vi",
-        "emacs",
-        "noclobber",
         "allexport",
+        "braceexpand",
+        "emacs",
+        "errexit",
+        "errtrace",
+        "functrace",
+        "hashall",
+        "histexpand",
+        "history",
+        "ignoreeof",
+        "interactive-comments",
+        "keyword",
+        "monitor",
+        "noclobber",
+        "noexec",
+        "noglob",
         "notify",
         "nounset",
-        "privileged",
-        "nolog",
-        "debug",
+        "onecmd",
+        "physical",
         "pipefail",
         "posix",
+        "privileged",
+        "verbose",
+        "vi",
+        "xtrace",
+        # Kept for internal compatibility/debug.
+        "interactive",
+        "stdin",
+        "nolog",
+        "debug",
     ]
     SET_O_OPTION_MAP: Dict[str, str] = {
         "allexport": "a",
+        "braceexpand": "B",
+        "emacs": "E",
         "errexit": "e",
+        "errtrace": "E",
+        "functrace": "T",
+        "hashall": "h",
+        "histexpand": "H",
+        "history": "history",
+        "interactive-comments": "interactive-comments",
+        "keyword": "k",
+        "onecmd": "t",
+        "physical": "P",
         "noglob": "f",
         "noexec": "n",
         "nounset": "u",
@@ -513,7 +535,6 @@ class Runtime:
         "xtrace": "x",
         "noclobber": "C",
         "vi": "V",
-        "emacs": "E",
         "interactive": "i",
         "monitor": "m",
         "notify": "b",
@@ -1449,6 +1470,14 @@ class Runtime:
 
     def _exec_asdl_command(self, node: dict[str, Any]) -> int:
         t = node.get("type")
+        if self.options.get("n", False):
+            if t == "command.Func":
+                name_tok = node.get("name")
+                name = self._asdl_token_text(name_tok)
+                body = node.get("body")
+                if name and isinstance(body, dict):
+                    self.functions_asdl[name] = body
+            return 0
         if t == "command.Simple":
             return self._exec_asdl_simple_command(node)
         if t == "command.Redirect":
@@ -4210,6 +4239,10 @@ class Runtime:
         return False
 
     def _exec_command(self, node: Command) -> int:
+        if self.options.get("n", False):
+            if isinstance(node, FunctionDef):
+                self.functions[node.name] = node.body
+            return 0
         if isinstance(node, GroupCommand):
             return self._exec_list(node.body)
         if isinstance(node, SubshellCommand):
