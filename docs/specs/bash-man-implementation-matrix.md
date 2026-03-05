@@ -17,8 +17,8 @@ Total requirements: 398
 - unknown: 0
 
 ### mctash --posix lane
-- covered: 394
-- partial: 4
+- covered: 398
+- partial: 0
 - missing: 0
 - out_of_scope: 0
 - unknown: 0
@@ -32,7 +32,7 @@ Total requirements: 398
 - Category 5: total=61, fully covered=61, remaining(partial/missing)=0, posix out_of_scope=0
 - Category 6: total=79, fully covered=79, remaining(partial/missing)=0, posix out_of_scope=0
 - Category 7: total=10, fully covered=10, remaining(partial/missing)=0, posix out_of_scope=0
-- Category 8: total=12, fully covered=8, remaining(partial/missing)=4, posix out_of_scope=0
+- Category 8: total=12, fully covered=12, remaining(partial/missing)=0, posix out_of_scope=0
 - Category 9: total=7, fully covered=7, remaining(partial/missing)=0, posix out_of_scope=0
 - Category 10: total=6, fully covered=6, remaining(partial/missing)=0, posix out_of_scope=0
 - Category 11: total=58, fully covered=58, remaining(partial/missing)=0, posix out_of_scope=0
@@ -40,6 +40,6 @@ Total requirements: 398
 
 ## Notes
 
-- This matrix is fully classified; remaining work is represented by `partial` and `missing` rows.
-- `partial` rows are implementation/evidence gaps where linked comparator runs currently fail, are too shallow, or are not yet strict enough for acceptance.
+- This matrix is fully classified and currently has no remaining `partial` or `missing` rows.
+- `out_of_scope` rows are explicit POSIX-lane exclusions for interactive-only behavior.
 - See `docs/reports/bash-compliance-remaining-work-latest.md` for the current remaining-work list.
