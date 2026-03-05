@@ -1,0 +1,234 @@
+{
+  "bash-builtin-completion.sh": {
+    "cmd": "bash /home/sam/Projects/pybash/tests/diff/run.sh --case bash-builtin-completion",
+    "rc": 0,
+    "sec": 0.95,
+    "status": "pass",
+    "stderr": "",
+    "stdout": ""
+  },
+  "bash-builtin-declare-typeset-local.sh": {
+    "cmd": "bash /home/sam/Projects/pybash/tests/diff/run.sh --case bash-builtin-declare-typeset-local",
+    "rc": 0,
+    "sec": 0.61,
+    "status": "pass",
+    "stderr": "",
+    "stdout": ""
+  },
+  "bash-compat-param-array-hash-extended.sh": {
+    "cmd": "bash /home/sam/Projects/pybash/tests/diff/run.sh --case bash-compat-param-array-hash-extended",
+    "rc": 1,
+    "sec": 0.57,
+    "status": "fail",
+    "stderr": "bash-compat-param-array-hash-extended: exit status mismatch bash=0 mctash=1\nbash-compat-param-array-hash-extended: stdout mismatch\nbash-compat-param-array-hash-extended: stderr mismatch\n",
+    "stdout": ""
+  },
+  "bash-compat-param-positional-extended.sh": {
+    "cmd": "bash /home/sam/Projects/pybash/tests/diff/run.sh --case bash-compat-param-positional-extended",
+    "rc": 0,
+    "sec": 0.54,
+    "status": "pass",
+    "stderr": "",
+    "stdout": ""
+  },
+  "bash-man-expansion-core.sh": {
+    "cmd": "bash /home/sam/Projects/pybash/tests/diff/run.sh --case bash-man-expansion-core",
+    "rc": 0,
+    "sec": 0.56,
+    "status": "pass",
+    "stderr": "",
+    "stdout": ""
+  },
+  "bash-man-expansion-process-subst.sh": {
+    "cmd": "bash /home/sam/Projects/pybash/tests/diff/run.sh --case bash-man-expansion-process-subst",
+    "rc": null,
+    "sec": 120.07,
+    "status": "timeout",
+    "stderr": "",
+    "stdout": ""
+  },
+  "bash-man-grammar-core.sh": {
+    "cmd": "bash /home/sam/Projects/pybash/tests/diff/run.sh --case bash-man-grammar-core",
+    "rc": 0,
+    "sec": 0.65,
+    "status": "pass",
+    "stderr": "",
+    "stdout": ""
+  },
+  "bash-man-redir-bash-ext.sh": {
+    "cmd": "bash /home/sam/Projects/pybash/tests/diff/run.sh --case bash-man-redir-bash-ext",
+    "rc": 1,
+    "sec": 0.57,
+    "status": "fail",
+    "stderr": "bash-man-redir-bash-ext: exit status mismatch bash=0 mctash=127\nbash-man-redir-bash-ext: stdout mismatch\nbash-man-redir-bash-ext: stderr mismatch\n",
+    "stdout": ""
+  },
+  "bash-man-seto-surface.sh": {
+    "cmd": "bash /home/sam/Projects/pybash/tests/diff/run.sh --case bash-man-seto-surface",
+    "rc": 1,
+    "sec": 1.26,
+    "status": "fail",
+    "stderr": "bash-man-seto-surface: stdout mismatch\nbash-man-seto-surface: stderr mismatch\n",
+    "stdout": ""
+  },
+  "bash-man-shopt-surface.sh": {
+    "cmd": "bash /home/sam/Projects/pybash/tests/diff/run.sh --case bash-man-shopt-surface",
+    "rc": 0,
+    "sec": 0.9,
+    "status": "pass",
+    "stderr": "",
+    "stdout": ""
+  },
+  "bash-man-variables-surface.sh": {
+    "cmd": "bash /home/sam/Projects/pybash/tests/diff/run.sh --case bash-man-variables-surface",
+    "rc": 1,
+    "sec": 0.84,
+    "status": "fail",
+    "stderr": "bash-man-variables-surface: exit status mismatch bash=0 mctash=2\nbash-man-variables-surface: stderr mismatch\n",
+    "stdout": ""
+  },
+  "man-ash-glob-full-matrix.sh": {
+    "cmd": "bash /home/sam/Projects/pybash/tests/diff/run.sh --case man-ash-glob-full-matrix",
+    "rc": 0,
+    "sec": 0.74,
+    "status": "pass",
+    "stderr": "",
+    "stdout": ""
+  },
+  "man-ash-grammar-word-matrix.sh": {
+    "cmd": "bash /home/sam/Projects/pybash/tests/diff/run.sh --case man-ash-grammar-word-matrix",
+    "rc": 0,
+    "sec": 0.56,
+    "status": "pass",
+    "stderr": "",
+    "stdout": ""
+  },
+  "man-ash-jobs.sh": {
+    "cmd": "bash /home/sam/Projects/pybash/tests/diff/run.sh --case man-ash-jobs",
+    "rc": 0,
+    "sec": 0.91,
+    "status": "pass",
+    "stderr": "",
+    "stdout": ""
+  },
+  "man-ash-kill-wait.sh": {
+    "cmd": "bash /home/sam/Projects/pybash/tests/diff/run.sh --case man-ash-kill-wait",
+    "rc": 0,
+    "sec": 2.58,
+    "status": "pass",
+    "stderr": "",
+    "stdout": ""
+  },
+  "man-ash-redir-heredoc-matrix.sh": {
+    "cmd": "bash /home/sam/Projects/pybash/tests/diff/run.sh --case man-ash-redir-heredoc-matrix",
+    "rc": 0,
+    "sec": 1.22,
+    "status": "pass",
+    "stderr": "",
+    "stdout": ""
+  },
+  "man-ash-set-monitor.sh": {
+    "cmd": "bash /home/sam/Projects/pybash/tests/diff/run.sh --case man-ash-set-monitor",
+    "rc": 0,
+    "sec": 0.68,
+    "status": "pass",
+    "stderr": "",
+    "stdout": ""
+  },
+  "man-ash-trap-delivery.sh": {
+    "cmd": "bash /home/sam/Projects/pybash/tests/diff/run.sh --case man-ash-trap-delivery",
+    "rc": 0,
+    "sec": 0.55,
+    "status": "pass",
+    "stderr": "",
+    "stdout": ""
+  },
+  "man-ash-trap-signal-matrix.sh": {
+    "cmd": "bash /home/sam/Projects/pybash/tests/diff/run.sh --case man-ash-trap-signal-matrix",
+    "rc": 0,
+    "sec": 0.58,
+    "status": "pass",
+    "stderr": "",
+    "stdout": ""
+  },
+  "man-ash-var-ops-matrix.sh": {
+    "cmd": "bash /home/sam/Projects/pybash/tests/diff/run.sh --case man-ash-var-ops-matrix",
+    "rc": 0,
+    "sec": 0.58,
+    "status": "pass",
+    "stderr": "",
+    "stdout": ""
+  },
+  "man-bash-posix-08-declare-posix-policy.sh": {
+    "cmd": "bash /home/sam/Projects/pybash/tests/diff/run.sh --case man-bash-posix-08-declare-posix-policy",
+    "rc": 0,
+    "sec": 0.52,
+    "status": "pass",
+    "stderr": "",
+    "stdout": ""
+  },
+  "man-bash-posix-10-jobs-fg-bg-interactive.sh": {
+    "cmd": "bash /home/sam/Projects/pybash/tests/diff/run.sh --case man-bash-posix-10-jobs-fg-bg-interactive",
+    "rc": 0,
+    "sec": 0.78,
+    "status": "pass",
+    "stderr": "",
+    "stdout": ""
+  },
+  "man-bash-posix-12-history-suspend-logout.sh": {
+    "cmd": "bash /home/sam/Projects/pybash/tests/diff/run.sh --case man-bash-posix-12-history-suspend-logout",
+    "rc": 0,
+    "sec": 0.66,
+    "status": "pass",
+    "stderr": "",
+    "stdout": ""
+  },
+  "man-bash-posix-13-exec-errors-signals-jobs.sh": {
+    "cmd": "bash /home/sam/Projects/pybash/tests/diff/run.sh --case man-bash-posix-13-exec-errors-signals-jobs",
+    "rc": 0,
+    "sec": 1.32,
+    "status": "pass",
+    "stderr": "",
+    "stdout": ""
+  },
+  "man-bash-posix-14-env-exec-flow.sh": {
+    "cmd": "bash /home/sam/Projects/pybash/tests/diff/run.sh --case man-bash-posix-14-env-exec-flow",
+    "rc": 0,
+    "sec": 1.3,
+    "status": "pass",
+    "stderr": "",
+    "stdout": ""
+  },
+  "run_bash_invocation_option_matrix.sh": {
+    "cmd": "bash /home/sam/Projects/pybash/tests/compat/run_bash_invocation_option_matrix.sh",
+    "rc": 1,
+    "sec": 8.39,
+    "status": "fail",
+    "stderr": "",
+    "stdout": "args/bash stdout\n[MISMATCH] short-s-with-args/bash stderr\n[MISMATCH] long-verbose/bash rc bash=0 mctash=2\n[MISMATCH] long-verbose/bash stdout\n[MISMATCH] long-verbose/bash stderr\n[MISMATCH] short-D/bash rc bash=0 mctash=2\n[MISMATCH] short-D/bash stdout\n[MISMATCH] short-D/bash stderr\n[MISMATCH] long-dump-strings/bash rc bash=0 mctash=2\n[MISMATCH] long-dump-strings/bash stdout\n[MISMATCH] long-dump-strings/bash stderr\n[MISMATCH] long-dump-po/bash rc bash=0 mctash=2\n[MISMATCH] long-dump-po/bash stdout\n[MISMATCH] long-dump-po/bash stderr\n[MISMATCH] short-s-with-args/posix rc bash=0 mctash=1\n[MISMATCH] short-s-with-args/posix stdout\n[MISMATCH] short-s-with-args/posix stderr\n[MISMATCH] long-verbose/posix rc bash=0 mctash=2\n[MISMATCH] long-verbose/posix stdout\n[MISMATCH] long-verbose/posix stderr\n[MISMATCH] short-D/posix rc bash=0 mctash=2\n[MISMATCH] short-D/posix stdout\n[MISMATCH] short-D/posix stderr\n[MISMATCH] long-dump-strings/posix rc bash=0 mctash=2\n[MISMATCH] long-dump-strings/posix stdout\n[MISMATCH] long-dump-strings/posix stderr\n[MISMATCH] long-dump-po/posix rc bash=0 mctash=2\n[MISMATCH] long-dump-po/posix stdout\n[MISMATCH] long-dump-po/posix stderr\n[FAIL] invocation option matrix\n"
+  },
+  "run_completion_interactive_matrix.sh": {
+    "cmd": "bash /home/sam/Projects/pybash/tests/compat/run_completion_interactive_matrix.sh",
+    "rc": 0,
+    "sec": 0.54,
+    "status": "pass",
+    "stderr": "",
+    "stdout": "[PASS] completion interactive matrix\n"
+  },
+  "run_interactive_ux_matrix.sh": {
+    "cmd": "bash /home/sam/Projects/pybash/tests/compat/run_interactive_ux_matrix.sh",
+    "rc": 0,
+    "sec": 0.59,
+    "status": "pass",
+    "stderr": "",
+    "stdout": "[PASS] interactive UX matrix\n"
+  },
+  "run_startup_mode_matrix.sh": {
+    "cmd": "bash /home/sam/Projects/pybash/tests/compat/run_startup_mode_matrix.sh",
+    "rc": 0,
+    "sec": 2.33,
+    "status": "pass",
+    "stderr": "",
+    "stdout": "[PASS] startup mode matrix\n"
+  }
+}
