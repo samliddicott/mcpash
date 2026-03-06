@@ -57,3 +57,14 @@ This note maps `JOB CONTROL` requirement rows `C8.JOB.14` through `C8.JOB.29` to
 - Full parity for `C8.JOB.17` requires explicit foreground process-group control (`tcsetpgrp`) and robust restoration paths.
 - `C8.JOB.18-19` may need tighter PTY harness control to deterministically trigger SIGTTIN/SIGTTOU.
 - `C8.JOB.21` (`^Y`) is terminal-driver dependent and should be validated with strict comparator scope notes.
+
+## Progress Notes
+- Implemented resolver support for jobspec core and match forms:
+  - `%%`, `%+`, bare `%`, `%-`
+  - `%name` prefix match
+  - `%?text` substring match
+- Implemented `%jobspec` and `%jobspec &` command-form dispatch hooks in list-item execution paths.
+- Added comparator cases:
+  - `tests/diff/cases/bash-man-jobcontrol-jobspec-core.sh`
+  - `tests/diff/cases/bash-man-jobcontrol-jobspec-match.sh`
+- `C8.JOB.24` remains partial pending deeper command-form parity (especially redirection + interactive nuances).

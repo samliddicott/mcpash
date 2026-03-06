@@ -749,6 +749,8 @@ class Runtime:
         self._bg_pids: Dict[int, int] = {}
         self._bg_pid_to_job: Dict[int, int] = {}
         self._bg_started_at: Dict[int, float] = {}
+        self._bg_cmdline: Dict[int, str] = {}
+        self._last_job_lookup_error: str | None = None
         self._coproc_procs: Dict[int, subprocess.Popen] = {}
         self._thread_ctx = threading.local()
         self._fd_redirect_depth: int = 0
@@ -1158,7 +1160,57 @@ class Runtime:
         self._run_pending_traps()
         return status
 
+    def _jobspec_token_from_ast_and_or(self, node: Any) -> str | None:
+        if not isinstance(node, AndOr):
+            return None
+        if len(node.pipelines) != 1 or node.operators:
+            return None
+        pl = node.pipelines[0]
+        if pl.negate or len(pl.commands) != 1:
+            return None
+        cmd = pl.commands[0]
+        if not isinstance(cmd, SimpleCommand):
+            return None
+        if cmd.assignments or cmd.redirects:
+            return None
+        argv = self._expand_aliases(self._expand_argv(cmd.argv))
+        if len(argv) != 1:
+            return None
+        token = argv[0]
+        return token if token.startswith("%") else None
+
+    def _jobspec_token_from_asdl_and_or(self, node: dict[str, Any]) -> str | None:
+        if node.get("type") != "command.AndOr":
+            return None
+        children = node.get("children") or []
+        ops = node.get("ops") or []
+        if len(children) != 1 or ops:
+            return None
+        pl = children[0]
+        if not isinstance(pl, dict) or pl.get("type") != "command.Pipeline":
+            return None
+        if pl.get("negated"):
+            return None
+        cmds = pl.get("children") or []
+        if len(cmds) != 1:
+            return None
+        cmd = cmds[0]
+        if not isinstance(cmd, dict) or cmd.get("type") != "command.Simple":
+            return None
+        if (cmd.get("more_env") or []) or (cmd.get("redirects") or []):
+            return None
+        argv = self._expand_aliases(self._expand_asdl_simple_argv(cmd))
+        if len(argv) != 1:
+            return None
+        token = argv[0]
+        return token if token.startswith("%") else None
+
     def _exec_list_item(self, item) -> int:
+        jobspec_token = self._jobspec_token_from_ast_and_or(item.node)
+        if jobspec_token is not None:
+            if getattr(item, "background", False):
+                return self._run_bg_builtin([jobspec_token])
+            return self._run_fg([jobspec_token])
         if getattr(item, "background", False):
             # Fast path: backgrounded "echo" in tests should still emit output
             # even when the parent shell exits immediately.
@@ -1236,6 +1288,7 @@ class Runtime:
                         self._bg_pids[job_id] = proc.pid
                         self._bg_pid_to_job[proc.pid] = job_id
                         self._bg_started_at[job_id] = time.monotonic()
+                        self._bg_cmdline[job_id] = " ".join(argv)
                         self._last_bg_job = job_id
                         self._last_bg_pid = proc.pid
                         th.start()
@@ -1283,6 +1336,7 @@ class Runtime:
                 bg_rt._bg_pids = self._bg_pids
                 bg_rt._bg_pid_to_job = self._bg_pid_to_job
                 bg_rt._bg_started_at = self._bg_started_at
+                bg_rt._bg_cmdline = self._bg_cmdline
                 bg_rt._last_bg_job = self._last_bg_job
                 bg_rt._last_bg_pid = self._last_bg_pid
                 bg_rt._shared_store_path = self._shared_store_path
@@ -1302,6 +1356,7 @@ class Runtime:
             thread.daemon = True
             self._bg_jobs[job_id] = thread
             self._bg_started_at[job_id] = time.monotonic()
+            self._bg_cmdline[job_id] = "<background>"
             self._last_bg_job = job_id
             thread.start()
             # Best-effort: wait briefly for background job leader PID so $! is
@@ -1328,6 +1383,13 @@ class Runtime:
             child = item.get("child")
             if not isinstance(child, dict):
                 raise RuntimeError("invalid ASDL sentence node")
+            jobspec_token = self._jobspec_token_from_asdl_and_or(child)
+            if jobspec_token is not None:
+                if term == "&":
+                    return self._run_bg_builtin([jobspec_token])
+                status = self._run_fg([jobspec_token])
+                self._drain_process_subst()
+                return status
             if term == "&":
                 return self._exec_asdl_background(child)
             status = self._exec_asdl_list_item(child)
@@ -1335,6 +1397,11 @@ class Runtime:
             return status
         if t != "command.AndOr":
             raise RuntimeError(f"invalid ASDL list item: {t}")
+        jobspec_token = self._jobspec_token_from_asdl_and_or(item)
+        if jobspec_token is not None:
+            status = self._run_fg([jobspec_token])
+            self._drain_process_subst()
+            return status
         status = self._exec_asdl_and_or(item)
         self._drain_process_subst()
         return status
@@ -1708,6 +1775,7 @@ class Runtime:
             self._bg_pids[job_id] = proc.pid
             self._bg_pid_to_job[proc.pid] = job_id
             self._bg_started_at[job_id] = time.time()
+            self._bg_cmdline[job_id] = f"coproc {name}"
             self._coproc_procs[job_id] = proc
 
             def _wait_coproc() -> None:
@@ -2134,6 +2202,7 @@ class Runtime:
                     self._bg_pids[job_id] = proc.pid
                     self._bg_pid_to_job[proc.pid] = job_id
                     self._bg_started_at[job_id] = time.monotonic()
+                    self._bg_cmdline[job_id] = " ".join(argv)
                     self._last_bg_job = job_id
                     self._last_bg_pid = proc.pid
                     th.start()
@@ -2177,6 +2246,7 @@ class Runtime:
             bg_rt._bg_pids = self._bg_pids
             bg_rt._bg_pid_to_job = self._bg_pid_to_job
             bg_rt._bg_started_at = self._bg_started_at
+            bg_rt._bg_cmdline = self._bg_cmdline
             bg_rt._last_bg_job = self._last_bg_job
             bg_rt._last_bg_pid = self._last_bg_pid
             bg_rt._shared_store_path = self._shared_store_path
@@ -2194,6 +2264,7 @@ class Runtime:
         thread = threading.Thread(target=_run_bg, daemon=True)
         self._bg_jobs[job_id] = thread
         self._bg_started_at[job_id] = time.monotonic()
+        self._bg_cmdline[job_id] = self._asdl_command_to_sh_source(child)
         self._last_bg_job = job_id
         thread.start()
         deadline = time.monotonic() + 0.1
@@ -5641,6 +5712,7 @@ class Runtime:
                         self._bg_pids[job_id] = proc.pid
                         self._bg_pid_to_job[proc.pid] = job_id
                         self._bg_started_at.setdefault(job_id, time.monotonic())
+                        self._bg_cmdline.setdefault(job_id, " ".join(argv))
                         if job_id == self._last_bg_job:
                             self._last_bg_pid = proc.pid
                     sent_sigint = False
@@ -5791,6 +5863,8 @@ class Runtime:
         return status
 
     def _run_wait(self, args: List[str]) -> int:
+        wait_for_termination = False
+
         def wait_job(job_id: int) -> int:
             th = self._bg_jobs.get(job_id)
             if th is not None:
@@ -5806,6 +5880,21 @@ class Runtime:
                 return 128 + (-st)
             return st
 
+        i = 0
+        while i < len(args):
+            a = args[i]
+            if a == "-f":
+                wait_for_termination = True
+                i += 1
+                continue
+            if a == "--":
+                i += 1
+                break
+            if a.startswith("-"):
+                return 2
+            break
+        args = args[i:]
+
         if not args:
             last = 0
             for job_id in sorted(self._bg_jobs.keys()):
@@ -5815,28 +5904,10 @@ class Runtime:
             return last
         last = 0
         for arg in args:
-            if arg == "%%":
-                if self._last_bg_job is None:
-                    return 127
-                job_id = self._last_bg_job
-            else:
-                token = arg[1:] if arg.startswith("%") else arg
-                if not token.isdigit():
-                    return 127
-                token_i = int(token)
-                if arg.startswith("%"):
-                    job_id = token_i
-                elif token_i in self._bg_jobs or token_i in self._bg_status:
-                    job_id = token_i
-                else:
-                    job_id = self._bg_pid_to_job.get(token_i, -1)
-                    if job_id < 0:
-                        for jid, pid in self._bg_pids.items():
-                            if pid == token_i:
-                                job_id = jid
-                                break
-                    if job_id < 0:
-                        return 127
+            _ = wait_for_termination
+            job_id = self._resolve_job_id(arg)
+            if job_id is None:
+                return 127
             if job_id not in self._bg_jobs and job_id not in self._bg_status:
                 return 127
             last = wait_job(job_id)
@@ -5844,9 +5915,46 @@ class Runtime:
                 return last
         return last
 
+    def _active_job_ids(self) -> list[int]:
+        return sorted(set(self._bg_jobs.keys()) | set(self._bg_status.keys()))
+
+    def _jobs_by_recency(self) -> list[int]:
+        ids = self._active_job_ids()
+        return sorted(ids, key=lambda jid: (self._bg_started_at.get(jid, 0.0), jid), reverse=True)
+
+    def _current_job_id(self) -> int | None:
+        ordered = self._jobs_by_recency()
+        return ordered[0] if ordered else None
+
+    def _previous_job_id(self) -> int | None:
+        ordered = self._jobs_by_recency()
+        return ordered[1] if len(ordered) > 1 else None
+
+    def _resolve_named_jobspec(self, body: str) -> int | None:
+        self._last_job_lookup_error = None
+        if not body:
+            return self._current_job_id()
+        if body.startswith("?"):
+            needle = body[1:]
+            matches = [jid for jid in self._active_job_ids() if needle in self._bg_cmdline.get(jid, "")]
+        else:
+            matches = [jid for jid in self._active_job_ids() if self._bg_cmdline.get(jid, "").startswith(body)]
+        if len(matches) == 1:
+            return matches[0]
+        if len(matches) > 1:
+            self._last_job_lookup_error = "ambiguous"
+        return None
+
     def _resolve_job_id(self, token: str | None) -> int | None:
-        if token is None or token == "%%":
-            return self._last_bg_job
+        self._last_job_lookup_error = None
+        if token is None or token in {"%%", "%+", "%"}:
+            return self._current_job_id()
+        if token == "%-":
+            return self._previous_job_id()
+        if token.startswith("%?"):
+            return self._resolve_named_jobspec(token[1:])
+        if token.startswith("%") and not token[1:].isdigit():
+            return self._resolve_named_jobspec(token[1:])
         raw = token[1:] if token.startswith("%") else token
         if not raw.isdigit():
             return None
@@ -5902,7 +6010,7 @@ class Runtime:
                 line=self.current_line,
                 context="fg",
             )
-            return 2
+            return 1 if self._diag.style == "bash" else 2
         job_id = self._resolve_job_id(args[0] if args else None)
         if job_id is None:
             return 1
@@ -5927,7 +6035,7 @@ class Runtime:
                 line=self.current_line,
                 context="bg",
             )
-            return 2
+            return 1 if self._diag.style == "bash" else 2
         job_id = self._resolve_job_id(args[0] if args else None)
         if job_id is None:
             return 1
@@ -11115,6 +11223,7 @@ class Runtime:
             self._bg_status.pop(jid, None)
             pid = self._bg_pids.pop(jid, None)
             self._bg_started_at.pop(jid, None)
+            self._bg_cmdline.pop(jid, None)
             self._disowned_nohup.discard(jid)
             if pid is not None:
                 self._bg_pid_to_job.pop(pid, None)
