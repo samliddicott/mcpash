@@ -6,11 +6,13 @@ This report tracks observed gaps from runnable evidence.
 
 ## Explicit Known Gaps
 
-None at current HEAD.
+1. Interactive SIGINT foreground-command continuation (`C8.JOB.13`) is partial.
+   - Evidence: `tests/compat/run_interactive_sigint_matrix.sh`
+   - Observed behavior: PTY Ctrl-C probe currently shows mctash foreground external command interruptibility diverging from bash.
 
 ## Known Unknowns (Compliance-Risk Tracking)
 
-None currently open in this board.
+None currently open in this board beyond explicit gap above.
 
 ## Basis
 

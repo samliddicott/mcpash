@@ -636,10 +636,22 @@ def _expand_prompt(rt: Runtime, prompt: str) -> str:
                 out.append(cwd)
         elif nxt == "$":
             out.append("#" if os.geteuid() == 0 else "$")
+        elif nxt in {"[", "]"}:
+            # Non-printing markers for readline display width accounting.
+            # They are stripped from the rendered prompt text.
+            pass
         else:
             out.append(nxt)
         i += 2
-    return "".join(out)
+    expanded = "".join(out)
+    if rt._shopts.get("promptvars", False):
+        try:
+            # Prompt expansion should apply parameter / command / arithmetic
+            # substitution without field splitting/pathname expansion side effects.
+            expanded = rt._expand_assignment_word(expanded)
+        except Exception:
+            pass
+    return expanded
 
 
 def _expand_history_bang(rt: Runtime, line: str) -> tuple[str | None, str | None]:
@@ -728,6 +740,14 @@ def _run_interactive(rt: Runtime) -> int:
             code = int(e.code) if e.code is not None else 0
             rt.last_status = code
             return rt._run_exit_trap(code)
+        except KeyboardInterrupt:
+            print()
+            status = 130
+            rt.last_status = status
+            rt.last_nonzero_status = status
+            rt._trap_status_hint = status
+            buffer.clear()
+            continue
         rt.last_status = status
         if status != 0:
             rt.last_nonzero_status = status

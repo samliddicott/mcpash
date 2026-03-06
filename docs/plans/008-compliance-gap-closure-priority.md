@@ -78,3 +78,13 @@ Goal:
 - Upstream POSIX matrix: core 9/9 pass.
 - Report set consistent (no conflicting closure claims).
 - `make compliance-truth-gate` pass at HEAD.
+
+## Follow-Up Reopen (Detail-Level Man-Page Pass)
+
+Date reopened: 2026-03-06
+
+1. `C7.INT.11` added and covered:
+   - Prompt render-time expansion semantics (`PROMPTING`, `promptvars`) now have explicit row-level evidence.
+2. `C8.JOB.13` added and currently partial:
+   - Interactive Ctrl-C continuation for foreground external commands now has a dedicated PTY probe (`run_interactive_sigint_matrix.sh`).
+   - This is now a tracked parity gap, not an implicit assumption.

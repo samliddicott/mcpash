@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import re
 import sys
+import csv
 from pathlib import Path
 
 
@@ -28,6 +29,7 @@ def main() -> int:
     builtin = _read(ROOT / "docs/reports/bash-builtin-matrix-latest.md")
     remaining = _read(ROOT / "docs/reports/bash-compliance-remaining-work-latest.md")
     gaps = _read(ROOT / "docs/reports/bash-compliance-gaps-latest.md")
+    matrix_path = ROOT / "docs/specs/bash-man-implementation-matrix.tsv"
 
     upstream_fail = _extract_int(r"core failing rows:\s*(\d+)", upstream, "upstream core failing rows")
     man_rc = _extract_int(r"matrix exit code:\s*(\d+)", man, "man matrix exit code")
@@ -37,12 +39,21 @@ def main() -> int:
 
     hard_fail = upstream_fail != 0 or man_rc != 0 or man_mismatch != 0 or builtin_rc != 0
 
+    partial_rows = 0
+    with matrix_path.open(encoding="utf-8", errors="surrogateescape") as f:
+        r = csv.DictReader(f, delimiter="\t")
+        for row in r:
+            if row.get("mctash_default") == "partial" or row.get("mctash_posix") == "partial":
+                partial_rows += 1
+
     if hard_fail and remaining_total == 0:
         raise SystemExit("inconsistent reports: failing gates but remaining-work says 0")
-    if not hard_fail and remaining_total != 0:
-        raise SystemExit("inconsistent reports: gates are green but remaining-work is non-zero")
+    if (not hard_fail) and partial_rows == 0 and remaining_total != 0:
+        raise SystemExit("inconsistent reports: gates are green with no partial rows but remaining-work is non-zero")
+    if partial_rows > 0 and remaining_total == 0:
+        raise SystemExit("inconsistent reports: matrix has partial rows but remaining-work says 0")
 
-    if not hard_fail:
+    if not hard_fail and partial_rows == 0:
         if "None at current HEAD." not in gaps:
             raise SystemExit("inconsistent gap report: expected explicit no-gap statement")
     else:

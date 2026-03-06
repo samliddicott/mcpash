@@ -703,7 +703,7 @@ class Runtime:
         "nullglob": False,
         "progcomp": False,
         "progcomp_alias": False,
-        "promptvars": False,
+        "promptvars": True,
         "restricted_shell": False,
         "shift_verbose": False,
         "sourcepath": False,
@@ -5602,7 +5602,20 @@ class Runtime:
                         self._bg_started_at.setdefault(job_id, time.monotonic())
                         if job_id == self._last_bg_job:
                             self._last_bg_pid = proc.pid
-                    status = proc.wait()
+                    sent_sigint = False
+                    while True:
+                        try:
+                            status = proc.wait(timeout=0.1)
+                            break
+                        except subprocess.TimeoutExpired:
+                            # In interactive mode, ensure Ctrl-C interrupts the
+                            # foreground external command promptly.
+                            if (not sent_sigint) and ("INT" in self._pending_signals):
+                                try:
+                                    os.kill(proc.pid, signal.SIGINT)
+                                except OSError:
+                                    pass
+                                sent_sigint = True
                     if self._pending_signals and self.traps.get("TERM"):
                         if "TERM" in self._pending_signals:
                             self._run_pending_traps()

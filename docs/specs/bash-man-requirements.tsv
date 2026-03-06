@@ -397,3 +397,5 @@ C12.MATRIX.04	12	requirements-matrix	meta	matrix column: mctash --posix mode	pre
 C12.MATRIX.05	12	requirements-matrix	meta	matrix row must map to at least one executable case id	present	project policy	Requirements-trace discipline for exhaustive implementation tracking.
 C12.MATRIX.06	12	requirements-matrix	meta	matrix row must record POSIX classification	present	project policy	Requirements-trace discipline for exhaustive implementation tracking.
 C12.MATRIX.07	12	requirements-matrix	meta	matrix row must avoid grouped shorthand and etc	present	project policy	Requirements-trace discipline for exhaustive implementation tracking.
+C7.INT.11	7	interactive	interactive	PS1 parameter/command/arithmetic expansion at prompt render time (promptvars)	n/a	PROMPTING + Shell Variables	PROMPTING says prompt string is decoded then expanded subject to promptvars.
+C8.JOB.13	8	jobs-signals	behavior	interactive Ctrl-C during foreground external command returns prompt and keeps shell alive	present	SIGNALS + JOB CONTROL	SIGNALS describes SIGINT handling in interactive shells and interruptible wait behavior.

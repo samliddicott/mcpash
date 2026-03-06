@@ -5,7 +5,7 @@ OIL_MIN_PASS ?= 245
 OIL_MAX_FAIL ?= 0
 SUMMARY_FILE ?= docs/reports/parity-summary.json
 
-.PHONY: regressions bridge-conformance diff-conformance diff-parity-matrix read-matrix semantic-matrix jobs-interactive-matrix trap-noninteractive-matrix trap-interactive-matrix trap-variant-matrix completion-interactive-matrix interactive-ux-matrix startup-mode-matrix bash-invocation-option-matrix category-buckets-matrix bash-builtin-matrix busybox-conformance parity-summary parity-summary-validate perf-baseline perf-compare perf-variation stress-race stress-bridge compat-posix-bash compat-posix-bash-strict bash-posix-man-matrix bash-posix-upstream-matrix bash-tests-fetch compliance-truth-check compliance-truth-gate conformance conformance-full conformance-quick test-all
+.PHONY: regressions bridge-conformance diff-conformance diff-parity-matrix read-matrix semantic-matrix jobs-interactive-matrix trap-noninteractive-matrix trap-interactive-matrix trap-variant-matrix completion-interactive-matrix interactive-ux-matrix interactive-sigint-matrix startup-mode-matrix bash-invocation-option-matrix category-buckets-matrix bash-builtin-matrix busybox-conformance parity-summary parity-summary-validate perf-baseline perf-compare perf-variation stress-race stress-bridge compat-posix-bash compat-posix-bash-strict bash-posix-man-matrix bash-posix-upstream-matrix bash-tests-fetch compliance-truth-check compliance-truth-gate conformance conformance-full conformance-quick test-all
 
 regressions:
 	@./tests/regressions/run.sh
@@ -42,6 +42,9 @@ completion-interactive-matrix:
 
 interactive-ux-matrix:
 	@./tests/compat/run_interactive_ux_matrix.sh
+
+interactive-sigint-matrix:
+	@./tests/compat/run_interactive_sigint_matrix.sh
 
 startup-mode-matrix:
 	@./tests/compat/run_startup_mode_matrix.sh
