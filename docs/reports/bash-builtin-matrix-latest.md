@@ -1,12 +1,12 @@
 # Bash Builtin Matrix
 
-Generated: 2026-03-05 17:02:00Z
+Generated: 2026-03-06 09:08:50Z
 
 ## Summary
 
 - core lane rc: 0
 - bash-compat lane rc: 0
-- interactive lane rc: 0 (STRICT=1)
+- interactive lane rc: 0 (STRICT=0)
 - overall rc: 0
 - memory cap (KB): 786432
 - row timeout (s): 120

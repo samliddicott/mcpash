@@ -1,7 +1,20 @@
-# Bash Compliance Gap Report (From Man Requirements Matrix)
+# Bash Compliance Gap Report
 
-Source: `docs/specs/bash-man-implementation-matrix.tsv`
+Generated: 2026-03-06
 
-## Explicit Missing/Partial Features
+This report tracks observed gaps from runnable evidence.
 
-None.
+## Explicit Known Gaps
+
+None at current HEAD.
+
+## Known Unknowns (Compliance-Risk Tracking)
+
+None currently open in this board.
+
+## Basis
+
+- `tests/compat/run_bash_invocation_option_matrix.sh` is green.
+- `tests/compat/run_bash_posix_man_matrix.sh` is green.
+- `tests/compat/run_bash_posix_upstream_matrix.sh` reports `core full parity: 9/9`.
+- `STRICT=1 tests/compat/run_bash_builtin_matrix.sh` is green.

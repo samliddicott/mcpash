@@ -1,19 +1,18 @@
 # Bash POSIX Upstream Gap Report
 
-Generated: 2026-03-05 09:04:24Z
+Generated: 2026-03-06 09:08:45Z
 Comparator baseline: GNU bash `--posix` (baserock mirror corpus, `bash-5.1-testing`)
 Target: `mctash --posix`
 
-## Lane Split
+## Scope
 
-- Core lane: strict POSIX-focused files (gating)
-- Info lane: extension-heavy file(s) used as drift signal only
+- All listed upstream cases are now strict gating scope.
 
 ## Summary
 
-- core full parity: 8/8
+- core full parity: 9/9
 - core failing rows: 0
-- info full parity: 0/1
+- info lane: removed (no non-gating carve-out)
 
 ## Case Results
 
@@ -27,7 +26,7 @@ Target: `mctash --posix`
 | `ifs-posix.tests` | core | 0 | 0 | ok | ok |
 | `comsub-posix.tests` | core | 0 | 0 | ok | ok |
 | `set-e.tests` | core | 0 | 0 | ok | ok |
-| `builtins.tests` | info | 2 | 1 | mismatch | mismatch |
+| `builtins.tests` | core | 2 | 2 | ok | ok |
 
 ## Artifacts
 

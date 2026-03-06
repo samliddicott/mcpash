@@ -99,7 +99,9 @@ def main(argv: List[str] | None = None) -> int:
         rt.set_interactive_session(interactive)
         _source_startup_files(rt, mode=mode, login_shell=login_shell, interactive=interactive)
         if startup_changes.get("D", False):
-            return _emit_dump_strings(source, script_name or "-c", dump_mode)
+            # bash always labels `-c` input as "-c" in dump output, even when
+            # argv[0] for the script body is provided separately.
+            return _emit_dump_strings(source, "-c", dump_mode)
         try:
             parser_impl = Parser(source, aliases=rt.aliases)
             while True:

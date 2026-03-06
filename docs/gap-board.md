@@ -57,7 +57,7 @@ Reference summary source: `docs/posix-shall-trace.md`.
 | 2.6 Word Expansions | covered | `docs/posix-shall-trace.md` + differential expansion matrices (`man-ash-var-ops*.sh`, `man-ash-word-nesting*.sh`, `man-ash-glob-matrix.sh`, `man-ash-glob-full-matrix.sh`).
 | 2.7 Redirection | covered | `docs/posix-shall-trace.md` + `tests/diff/cases/man-ash-redir.sh`, `tests/diff/cases/man-ash-heredoc-edges.sh`, `tests/diff/cases/man-ash-redir-heredoc-matrix.sh`.
 | 2.8 Exit Status and Errors | covered | `docs/posix-shall-trace.md` + differential command-status cases.
-| 2.9 Shell Commands | partial | Narrowed to special-builtin full option-surface parity row in `docs/posix-shall-trace.md`; command grammar/control-flow rows are verified.
+| 2.9 Shell Commands | covered | Special-builtin option/error rows are now covered in `docs/posix-shall-trace.md`; command grammar/control-flow rows are verified.
 | 2.10 Shell Grammar | covered | `docs/posix-shall-trace.md`, `docs/grammar-production-checklist.md`, `tests/diff/cases/man-ash-prefix-suffix.sh`, `tests/diff/cases/man-ash-grammar-negative.sh`, `tests/diff/cases/man-ash-grammar-reserved.sh`.
 | 2.11 Signals/Traps | covered | `man-ash-trap*` differential corpus plus strict non-interactive and PTY-interactive matrices (`STRICT=1 make trap-noninteractive-matrix`, `STRICT=1 make trap-interactive-matrix`) for declared Linux comparator/signal scope.
 
@@ -71,7 +71,7 @@ Reference summary source: `docs/posix-shall-trace.md`.
 | Bash builtin extension tranche (`typeset/local`, `mapfile/readarray`, `enable/help`, `dirs/pushd/popd`, `disown`) | covered | `tests/diff/cases/bash-builtin-declare-typeset-local.sh`, `tests/diff/cases/bash-compat-mapfile-readarray.sh`, `tests/diff/cases/bash-builtin-enable.sh`, `tests/diff/cases/bash-builtin-help.sh`, `tests/diff/cases/bash-builtin-dirstack.sh`, `tests/diff/cases/bash-builtin-disown.sh`, `tests/compat/run_bash_builtin_matrix.sh` | Builtin parity lane now has dedicated matrix gate (`make bash-builtin-matrix`) with memory/time limits. |
 | Execution/environment/errors/signals/jobs category lane | covered | `tests/diff/cases/man-bash-posix-13-exec-errors-signals-jobs.sh`, `tests/diff/cases/man-bash-posix-14-env-exec-flow.sh`, `tests/compat/run_bash_posix_man_matrix.sh` | Adds explicit category-5 parity checks for command lookup/exec statuses, trap/wait/job paths, environment propagation, and pipeline exec-failure flow. |
 | Completion/readline interactive semantics (`bind/complete/compgen/compopt`) | covered | `tests/diff/cases/bash-builtin-completion.sh`, `tests/compat/run_completion_interactive_matrix.sh`, `tests/compat/run_interactive_ux_matrix.sh` | Covered for declared comparator scope: non-interactive behavior plus strict PTY marker checks for bind/query, completion status paths, prompt command, history bang expansion, and prompt expansion markers. |
-| Upstream `builtins.tests` strict lane | partial | `tests/compat/run_bash_posix_upstream_matrix.sh`, `docs/reports/bash-upstream-builtins-gap-latest.md` | Brought into strict gating scope (no info-lane carve-out). First implementation tranche landed (`type -t/-a`, `exec -a/-l/-c`, non-numeric `exit`, `declare -f`, special-builtin set correction); remaining diff buckets are tracked in report. |
+| Upstream `builtins.tests` strict lane | covered | `tests/compat/run_bash_posix_upstream_matrix.sh`, `docs/reports/bash-posix-upstream-gap-latest.md`, `docs/reports/bash-upstream-builtins-gap-latest.md` | Strict gating scope is active and current upstream core lane is green. |
 
 ## POSIX Lane In-Scope Interactive Closure
 
@@ -97,7 +97,7 @@ Evidence gates:
 
 | Bucket | Status | Next concrete step |
 |---|---|---|
-| Requirement-level trace completeness (all "shall" rows) | partial | Continue adding explicit case-id links for every remaining row in `docs/posix-shall-trace.md`.
+| Requirement-level trace completeness (all "shall" rows) | covered | `docs/posix-shall-trace.md` rows are now mapped with case evidence and kept aligned by compliance-truth gate.
 | Category-bucket gate closure (man-bash categories 1..9) | covered | `tests/compat/run_bash_category_bucket_matrix.sh` (`make category-buckets-matrix`) now enforces all buckets as green gates in declared scope.
 | Grammar production closure | covered | `docs/grammar-production-checklist.md`, `tests/diff/cases/man-ash-grammar-negative.sh`, `tests/diff/cases/man-ash-grammar-reserved.sh`, `tests/diff/cases/man-ash-grammar-word-matrix.sh`, `tests/diff/cases/man-ash-prefix-suffix.sh`.
 | Threaded-runtime parity checks | covered | Core cwd/fd/var isolation cases are covered (`man-ash-thread-cwd.sh`, `man-ash-thread-fd.sh`, `man-ash-thread-vars.sh`, `man-ash-thread-pipeline-cwd.sh`, `man-ash-thread-pipeline-fd.sh`) plus fallback-diag/process-subst regressions (`thread_unshare_fallback_diag`, `thread_unshare_forced_fail_diag`, `process_subst_*`, `thread_combined_bg_pipeline_process_subst`, `thread_multi_job_concurrency_isolation`, `thread_high_load_concurrency_isolation`, `thread_long_running_mixed_stress`, `monitor_mode_noninteractive_diag`, `monitor_mode_interactive_pty`, `monitor_mode_interactive_jobs_fg` in `tests/regressions/run.sh`) for declared Linux comparator scope.

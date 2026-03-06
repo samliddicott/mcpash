@@ -1049,10 +1049,13 @@ class Runtime:
             if self._diag.style != "bash" and self.c_string_mode and line > 0 and len(self.source_stack) <= 1:
                 line = line - 1
         if self._diag.style == "bash":
-            if line is not None:
-                prefix = f"{prefix}: line {line}"
-            if context:
-                prefix = f"{prefix}: {context}"
+            if context in {"eval", "command substitution"} and line is not None:
+                prefix = f"{prefix}: {context}: line {line}"
+            else:
+                if line is not None:
+                    prefix = f"{prefix}: line {line}"
+                if context:
+                    prefix = f"{prefix}: {context}"
         else:
             if context:
                 prefix = f"{prefix}: {context}"
@@ -4916,7 +4919,12 @@ class Runtime:
                 return 1
             args = argv[2:]
             status = self._run_source(path, args, builtin_name=name)
-            if status != 0 and self.options.get("posix", False) and not self.options.get("i", False):
+            if (
+                status != 0
+                and self.options.get("posix", False)
+                and not self.options.get("i", False)
+                and self._errexit_suppressed == 0
+            ):
                 raise SystemExit(status)
             return status
         if name == "local":
@@ -11324,11 +11332,7 @@ class Runtime:
                     print(f"{name} is a function", flush=True)
                     body = self.functions_asdl.get(name)
                     if isinstance(body, dict):
-                        try:
-                            ast_body = self._asdl_to_ast_list(body)
-                            print(self._format_ast_function(name, ast_body), flush=True)
-                        except Exception:
-                            print(self._format_asdl_function(name, body), flush=True)
+                        print(self._format_asdl_function(name, body), flush=True)
                 elif self._is_builtin_enabled(name):
                     print(f"{name} is a shell builtin", flush=True)
                 else:
@@ -11388,11 +11392,7 @@ class Runtime:
                     print(f"{name} is a function", flush=True)
                     body = self.functions_asdl.get(name)
                     if isinstance(body, dict):
-                        try:
-                            ast_body = self._asdl_to_ast_list(body)
-                            print(self._format_ast_function(name, ast_body), flush=True)
-                        except Exception:
-                            print(self._format_asdl_function(name, body), flush=True)
+                        print(self._format_asdl_function(name, body), flush=True)
                 elif kind == "builtin":
                     print(f"{name} is a shell builtin", flush=True)
                 else:
@@ -11544,6 +11544,8 @@ class Runtime:
             ops = node.get("ops") or []
             if not pipes:
                 return [pad + ":;"]
+            if len(pipes) == 1 and not ops:
+                return self._format_asdl_command_for_type(pipes[0], indent)
             parts: list[str] = []
             for i, p in enumerate(pipes):
                 seg = self._format_asdl_command_for_type(p, 0)
