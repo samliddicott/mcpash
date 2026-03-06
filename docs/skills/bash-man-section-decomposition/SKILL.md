@@ -15,6 +15,7 @@ This skill is for **spec decomposition first**. Runtime implementation is separa
 ## Outputs
 - New or refined `C*.***` requirement rows, one behavior per row.
 - Matching matrix rows with test IDs and honest status (`covered`/`partial`/`out_of_scope`).
+- A design-model note that maps requirement rows to runtime components/state transitions.
 - No grouped shorthand like “etc”.
 
 ## Process
@@ -36,6 +37,14 @@ This skill is for **spec decomposition first**. Runtime implementation is separa
    - each new requirement has matching matrix row
    - test IDs are explicit
    - statuses match real evidence
+9. Produce implementation design model (before runtime coding):
+   - write a short design note (e.g. `docs/design/<section>-runtime-model.md`)
+   - map each requirement row to:
+     - runtime ownership (module/function boundary)
+     - state model (states + transitions)
+     - invariants/preconditions
+     - comparator test case(s)
+   - explicitly call out rows blocked on architecture changes
 
 ## Evidence Rules
 - `covered` only if comparator-backed behavior case exists and passes.
@@ -70,11 +79,13 @@ PY
 
 ## Implementation Hand-off Template
 After decomposition, produce an implementation plan in this order:
-1. Add missing comparator tests for the new rows.
-2. Reclassify row statuses from evidence.
-3. Implement runtime semantics row-by-row.
-4. Re-run matrix gates and close rows.
+1. Add/update design model mapping each row to runtime semantics.
+2. Add missing comparator tests for the new rows.
+3. Reclassify row statuses from evidence.
+4. Implement runtime semantics row-by-row (by subsystem slices).
+5. Re-run matrix gates and close rows.
 
 ## Notes
 - Decomposition is a requirements activity, not a claim of compliance.
 - Keep row naming stable; prefer adding rows to mutating IDs.
+- If a row cannot be implemented without deeper architecture work, keep it `partial` and record the blocker in the design-model note.

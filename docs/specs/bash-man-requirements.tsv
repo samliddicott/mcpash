@@ -400,3 +400,19 @@ C12.MATRIX.06	12	requirements-matrix	meta	matrix row must record POSIX classific
 C12.MATRIX.07	12	requirements-matrix	meta	matrix row must avoid grouped shorthand and etc	present	project policy	Requirements-trace discipline for exhaustive implementation tracking.
 C7.INT.11	7	interactive	interactive	PS1 parameter/command/arithmetic expansion at prompt render time (promptvars)	n/a	PROMPTING + Shell Variables	PROMPTING says prompt string is decoded then expanded subject to promptvars.
 C8.JOB.13	8	jobs-signals	behavior	interactive Ctrl-C during foreground external command returns prompt and keeps shell alive	present	SIGNALS + JOB CONTROL	SIGNALS describes SIGINT handling in interactive shells and interruptible wait behavior.
+C8.JOB.14	8	jobs-control-detail	behavior	each pipeline is tracked as one job entry	n/a	JOB CONTROL	Paragraph 2: shell associates a job with each pipeline and keeps a job table.
+C8.JOB.15	8	jobs-control-detail	behavior	background launch banner `[job] pid` is emitted for async jobs	n/a	JOB CONTROL	Paragraph 2: async start prints job number and PID of last process in pipeline.
+C8.JOB.16	8	jobs-control-detail	behavior	all processes in one pipeline share a process group/job	n/a	JOB CONTROL	Paragraph 2-3: pipeline members are one job and receive foreground-group signal behavior together.
+C8.JOB.17	8	jobs-control-detail	behavior	foreground process group receives keyboard-generated SIGINT	n/a	JOB CONTROL	Paragraph 3: foreground group receives terminal keyboard signals (e.g., SIGINT).
+C8.JOB.18	8	jobs-control-detail	behavior	background process read from controlling tty gets SIGTTIN stop	n/a	JOB CONTROL	Paragraph 3: background read from terminal is stopped by SIGTTIN unless caught.
+C8.JOB.19	8	jobs-control-detail	behavior	background process write with `stty tostop` gets SIGTTOU stop	n/a	JOB CONTROL	Paragraph 3: background write with tostop is stopped by SIGTTOU unless caught.
+C8.JOB.20	8	jobs-control-detail	behavior	interactive suspend char ^Z stops foreground job and returns prompt	n/a	JOB CONTROL	Paragraph 4: immediate suspend semantics including return of control to shell.
+C8.JOB.21	8	jobs-control-detail	behavior	delayed suspend char ^Y stops on terminal-read attempt	n/a	JOB CONTROL	Paragraph 4: delayed suspend semantics differ from immediate ^Z.
+C8.JOB.22	8	jobs-control-detail	behavior	jobspec forms resolve correctly: `%n`, `%%`/`%+`, `%-`, bare `%`	n/a	JOB CONTROL	Paragraph 5: current/previous job references and bare `%` aliasing.
+C8.JOB.23	8	jobs-control-detail	behavior	jobspec name matching supports prefix `%name` and substring `%?text` with ambiguity errors	n/a	JOB CONTROL	Paragraph 5: prefix/substring resolution and multi-match error handling.
+C8.JOB.24	8	jobs-control-detail	behavior	`%jobspec` and `%jobspec &` command forms map to `fg` and `bg` behavior	n/a	JOB CONTROL	Paragraph 6: direct jobspec command forms are fg/bg shorthands.
+C8.JOB.25	8	jobs-control-detail	behavior	job status notifications are deferred to prompt by default and immediate with `set -b`	n/a	JOB CONTROL	Paragraph 7: default deferred notifications and notify-mode immediate reporting.
+C8.JOB.26	8	jobs-control-detail	behavior	`trap SIGCHLD` runs per exiting child	n/a	JOB CONTROL	Paragraph 7: SIGCHLD trap firing frequency semantics.
+C8.JOB.27	8	jobs-control-detail	behavior	`exit` with stopped jobs warns once; second exit terminates stopped jobs	n/a	JOB CONTROL	Paragraph 8: warning-on-exit semantics and second-exit behavior.
+C8.JOB.28	8	jobs-control-detail	behavior	with job control enabled, `wait` returns on job state change	n/a	JOB CONTROL	Paragraph 9: non-`-f` wait returns on state change.
+C8.JOB.29	8	jobs-control-detail	behavior	`wait -f` waits for termination (not merely state change)	n/a	JOB CONTROL	Paragraph 9: `-f` termination-only wait semantics.

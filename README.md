@@ -2,6 +2,23 @@
 
 `mctash` is a Python 3 shell project targeting ash-compatible behavior with an OSH-ASDL-guided parser/runtime path.
 
+## Standard Development Cycle
+
+For any new `man bash` section work, follow this cycle:
+
+1. Decompose section text into atomic requirement rows.
+2. Add matching implementation-matrix rows with explicit test IDs.
+3. Write an implementation design model mapping rows to runtime ownership/state.
+4. Implement by subsystem slices, then re-run matrix gates and close rows.
+
+Project skill for this cycle:
+
+- `docs/skills/bash-man-section-decomposition/SKILL.md`
+
+Current example design artifact:
+
+- `docs/design/job-control-runtime-model.md`
+
 ## Startup Mode Selection
 
 Mode precedence is:
