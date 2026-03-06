@@ -5660,10 +5660,12 @@ class Runtime:
 
     def _run_hash(self, args: List[str]) -> int:
         verbose = False
+        did_reset = False
         i = 0
         while i < len(args) and args[i].startswith("-"):
             if args[i] == "-r":
                 self._cmd_hash.clear()
+                did_reset = True
                 i += 1
                 continue
             if args[i] == "-v":
@@ -5672,6 +5674,8 @@ class Runtime:
                 continue
             return 2
         names = args[i:]
+        if did_reset and not names and not verbose:
+            return 0
         if not names:
             if not self._cmd_hash and self._bash_compat_level is not None:
                 print("hash: hash table empty", flush=True)

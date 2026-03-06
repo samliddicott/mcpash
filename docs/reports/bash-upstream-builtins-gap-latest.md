@@ -15,7 +15,7 @@ Current result:
 
 - bash rc: `2`
 - mctash rc: `2`
-- stdout diff lines: `19`
+- stdout diff lines: `11`
 - stderr diff lines: `0`
 
 Artifacts:
@@ -41,8 +41,7 @@ Implemented in this tranche:
 
 Remaining high-impact mismatch buckets:
 
-1. one extra `hash: hash table empty` line in `builtins.tests`.
-2. assoc-array `declare -p` key ordering mismatch in `builtins4.sub` (`[one][two][three]` vs bash output order in this corpus run).
+1. assoc-array `declare -p` key ordering mismatch in `builtins4.sub` (`[one][two][three]` vs bash output order in this corpus run).
 
 Next closure order:
 
