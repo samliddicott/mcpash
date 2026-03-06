@@ -5,10 +5,17 @@ script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd -- "${script_dir}/.." && pwd)"
 src_path="${repo_root}/src"
 
+# Test wrapper defaults: constrain memory and force deterministic test mode.
+mem_kb="${MCTASH_TEST_MEM_KB:-262144}"
+ulimit -Sv "${mem_kb}"
+
 if [[ -n "${PYTHONPATH:-}" ]]; then
   export PYTHONPATH="${src_path}:${PYTHONPATH}"
 else
   export PYTHONPATH="${src_path}"
 fi
+
+export MCTASH_TEST_MODE=1
+export MCTASH_MODE=posix
 
 exec python3 -m mctash "$@"
