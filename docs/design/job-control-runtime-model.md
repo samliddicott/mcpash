@@ -58,6 +58,14 @@ This note maps `JOB CONTROL` requirement rows `C8.JOB.14` through `C8.JOB.29` to
 - `C8.JOB.18-19` may need tighter PTY harness control to deterministically trigger SIGTTIN/SIGTTOU.
 - `C8.JOB.21` (`^Y`) is terminal-driver dependent and should be validated with strict comparator scope notes.
 
+## Remaining Open Rows (Post-Tranche)
+- `C8.JOB.17`: still partial (foreground process-group signal routing).
+- `C8.JOB.18-19`: still partial (TTY stop semantics `SIGTTIN`/`SIGTTOU`).
+- `C8.JOB.20-21`: still partial (suspend control chars and delayed suspend behavior).
+- `C8.JOB.26`: still partial (`trap CHLD` per-child semantics are not yet modeled in threaded runtime).
+- `C8.JOB.27`: still partial (exit warning/second-exit termination flow for stopped jobs).
+- `C8.JOB.28-29`: still partial (`wait` state-change vs `wait -f` termination split requires explicit stopped/continued state modeling).
+
 ## Progress Notes
 - Implemented resolver support for jobspec core and match forms:
   - `%%`, `%+`, bare `%`, `%-`
