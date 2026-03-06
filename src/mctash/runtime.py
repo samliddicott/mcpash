@@ -6066,14 +6066,22 @@ class Runtime:
             fmt = self._decode_backslash_escapes(fmt[2:-1])
         elif fmt.startswith("$"):
             fmt = self._decode_backslash_escapes(fmt[1:])
-        rendered = self._render_timeformat(fmt, real, user, sys_t)
+        rendered, invalid = self._render_timeformat(fmt, real, user, sys_t)
+        if invalid is not None:
+            self._print_stderr(
+                self._format_error(
+                    f"TIMEFORMAT: `{invalid}': invalid format character",
+                    line=self.current_line,
+                )
+            )
+            return status
         if rendered:
             if not rendered.endswith("\n"):
                 rendered += "\n"
             sys.stderr.write(rendered)
         return status
 
-    def _render_timeformat(self, fmt: str, real: float, user: float, sys_t: float) -> str:
+    def _render_timeformat(self, fmt: str, real: float, user: float, sys_t: float) -> tuple[str, str | None]:
         out: list[str] = []
         i = 0
         n = len(fmt)
@@ -6109,8 +6117,16 @@ class Runtime:
             if code == "S":
                 out.append(f"{sys_t:.{p}f}")
                 continue
-            out.append("%" + (str(precision) if precision is not None else "") + code)
-        return "".join(out)
+            if code == "P":
+                if precision is not None:
+                    return "", "P"
+                if real <= 0.0:
+                    out.append("0.00")
+                else:
+                    out.append(f"{((user + sys_t) * 100.0 / real):.2f}")
+                continue
+            return "", code
+        return "".join(out), None
 
     def _run_umask(self, args: List[str]) -> int:
         symbolic = False

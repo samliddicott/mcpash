@@ -11,13 +11,13 @@ normalize_time_output() {
 }
 
 run_time_case() {
-  local fmt="$1"
-  local out
+  fmt="$1"
+  out=""
   out="$(
     TIMEFORMAT="$fmt"
     { time true; } 2>&1 >/dev/null
   )"
-  printf '%s\n' "$out" | normalize_time_output
+  printf '%s\n' "$out" | sed -E -e 's/[0-9]+(\.[0-9]+)?/NUM/g' -e 's/ +/ /g'
 }
 
 printf 'case:1\n'
