@@ -68,3 +68,4 @@ This note maps `JOB CONTROL` requirement rows `C8.JOB.14` through `C8.JOB.29` to
   - `tests/diff/cases/bash-man-jobcontrol-jobspec-core.sh`
   - `tests/diff/cases/bash-man-jobcontrol-jobspec-match.sh`
 - `C8.JOB.24` is now parity-covered for shorthand dispatch (`%jobspec`/`%jobspec &`) including redirect-safe forms in non-interactive and PTY interactive lanes.
+- `C8.JOB.16` is parity-covered at current runtime scope via interactive pipeline-to-single-job assertions (`run_jobs_interactive_matrix.sh`).

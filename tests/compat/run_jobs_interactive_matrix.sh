@@ -65,6 +65,10 @@ bash_shell3="bash --posix -i -c 'set -m; sleep 0.6 & sleep 0.6 & %1 >/dev/null 2
 mctash_shell3="cd '$ROOT' && MCTASH_DIAG_STYLE=bash PYTHONPATH='$ROOT/src' python3 -m mctash --posix -i -c 'set -m; sleep 0.6 & sleep 0.6 & %1 >/dev/null 2>&1; echo JM:pctfg:$?; %2 & echo JM:pctbg:$?; wait >/dev/null 2>&1; echo JM:done'"
 check_pair "jobspec-command-forms" "$bash_shell3" "$mctash_shell3"
 
+bash_shell4="bash --posix -i -c 'set -m; yes | head -n 1 >/dev/null & jc=\$(jobs | wc -l); printf \"JM:jc:%s\\n\" \"\$jc\"; wait %1 >/dev/null 2>&1; echo JM:w:$?'"
+mctash_shell4="cd '$ROOT' && MCTASH_DIAG_STYLE=bash PYTHONPATH='$ROOT/src' python3 -m mctash --posix -i -c 'set -m; yes | head -n 1 >/dev/null & jc=\$(jobs | wc -l); printf \"JM:jc:%s\\n\" \"\$jc\"; wait %1 >/dev/null 2>&1; echo JM:w:$?'"
+check_pair "pipeline-one-job" "$bash_shell4" "$mctash_shell4"
+
 if [[ "$STRICT" != "1" ]]; then
   echo "[INFO] STRICT=0: interactive jobs matrix is informational"
 fi
