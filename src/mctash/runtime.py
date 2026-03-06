@@ -6947,6 +6947,67 @@ class Runtime:
             return f"declare -A {name}=()"
         return ""
 
+    def _expand_prompt_string(self, prompt: str) -> str:
+        def _needs_promptvars(raw: str) -> bool:
+            i_raw = 0
+            while i_raw < len(raw):
+                ch_raw = raw[i_raw]
+                if ch_raw == "\\" and i_raw + 1 < len(raw):
+                    i_raw += 2
+                    continue
+                if ch_raw in {"$", "`"}:
+                    return True
+                i_raw += 1
+            return False
+
+        out: list[str] = []
+        i = 0
+        user = self.env.get("USER", os.environ.get("USER", ""))
+        host = os.uname().nodename if hasattr(os, "uname") else ""
+        host_short = host.split(".")[0]
+        cwd = self.env.get("PWD", os.getcwd())
+        home = self.env.get("HOME") or os.environ.get("HOME", "")
+        while i < len(prompt):
+            ch = prompt[i]
+            if ch != "\\" or i + 1 >= len(prompt):
+                out.append(ch)
+                i += 1
+                continue
+            nxt = prompt[i + 1]
+            if nxt == "u":
+                out.append(user)
+            elif nxt == "h":
+                out.append(host_short)
+            elif nxt == "H":
+                out.append(host)
+            elif nxt == "w":
+                h = home.rstrip("/")
+                if h and (cwd == h or cwd.startswith(h + "/")):
+                    out.append("~" + cwd[len(h) :])
+                else:
+                    out.append(cwd)
+            elif nxt == "W":
+                base = os.path.basename(cwd.rstrip("/")) if cwd not in {"", "/"} else "/"
+                out.append(base)
+            elif nxt == "$":
+                out.append("#" if os.geteuid() == 0 else "$")
+            elif nxt == "n":
+                out.append("\n")
+            elif nxt == "r":
+                out.append("\r")
+            elif nxt in {"[", "]"}:
+                pass
+            else:
+                out.append(nxt)
+            i += 2
+        expanded = "".join(out)
+        if self._shopts.get("promptvars", False) and _needs_promptvars(prompt):
+            try:
+                expanded = self._expand_assignment_word(expanded)
+            except Exception:
+                pass
+        return expanded
+
     def _transform_A_value(self, name: str, value: str) -> str:
         if name == "@":
             return "set -- " + " ".join(self._transform_q_quote(a) for a in self.positional)
@@ -6968,9 +7029,7 @@ class Runtime:
         if transform_op == "@Q":
             return self._transform_q_quote(value)
         if transform_op == "@P":
-            # Prompt-style expansion is intentionally conservative here:
-            # preserve plain value until full prompt escape support is wired.
-            return value
+            return self._expand_prompt_string(value)
         if transform_op == "@A":
             return self._transform_A_value(name, value)
         if transform_op == "@a":

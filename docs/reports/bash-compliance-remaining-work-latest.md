@@ -20,8 +20,8 @@ Total remaining items: 7
 
 1. `${v@op}` parameter transformation operator parity.
    - Requirement row: `C3.EXP.016`
-   - Evidence: `tests/diff/cases/bash-man-param-transform-ops.sh`, `tests/diff/cases/bash-man-param-transform-ops-variants.sh`
-   - Current status: `partial` (core scalar/positional/array lanes run in bash-compat mode; deeper `${v@P}` semantics remain open).
+   - Evidence: `tests/diff/cases/bash-man-param-transform-ops.sh`, `tests/diff/cases/bash-man-param-transform-ops-variants.sh`, `tests/diff/cases/bash-man-param-transform-prompt.sh`
+   - Current status: `partial` (core scalar/positional/array/prompt lanes run in bash-compat mode; deeper `${v@P}` edge semantics, especially `\\w`/tilde behavior, remain open).
 2. `TIMEFORMAT` variable semantics parity.
    - Requirement row: `C6.VAR.BASH.TIMEFORMAT`
    - Evidence: `tests/diff/cases/bash-man-timeformat.sh`

@@ -611,47 +611,7 @@ def _configure_line_editor(rt: Runtime) -> None:
 
 
 def _expand_prompt(rt: Runtime, prompt: str) -> str:
-    out: list[str] = []
-    i = 0
-    user = os.environ.get("USER", "")
-    host = os.uname().nodename.split(".")[0] if hasattr(os, "uname") else ""
-    cwd = rt.env.get("PWD", os.getcwd())
-    home = rt.env.get("HOME", "")
-    while i < len(prompt):
-        ch = prompt[i]
-        if ch != "\\" or i + 1 >= len(prompt):
-            out.append(ch)
-            i += 1
-            continue
-        nxt = prompt[i + 1]
-        if nxt == "u":
-            out.append(user)
-        elif nxt == "h":
-            out.append(host)
-        elif nxt == "w":
-            if home and cwd.startswith(home):
-                rel = "~" + cwd[len(home) :]
-                out.append(rel)
-            else:
-                out.append(cwd)
-        elif nxt == "$":
-            out.append("#" if os.geteuid() == 0 else "$")
-        elif nxt in {"[", "]"}:
-            # Non-printing markers for readline display width accounting.
-            # They are stripped from the rendered prompt text.
-            pass
-        else:
-            out.append(nxt)
-        i += 2
-    expanded = "".join(out)
-    if rt._shopts.get("promptvars", False):
-        try:
-            # Prompt expansion should apply parameter / command / arithmetic
-            # substitution without field splitting/pathname expansion side effects.
-            expanded = rt._expand_assignment_word(expanded)
-        except Exception:
-            pass
-    return expanded
+    return rt._expand_prompt_string(prompt)
 
 
 def _expand_history_bang(rt: Runtime, line: str) -> tuple[str | None, str | None]:
