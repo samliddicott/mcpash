@@ -280,6 +280,7 @@ C6.VAR.BASH.PROMPT_COMMAND	6	variables.bash-extension	variable	PROMPT_COMMAND	ex
 C6.VAR.BASH.PS0	6	variables.bash-extension	variable	PS0	extension	Shell Variables + builtins	Bash-specific or Bash-extended variable surface.
 C6.VAR.BASH.PS3	6	variables.bash-extension	variable	PS3	extension	Shell Variables + builtins	Bash-specific or Bash-extended variable surface.
 C6.VAR.BASH.PS4	6	variables.bash-extension	variable	PS4	extension	Shell Variables + builtins	Bash-specific or Bash-extended variable surface.
+C6.VAR.BASH.TIMEFORMAT	6	variables.bash-extension	variable	TIMEFORMAT	extension	Shell Variables + builtins	Bash-specific timing output format variable used by the time reserved word.
 C6.VAR.BASH.COMP_LINE	6	variables.bash-extension	variable	COMP_LINE	extension	Shell Variables + builtins	Bash-specific or Bash-extended variable surface.
 C6.VAR.BASH.COMP_POINT	6	variables.bash-extension	variable	COMP_POINT	extension	Shell Variables + builtins	Bash-specific or Bash-extended variable surface.
 C6.VAR.BASH.COMP_WORDS	6	variables.bash-extension	variable	COMP_WORDS	extension	Shell Variables + builtins	Bash-specific or Bash-extended variable surface.
