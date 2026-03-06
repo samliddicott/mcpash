@@ -779,6 +779,7 @@ class Runtime:
         self._py_ties: Dict[str, tuple[Any, Any, str | None]] = {}
         self._shopts: Dict[str, bool] = dict(self.SHOPT_DEFAULTS)
         self._history_read_cursor: int = 0
+        self._command_number: int = 0
         self._is_interactive_session: bool = False
         self._is_login_shell: bool = False
         self._last_read_interrupt_status: int | None = None
@@ -1321,6 +1322,7 @@ class Runtime:
     def _exec_asdl_list_item(self, item: dict[str, Any]) -> int:
         t = item.get("type")
         if t == "command.Sentence":
+            self._command_number += 1
             term = self._asdl_token_text(item.get("terminator"))
             child = item.get("child")
             if not isinstance(child, dict):
@@ -3579,7 +3581,9 @@ class Runtime:
         return ExpansionField(segs, preserve_boundary=preserve)
 
     def _glob_structured_field(self, field: ExpansionField) -> list[str]:
-        text = self._tilde_expand(field.text())
+        raw_text = field.text()
+        all_quoted = bool(field.segments) and all(seg.quoted for seg in field.segments)
+        text = raw_text if all_quoted else self._tilde_expand(raw_text)
         if self.options.get("f", False):
             return [text]
         has_active_glob = False
@@ -3606,7 +3610,8 @@ class Runtime:
                     pat.append(ch)
         if not has_active_glob:
             return [text]
-        pattern = self._tilde_expand("".join(pat))
+        pat_text = "".join(pat)
+        pattern = pat_text if all_quoted else self._tilde_expand(pat_text)
         matches = sorted(glob.glob(pattern))
         if matches:
             return matches
@@ -6980,6 +6985,39 @@ class Runtime:
                 out.append(host_short)
             elif nxt == "H":
                 out.append(host)
+            elif nxt == "a":
+                out.append("\a")
+            elif nxt == "e":
+                out.append("\x1b")
+            elif nxt == "d":
+                out.append(time.strftime("%a %b %d"))
+            elif nxt == "t":
+                out.append(time.strftime("%H:%M:%S"))
+            elif nxt == "T":
+                out.append(time.strftime("%I:%M:%S"))
+            elif nxt == "@":
+                out.append(time.strftime("%I:%M %p"))
+            elif nxt == "A":
+                out.append(time.strftime("%H:%M"))
+            elif nxt == "s":
+                out.append("bash")
+            elif nxt == "v":
+                out.append(str(self.env.get("BASH_VERSINFO", "5.0")))
+            elif nxt == "V":
+                out.append(str(self.env.get("BASH_VERSION", "5.0.0")))
+            elif nxt == "j":
+                out.append(str(len(self._bg_jobs)))
+            elif nxt == "l":
+                tty_name = "tty"
+                try:
+                    tty_name = os.path.basename(os.ttyname(0))
+                except Exception:
+                    pass
+                out.append(tty_name)
+            elif nxt == "!":
+                out.append("1")
+            elif nxt == "#":
+                out.append(str(self._command_number))
             elif nxt == "w":
                 h = home.rstrip("/")
                 if h and (cwd == h or cwd.startswith(h + "/")):
@@ -6995,6 +7033,32 @@ class Runtime:
                 out.append("\n")
             elif nxt == "r":
                 out.append("\r")
+            elif nxt == "D":
+                if i + 2 < len(prompt) and prompt[i + 2] == "{":
+                    j = i + 3
+                    while j < len(prompt) and prompt[j] != "}":
+                        j += 1
+                    if j < len(prompt):
+                        fmt = prompt[i + 3 : j]
+                        try:
+                            out.append(time.strftime(fmt))
+                        except Exception:
+                            out.append("")
+                        i = j + 1
+                        continue
+                out.append(time.strftime("%X"))
+            elif nxt in "01234567":
+                oct_digits = [nxt]
+                j = i + 2
+                while j < len(prompt) and len(oct_digits) < 3 and prompt[j] in "01234567":
+                    oct_digits.append(prompt[j])
+                    j += 1
+                try:
+                    out.append(chr(int("".join(oct_digits), 8)))
+                except Exception:
+                    out.append("".join(oct_digits))
+                i = j
+                continue
             elif nxt in {"[", "]"}:
                 pass
             else:

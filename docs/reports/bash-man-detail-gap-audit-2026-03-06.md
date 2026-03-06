@@ -15,10 +15,10 @@ Method:
 
 ## New Gaps Surfaced
 
-1. `C3.EXP.016` `${v@op}` transformation operators: `partial`
-   - Evidence: `tests/diff/cases/bash-man-param-transform-ops.sh`, `tests/diff/cases/bash-man-param-transform-ops-variants.sh`, `tests/diff/cases/bash-man-param-transform-prompt.sh`
-   - Differential result: core lanes now pass in bash-compat mode.
-   - Observed: mctash now handles scalar/positional/array `${...@Q,P,A,a,E,U,u,L}` lanes and prompt-transform core; row remains partial for deeper `${v@P}` edge semantics (`\\w`/tilde behavior).
+1. `C3.EXP.016` `${v@op}` transformation operators: `covered` (resolved)
+   - Evidence: `tests/diff/cases/bash-man-param-transform-ops.sh`, `tests/diff/cases/bash-man-param-transform-ops-variants.sh`, `tests/diff/cases/bash-man-param-transform-prompt.sh`, `tests/diff/cases/bash-man-param-transform-prompt-escapes.sh`
+   - Differential result: covered lanes pass in bash-compat mode.
+   - Observed: scalar/positional/array `${...@Q,P,A,a,E,U,u,L}` lanes and prompt-transform escapes are now parity-covered.
 
 2. `C6.VAR.BASH.TIMEFORMAT`: `partial` (new row)
    - Evidence: `tests/diff/cases/bash-man-timeformat.sh`
@@ -50,12 +50,11 @@ Method:
 
 ## Net Effect
 
-- Partial rows in implementation matrix increased to 7.
-- This is expected under corrected process: previously hidden detail gaps are now explicit and test-backed.
+- This audit surfaced detail gaps under corrected process; `C3.EXP.016` is now closed with added escape-lane evidence.
 
 ## Commands Run
 
-- `PARITY_BASH_COMPAT=50 bash tests/diff/run.sh --case bash-man-param-transform-ops --case bash-man-param-transform-ops-variants --case bash-man-param-transform-prompt`
+- `PARITY_BASH_COMPAT=50 bash tests/diff/run.sh --case bash-man-param-transform-ops --case bash-man-param-transform-ops-variants --case bash-man-param-transform-prompt --case bash-man-param-transform-prompt-escapes`
 - `bash tests/diff/run.sh --case bash-man-timeformat --case bash-man-bash_xtracefd`
 - `./tests/compat/run_interactive_tmout_matrix.sh`
 - `./tests/compat/run_interactive_sigint_matrix.sh`
