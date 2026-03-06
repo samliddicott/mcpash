@@ -8,11 +8,9 @@ This report tracks observed gaps from runnable evidence.
 
 1. `TMOUT` interactive behavior (`C6.VAR.BASH.TMOUT`) is partial.
    - Evidence: `tests/compat/run_interactive_tmout_matrix.sh`
-2. `HISTTIMEFORMAT` behavior-depth (`C6.VAR.BASH.HISTTIMEFORMAT`) is partial.
-   - Evidence: currently surface-only mapping.
-3. Prompt escape depth (`C7.INT.01`) is partial.
+2. Prompt escape depth (`C7.INT.01`) is partial.
    - Evidence: current interactive lane focuses on PS1; PS2/PS4 dedicated assertions still missing.
-4. Interactive SIGINT foreground-command continuation (`C8.JOB.13`) is partial.
+3. Interactive SIGINT foreground-command continuation (`C8.JOB.13`) is partial.
    - Evidence: `tests/compat/run_interactive_sigint_matrix.sh`
 
 ## Known Unknowns (Compliance-Risk Tracking)

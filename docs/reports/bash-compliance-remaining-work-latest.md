@@ -11,9 +11,9 @@ Evidence sources:
 
 ## Summary
 
-Total remaining items: 4
+Total remaining items: 3
 
-- Known behavior mismatches: 3
+- Known behavior mismatches: 2
 - Known-unknown/completeness risks tracked in this board: 0
 
 ## Remaining Items
@@ -22,15 +22,11 @@ Total remaining items: 4
    - Requirement row: `C6.VAR.BASH.TMOUT`
    - Evidence: `tests/compat/run_interactive_tmout_matrix.sh`
    - Current status: `partial`.
-2. `HISTTIMEFORMAT` behavior-depth coverage.
-   - Requirement row: `C6.VAR.BASH.HISTTIMEFORMAT`
-   - Evidence: surface-only at present.
-   - Current status: `partial` until dedicated behavior case is added.
-3. Prompt escape depth coverage (`PS2`/`PS4` lanes).
+2. Prompt escape depth coverage (`PS2`/`PS4` lanes).
    - Requirement row: `C7.INT.01`
    - Evidence: `tests/compat/run_interactive_ux_matrix.sh`
    - Current status: `partial`.
-4. Interactive SIGINT continuation parity:
+3. Interactive SIGINT continuation parity:
    - Requirement row: `C8.JOB.13`
    - Evidence: `tests/compat/run_interactive_sigint_matrix.sh`
    - Current status: `partial` (mctash does not yet match bash for Ctrl-C interruption of a foreground external command in PTY probe).

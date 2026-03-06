@@ -773,6 +773,7 @@ class Runtime:
         self._frame_stack: List[Dict[str, object]] = []
         self._call_stack: List[str] = []
         self._history: List[str] = []
+        self._history_ts: List[float | None] = []
         self._cmd_hash: Dict[str, str] = {}
         self._errexit_suppressed: int = 0
         self._py_callables: Dict[str, Any] = {}
@@ -5420,11 +5421,17 @@ class Runtime:
         return sorted(set(self.functions.keys()) | set(self.functions_asdl.keys()))
 
 
-    def add_history_entry(self, line: str) -> None:
+    def add_history_entry(self, line: str, *, force: bool = False) -> None:
         text = line.strip("\n")
         if not text:
             return
+        if not force and not self.options.get("history", False):
+            return
         self._history.append(text)
+        ts: float | None = None
+        if self._get_var("HISTTIMEFORMAT") != "":
+            ts = time.time()
+        self._history_ts.append(ts)
 
     def _history_resolve(self, token: str | None) -> int | None:
         if not self._history:
@@ -9574,17 +9581,14 @@ class Runtime:
             return os.path.expanduser(path)
         return os.path.expanduser(self.env.get("HISTFILE", "~/.bash_history"))
 
-    def _history_public_entries(self) -> list[tuple[int, str]]:
-        out: list[tuple[int, str]] = []
+    def _history_public_entries(self) -> list[tuple[int, str, float | None]]:
+        out: list[tuple[int, str, float | None]] = []
         for i, line in enumerate(self._history):
             stripped = line.lstrip()
             if stripped.startswith("history"):
                 continue
-            # Bash non-interactive history output doesn't surface plain
-            # assignment lines by default.
-            if re.match(r"^[A-Za-z_][A-Za-z0-9_]*=", stripped):
-                continue
-            out.append((i, line))
+            ts = self._history_ts[i] if i < len(self._history_ts) else None
+            out.append((i, line, ts))
         return out
 
     def _history_write(self, path: str, lines: list[str], *, append: bool) -> int:
@@ -9607,6 +9611,7 @@ class Runtime:
                 break
             if a == "-c":
                 self._history.clear()
+                self._history_ts.clear()
                 self._history_read_cursor = 0
                 print_mode = False
                 i += 1
@@ -9623,6 +9628,8 @@ class Runtime:
                     return 1
                 real_idx = public[off - 1][0]
                 del self._history[real_idx]
+                if real_idx < len(self._history_ts):
+                    del self._history_ts[real_idx]
                 self._history_read_cursor = min(self._history_read_cursor, len(self._history))
                 print_mode = False
                 i += 2
@@ -9630,14 +9637,14 @@ class Runtime:
             if a in {"-a", "-w", "-r", "-n"}:
                 path = self._history_file(args[i + 1] if i + 1 < len(args) and not args[i + 1].startswith("-") else None)
                 if a == "-a":
-                    public_lines = [x for _, x in self._history_public_entries()]
+                    public_lines = [x for _, x, _ in self._history_public_entries()]
                     start = min(self._history_read_cursor, len(public_lines))
                     status = self._history_write(path, public_lines[start:], append=True)
                     if status != 0:
                         return status
                     self._history_read_cursor = len(public_lines)
                 elif a == "-w":
-                    public_lines = [x for _, x in self._history_public_entries()]
+                    public_lines = [x for _, x, _ in self._history_public_entries()]
                     status = self._history_write(path, public_lines, append=False)
                     if status != 0:
                         return status
@@ -9650,9 +9657,12 @@ class Runtime:
                         return 1
                     if a == "-r":
                         self._history.extend(file_lines)
+                        self._history_ts.extend([None] * len(file_lines))
                     else:
                         start = min(self._history_read_cursor, len(file_lines))
-                        self._history.extend(file_lines[start:])
+                        chunk = file_lines[start:]
+                        self._history.extend(chunk)
+                        self._history_ts.extend([None] * len(chunk))
                     self._history_read_cursor = len(file_lines)
                 print_mode = False
                 if i + 1 < len(args) and not args[i + 1].startswith("-"):
@@ -9663,7 +9673,7 @@ class Runtime:
             if a == "-s":
                 if i + 1 >= len(args):
                     return 2
-                self.add_history_entry(" ".join(args[i + 1 :]))
+                self.add_history_entry(" ".join(args[i + 1 :]), force=True)
                 return 0
             if a == "-p":
                 for tok in args[i + 1 :]:
@@ -9687,8 +9697,20 @@ class Runtime:
             start = max(0, len(public) - n)
         else:
             start = 0
+        histfmt = self._get_var("HISTTIMEFORMAT")
         for idx in range(start, len(public)):
-            print(f"{idx + 1:5d}  {public[idx][1]}")
+            _, line_text, line_ts = public[idx]
+            if histfmt:
+                if line_ts is None:
+                    stamp = "??"
+                else:
+                    try:
+                        stamp = time.strftime(histfmt, time.localtime(line_ts))
+                    except Exception:
+                        stamp = "??"
+                print(f"{idx + 1:5d}  {stamp}{line_text}")
+            else:
+                print(f"{idx + 1:5d}  {line_text}")
         return 0
 
     def _run_suspend(self, args: List[str]) -> int:
