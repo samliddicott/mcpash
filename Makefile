@@ -5,7 +5,7 @@ OIL_MIN_PASS ?= 245
 OIL_MAX_FAIL ?= 0
 SUMMARY_FILE ?= docs/reports/parity-summary.json
 
-.PHONY: regressions bridge-conformance diff-conformance diff-parity-matrix read-matrix semantic-matrix jobs-interactive-matrix trap-noninteractive-matrix trap-interactive-matrix trap-variant-matrix completion-interactive-matrix interactive-ux-matrix interactive-sigint-matrix interactive-tmout-matrix man-detail-audit startup-mode-matrix bash-invocation-option-matrix category-buckets-matrix bash-builtin-matrix busybox-conformance parity-summary parity-summary-validate perf-baseline perf-compare perf-variation stress-race stress-bridge compat-posix-bash compat-posix-bash-strict bash-posix-man-matrix bash-posix-upstream-matrix bash-tests-fetch compliance-truth-check compliance-truth-gate conformance conformance-full conformance-quick test-all
+.PHONY: regressions bridge-conformance diff-conformance diff-parity-matrix read-matrix semantic-matrix jobs-interactive-matrix trap-noninteractive-matrix trap-interactive-matrix trap-variant-matrix completion-interactive-matrix interactive-ux-matrix interactive-sigint-matrix interactive-tmout-matrix man-detail-audit startup-mode-matrix bash-invocation-option-matrix category-buckets-matrix bash-builtin-matrix busybox-conformance parity-summary parity-summary-validate perf-baseline perf-compare perf-variation stress-race stress-bridge compat-posix-bash compat-posix-bash-strict bash-posix-man-matrix bash-posix-upstream-matrix bash-tests-fetch spec-cycle-check compliance-truth-check compliance-truth-gate conformance conformance-full conformance-quick test-all
 
 regressions:
 	@./tests/regressions/run.sh
@@ -106,10 +106,14 @@ bash-posix-upstream-matrix:
 bash-tests-fetch:
 	@./tests/bash/fetch_upstream_tests.sh
 
+spec-cycle-check:
+	@python3 ./scripts/spec_cycle_check.py
+
 compliance-truth-check:
 	@python3 ./scripts/check_compliance_truth.py
 
 compliance-truth-gate:
+	@$(MAKE) spec-cycle-check
 	@$(MAKE) bash-invocation-option-matrix
 	@$(MAKE) bash-posix-man-matrix
 	@$(MAKE) bash-posix-upstream-matrix

@@ -19,6 +19,18 @@ Current example design artifact:
 
 - `docs/design/job-control-runtime-model.md`
 
+Validate the requirements -> matrix -> design cycle:
+
+```sh
+make spec-cycle-check
+```
+
+Optional pre-commit hook:
+
+```sh
+ln -sf ../../scripts/pre-commit.sh .git/hooks/pre-commit
+```
+
 ## Startup Mode Selection
 
 Mode precedence is:
