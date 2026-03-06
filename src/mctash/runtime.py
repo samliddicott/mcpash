@@ -4755,7 +4755,34 @@ class Runtime:
             items.append(self._trace_quote(arg, force=force_quote[i] if i < len(force_quote) else False))
         ps4 = self._get_var("PS4")
         prefix = ps4 if ps4 != "" else "+ "
-        self._print_stderr(prefix + " ".join(items))
+        self._print_xtrace(prefix + " ".join(items))
+
+    def _print_xtrace(self, text: str) -> None:
+        target_fd = 2
+        raw_fd, fd_set = self._get_var_with_state("BASH_XTRACEFD")
+        if fd_set and raw_fd != "":
+            try:
+                parsed = int(raw_fd, 10)
+                if parsed >= 0:
+                    target_fd = parsed
+            except Exception:
+                target_fd = 2
+        line = text + "\n"
+        data = line.encode("utf-8", errors="surrogateescape")
+        try:
+            os.write(target_fd, data)
+            return
+        except OSError:
+            if target_fd != 2:
+                try:
+                    os.write(2, data)
+                    return
+                except OSError:
+                    pass
+        try:
+            self._print_stderr(text)
+        except Exception:
+            pass
 
     def _trace_quote(self, s: str, force: bool = False) -> str:
         if s == "":
