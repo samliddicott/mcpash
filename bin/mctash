@@ -1,14 +1,23 @@
-#!/usr/bin/env bash
-set -euo pipefail
+#!/usr/bin/env python3
+from __future__ import annotations
 
-script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-repo_root="$(cd -- "${script_dir}/.." && pwd)"
-src_path="${repo_root}/src"
+import os
+import pathlib
+import sys
 
-if [[ -n "${PYTHONPATH:-}" ]]; then
-  export PYTHONPATH="${src_path}:${PYTHONPATH}"
-else
-  export PYTHONPATH="${src_path}"
-fi
 
-exec python3 -m mctash "$@"
+def main() -> None:
+    repo_root = pathlib.Path(__file__).resolve().parent.parent
+    src_path = str(repo_root / "src")
+
+    old_pythonpath = os.environ.get("PYTHONPATH", "")
+    if old_pythonpath:
+        os.environ["PYTHONPATH"] = f"{src_path}:{old_pythonpath}"
+    else:
+        os.environ["PYTHONPATH"] = src_path
+
+    os.execvp("python3", ["python3", "-m", "mctash", *sys.argv[1:]])
+
+
+if __name__ == "__main__":
+    main()
