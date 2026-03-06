@@ -67,4 +67,4 @@ This note maps `JOB CONTROL` requirement rows `C8.JOB.14` through `C8.JOB.29` to
 - Added comparator cases:
   - `tests/diff/cases/bash-man-jobcontrol-jobspec-core.sh`
   - `tests/diff/cases/bash-man-jobcontrol-jobspec-match.sh`
-- `C8.JOB.24` remains partial pending deeper command-form parity (especially redirection + interactive nuances).
+- `C8.JOB.24` is now parity-covered for shorthand dispatch (`%jobspec`/`%jobspec &`) including redirect-safe forms in non-interactive and PTY interactive lanes.

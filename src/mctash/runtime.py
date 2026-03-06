@@ -1160,7 +1160,7 @@ class Runtime:
         self._run_pending_traps()
         return status
 
-    def _jobspec_token_from_ast_and_or(self, node: Any) -> str | None:
+    def _jobspec_spec_from_ast_and_or(self, node: Any) -> tuple[str, list[Redirect]] | None:
         if not isinstance(node, AndOr):
             return None
         if len(node.pipelines) != 1 or node.operators:
@@ -1171,15 +1171,17 @@ class Runtime:
         cmd = pl.commands[0]
         if not isinstance(cmd, SimpleCommand):
             return None
-        if cmd.assignments or cmd.redirects:
+        if cmd.assignments:
             return None
         argv = self._expand_aliases(self._expand_argv(cmd.argv))
         if len(argv) != 1:
             return None
         token = argv[0]
-        return token if token.startswith("%") else None
+        if not token.startswith("%"):
+            return None
+        return token, list(cmd.redirects)
 
-    def _jobspec_token_from_asdl_and_or(self, node: dict[str, Any]) -> str | None:
+    def _jobspec_spec_from_asdl_and_or(self, node: dict[str, Any]) -> tuple[str, list[Redirect]] | None:
         if node.get("type") != "command.AndOr":
             return None
         children = node.get("children") or []
@@ -1197,20 +1199,30 @@ class Runtime:
         cmd = cmds[0]
         if not isinstance(cmd, dict) or cmd.get("type") != "command.Simple":
             return None
-        if (cmd.get("more_env") or []) or (cmd.get("redirects") or []):
+        if cmd.get("more_env") or []:
             return None
         argv = self._expand_aliases(self._expand_asdl_simple_argv(cmd))
         if len(argv) != 1:
             return None
         token = argv[0]
-        return token if token.startswith("%") else None
+        if not token.startswith("%"):
+            return None
+        redirects = [self._asdl_to_redirect(r) for r in (cmd.get("redirects") or [])]
+        return token, redirects
 
     def _exec_list_item(self, item) -> int:
-        jobspec_token = self._jobspec_token_from_ast_and_or(item.node)
-        if jobspec_token is not None:
-            if getattr(item, "background", False):
-                return self._run_bg_builtin([jobspec_token])
-            return self._run_fg([jobspec_token])
+        jobspec_spec = self._jobspec_spec_from_ast_and_or(item.node)
+        if jobspec_spec is not None:
+            jobspec_token, redirects = jobspec_spec
+            try:
+                with self._redirected_fds(redirects):
+                    if getattr(item, "background", False):
+                        return self._run_bg_builtin([jobspec_token])
+                    return self._run_fg([jobspec_token])
+            except RuntimeError as e:
+                msg = str(e)
+                self._print_stderr(msg)
+                return self._runtime_error_status(msg)
         if getattr(item, "background", False):
             # Fast path: backgrounded "echo" in tests should still emit output
             # even when the parent shell exits immediately.
@@ -1383,13 +1395,20 @@ class Runtime:
             child = item.get("child")
             if not isinstance(child, dict):
                 raise RuntimeError("invalid ASDL sentence node")
-            jobspec_token = self._jobspec_token_from_asdl_and_or(child)
-            if jobspec_token is not None:
-                if term == "&":
-                    return self._run_bg_builtin([jobspec_token])
-                status = self._run_fg([jobspec_token])
-                self._drain_process_subst()
-                return status
+            jobspec_spec = self._jobspec_spec_from_asdl_and_or(child)
+            if jobspec_spec is not None:
+                jobspec_token, redirects = jobspec_spec
+                try:
+                    with self._redirected_fds(redirects):
+                        if term == "&":
+                            return self._run_bg_builtin([jobspec_token])
+                        status = self._run_fg([jobspec_token])
+                        self._drain_process_subst()
+                        return status
+                except RuntimeError as e:
+                    msg = str(e)
+                    self._print_stderr(msg)
+                    return self._runtime_error_status(msg)
             if term == "&":
                 return self._exec_asdl_background(child)
             status = self._exec_asdl_list_item(child)
@@ -1397,11 +1416,18 @@ class Runtime:
             return status
         if t != "command.AndOr":
             raise RuntimeError(f"invalid ASDL list item: {t}")
-        jobspec_token = self._jobspec_token_from_asdl_and_or(item)
-        if jobspec_token is not None:
-            status = self._run_fg([jobspec_token])
-            self._drain_process_subst()
-            return status
+        jobspec_spec = self._jobspec_spec_from_asdl_and_or(item)
+        if jobspec_spec is not None:
+            jobspec_token, redirects = jobspec_spec
+            try:
+                with self._redirected_fds(redirects):
+                    status = self._run_fg([jobspec_token])
+                    self._drain_process_subst()
+                    return status
+            except RuntimeError as e:
+                msg = str(e)
+                self._print_stderr(msg)
+                return self._runtime_error_status(msg)
         status = self._exec_asdl_and_or(item)
         self._drain_process_subst()
         return status

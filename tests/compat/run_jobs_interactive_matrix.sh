@@ -61,6 +61,10 @@ ash_shell2="ash -i -c 'set -m; sleep 0.05 & bg %1 >/dev/null 2>&1; echo JM:bg:$?
 mctash_shell2="cd '$ROOT' && PYTHONPATH='$ROOT/src' python3 -m mctash -i -c 'set -m; sleep 0.05 & bg %1 >/dev/null 2>&1; echo JM:bg:$?; wait >/dev/null 2>&1; echo JM:done'"
 check_pair "bg-basic" "$ash_shell2" "$mctash_shell2"
 
+bash_shell3="bash --posix -i -c 'set -m; sleep 0.6 & sleep 0.6 & %1 >/dev/null 2>&1; echo JM:pctfg:$?; %2 & echo JM:pctbg:$?; wait >/dev/null 2>&1; echo JM:done'"
+mctash_shell3="cd '$ROOT' && MCTASH_DIAG_STYLE=bash PYTHONPATH='$ROOT/src' python3 -m mctash --posix -i -c 'set -m; sleep 0.6 & sleep 0.6 & %1 >/dev/null 2>&1; echo JM:pctfg:$?; %2 & echo JM:pctbg:$?; wait >/dev/null 2>&1; echo JM:done'"
+check_pair "jobspec-command-forms" "$bash_shell3" "$mctash_shell3"
+
 if [[ "$STRICT" != "1" ]]; then
   echo "[INFO] STRICT=0: interactive jobs matrix is informational"
 fi
