@@ -19,6 +19,7 @@ Method:
    - Evidence: `tests/diff/cases/bash-man-param-transform-ops.sh`
    - Differential result: mismatch
    - Observed: mctash reports bad substitution for `${x@Q,P,A,a,E,U,u,L}`.
+   - Scope note: this row also includes positional/array forms (`$@`/`$*`, `${arr[@]@op}`, `${arr[*]@op}`), which remain open.
 
 2. `C6.VAR.BASH.TIMEFORMAT`: `partial` (new row)
    - Evidence: `tests/diff/cases/bash-man-timeformat.sh`
