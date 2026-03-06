@@ -16,10 +16,9 @@ Method:
 ## New Gaps Surfaced
 
 1. `C3.EXP.016` `${v@op}` transformation operators: `partial`
-   - Evidence: `tests/diff/cases/bash-man-param-transform-ops.sh`
-   - Differential result: mismatch
-   - Observed: mctash reports bad substitution for `${x@Q,P,A,a,E,U,u,L}`.
-   - Scope note: this row also includes positional/array forms (`$@`/`$*`, `${arr[@]@op}`, `${arr[*]@op}`), which remain open.
+   - Evidence: `tests/diff/cases/bash-man-param-transform-ops.sh`, `tests/diff/cases/bash-man-param-transform-ops-variants.sh`
+   - Differential result: core lanes now pass in bash-compat mode.
+   - Observed: mctash now handles scalar/positional/array `${...@Q,P,A,a,E,U,u,L}` lanes; row remains partial for deeper `${v@P}` prompt-expansion semantics.
 
 2. `C6.VAR.BASH.TIMEFORMAT`: `partial` (new row)
    - Evidence: `tests/diff/cases/bash-man-timeformat.sh`
@@ -56,6 +55,7 @@ Method:
 
 ## Commands Run
 
-- `bash tests/diff/run.sh --case bash-man-param-transform-ops --case bash-man-timeformat --case bash-man-bash_xtracefd`
+- `PARITY_BASH_COMPAT=50 bash tests/diff/run.sh --case bash-man-param-transform-ops --case bash-man-param-transform-ops-variants`
+- `bash tests/diff/run.sh --case bash-man-timeformat --case bash-man-bash_xtracefd`
 - `./tests/compat/run_interactive_tmout_matrix.sh`
 - `./tests/compat/run_interactive_sigint_matrix.sh`

@@ -485,6 +485,7 @@ def _find_braced_end(text: str, start: int) -> int:
 
 
 def _split_braced(inner: str) -> Tuple[str | None, str | None, str | None]:
+    transform_ops = {"Q", "P", "A", "a", "E", "U", "u", "L"}
     def _consume_subscript(text: str, j: int) -> int:
         if j >= len(text) or text[j] != "[":
             return j
@@ -542,6 +543,10 @@ def _split_braced(inner: str) -> Tuple[str | None, str | None, str | None]:
             name = "".join(name_chars)
     if i >= len(inner):
         return name, None, None
+    if inner[i] == "@":
+        if i + 1 >= len(inner) or inner[i + 1] not in transform_ops or i + 2 != len(inner):
+            return name, "__invalid__", None
+        return name, "@" + inner[i + 1], None
     if inner[i] == ":" and (i + 1 >= len(inner) or inner[i + 1] not in "-=?+"):
         return name, ":substr", inner[i + 1 :]
     if inner[i] == "/":

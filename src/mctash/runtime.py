@@ -2241,6 +2241,8 @@ class Runtime:
                     arg = p.get("arg")
                     if not self._asdl_word_is_safe_literal(arg):
                         return False
+                if op in {"@Q", "@P", "@A", "@a", "@E", "@U", "@u", "@L"}:
+                    pass
                 if self._is_valid_name(name):
                     continue
                 return False
@@ -6886,6 +6888,103 @@ class Runtime:
         except Exception:
             return "~" + user
 
+    def _param_attr_letters(self, name: str) -> str:
+        attrs = self._var_attrs.get(name, set())
+        letters: list[str] = []
+        if "assoc" in attrs:
+            letters.append("A")
+        if "array" in attrs:
+            letters.append("a")
+        if "export" in attrs:
+            letters.append("x")
+        if "readonly" in attrs:
+            letters.append("r")
+        if "integer" in attrs:
+            letters.append("i")
+        if "nameref" in attrs:
+            letters.append("n")
+        if "lowercase" in attrs:
+            letters.append("l")
+        if "uppercase" in attrs:
+            letters.append("u")
+        if "trace" in attrs:
+            letters.append("t")
+        return "".join(letters)
+
+    def _decode_backslash_escapes(self, value: str) -> str:
+        try:
+            return bytes(value, "utf-8").decode("unicode_escape")
+        except Exception:
+            return value
+
+    @staticmethod
+    def _transform_q_quote(value: str) -> str:
+        return "'" + value.replace("'", "'\"'\"'") + "'"
+
+    @staticmethod
+    def _dq_escape(value: str) -> str:
+        return value.replace("\\", "\\\\").replace('"', '\\"')
+
+    def _typed_declare_A(self, name: str, typed: object) -> str:
+        attrs = self._var_attrs.get(name, set())
+        if isinstance(typed, list):
+            elems: list[str] = []
+            for i, v in enumerate(typed):
+                if v is None:
+                    continue
+                elems.append(f'[{i}]="{self._dq_escape(str(v))}"')
+            if elems:
+                return f"declare -a {name}=(" + " ".join(elems) + ")"
+            return f"declare -a {name}=()"
+        if isinstance(typed, dict) and "assoc" in attrs:
+            elems: list[str] = []
+            for k, v in typed.items():
+                elems.append(
+                    f"[{self._transform_q_quote(str(k))}]=\"{self._dq_escape(str(v))}\""
+                )
+            if elems:
+                return f"declare -A {name}=(" + " ".join(elems) + ")"
+            return f"declare -A {name}=()"
+        return ""
+
+    def _transform_A_value(self, name: str, value: str) -> str:
+        if name == "@":
+            return "set -- " + " ".join(self._transform_q_quote(a) for a in self.positional)
+        if name == "*":
+            return "set -- " + " ".join(self._transform_q_quote(a) for a in self.positional)
+        if name.isdigit() or name in {"#", "?", "$", "!", "-", "LINENO", "PPID"}:
+            return ""
+        typed_decl = self._typed_declare_A(name, self._typed_vars.get(name))
+        if typed_decl:
+            return typed_decl
+        attrs = self._var_attrs.get(name, set())
+        if "assoc" in attrs:
+            return f"declare -A {name}"
+        if "array" in attrs:
+            return f"declare -a {name}={self._transform_q_quote(value)}"
+        return f"{name}={self._transform_q_quote(value)}"
+
+    def _apply_param_transform(self, name: str, value: str, transform_op: str) -> str:
+        if transform_op == "@Q":
+            return self._transform_q_quote(value)
+        if transform_op == "@P":
+            # Prompt-style expansion is intentionally conservative here:
+            # preserve plain value until full prompt escape support is wired.
+            return value
+        if transform_op == "@A":
+            return self._transform_A_value(name, value)
+        if transform_op == "@a":
+            return self._param_attr_letters(name)
+        if transform_op == "@E":
+            return self._decode_backslash_escapes(value)
+        if transform_op == "@U":
+            return value.upper()
+        if transform_op == "@u":
+            return value[:1].upper() + value[1:] if value else ""
+        if transform_op == "@L":
+            return value.lower()
+        raise RuntimeError(self._format_error("syntax error: bad substitution", line=self.current_line))
+
     def _expand_param(self, name: str, quoted: bool):
         if name == "@":
             return list(self.positional)
@@ -7170,7 +7269,20 @@ class Runtime:
                         return vals
                     return vals
                 arg_text = arg or ""
-                if op in ["#", "##"]:
+                if op == "@A":
+                    decl = self._typed_declare_A(base, typed)
+                    if not decl:
+                        scalar_base, base_set = self._get_var_with_state(base)
+                        if base_set:
+                            decl = self._transform_A_value(base, scalar_base)
+                    if key == "@":
+                        if decl:
+                            return decl.split(" ", 2) if decl.startswith("declare ") else [decl]
+                        return []
+                    return decl
+                if isinstance(op, str) and op.startswith("@"):
+                    vals = [self._apply_param_transform(base, v, op) for v in vals]
+                elif op in ["#", "##"]:
                     pattern = (
                         self._pattern_from_structured_fields(arg_fields)
                         if arg_fields is not None
@@ -7237,6 +7349,18 @@ class Runtime:
             if quoted:
                 return self._ifs_join(self.positional)
             return list(self.positional)
+        if isinstance(op, str) and op.startswith("@") and name in {"@", "*"}:
+            if op == "@A":
+                if name == "@":
+                    return ["set", "--"] + [self._transform_q_quote(v) for v in self.positional]
+                return self._transform_A_value(name, "")
+            vals = list(self.positional)
+            vals = [self._apply_param_transform(name, v, op) for v in vals]
+            if name == "*":
+                if quoted:
+                    return self._ifs_join(vals)
+                return vals
+            return vals
         if name.isdigit():
             value, is_set = self._get_param_state(name)
             if op is None:
@@ -7284,7 +7408,7 @@ class Runtime:
         if (
             self.options.get("u", False)
             and not is_set
-            and op in {"__len__", "#", "##", "%", "%%", ":substr", "/"}
+            and (op in {"__len__", "#", "##", "%", "%%", ":substr", "/"} or (isinstance(op, str) and op.startswith("@")))
         ):
             raise RuntimeError(f"unbound variable: {name}")
         if op in ["-", ":-"]:
@@ -7346,6 +7470,8 @@ class Runtime:
                 pat_fields=pat_f,
                 repl_fields=repl_f,
             )
+        if isinstance(op, str) and op.startswith("@"):
+            return self._apply_param_transform(name, value, op)
         return value
 
     def _substring(self, value: str, arg_text: str) -> str:

@@ -7,7 +7,8 @@ This report tracks observed gaps from runnable evidence.
 ## Explicit Known Gaps
 
 1. `${v@op}` parameter transformation operators (`C3.EXP.016`) are partial.
-   - Evidence: `tests/diff/cases/bash-man-param-transform-ops.sh`
+   - Evidence: `tests/diff/cases/bash-man-param-transform-ops.sh`, `tests/diff/cases/bash-man-param-transform-ops-variants.sh`
+   - Note: core scalar/positional/array lanes now run; deeper `${v@P}` prompt-expansion semantics remain open.
 2. `TIMEFORMAT` semantics (`C6.VAR.BASH.TIMEFORMAT`) are partial.
    - Evidence: `tests/diff/cases/bash-man-timeformat.sh`
 3. `BASH_XTRACEFD` behavior (`C6.VAR.BASH.BASH_XTRACEFD`) is partial.

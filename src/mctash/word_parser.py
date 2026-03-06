@@ -443,6 +443,7 @@ def _parse_braced_var(text: str, start: int) -> tuple[LstWordPart | None, int]:
 
 
 def _split_braced_var(inner: str) -> tuple[str | None, str | None, str | None]:
+    transform_ops = {"Q", "P", "A", "a", "E", "U", "u", "L"}
     def _consume_subscript(text: str, j: int) -> int:
         if j >= len(text) or text[j] != "[":
             return j
@@ -482,6 +483,31 @@ def _split_braced_var(inner: str) -> tuple[str | None, str | None, str | None]:
         i = 1
         if i >= len(inner):
             return name, None, None
+        if inner[i] == "@":
+            if i + 1 >= len(inner) or inner[i + 1] not in transform_ops or i + 2 != len(inner):
+                return name, "__invalid__", None
+            return name, "@" + inner[i + 1], None
+        if inner[i] == ":" and (i + 1 >= len(inner) or inner[i + 1] not in "-=?+"):
+            return name, ":substr", inner[i + 1 :]
+        if inner[i] == "/":
+            return name, "/", inner[i + 1 :]
+        two_char_ops = {":-", ":=", ":?", ":+", "##", "%%"}
+        if i + 1 < len(inner) and inner[i : i + 2] in two_char_ops:
+            op = inner[i : i + 2]
+            return name, op, inner[i + 2 :]
+        if inner[i] in ["-", "=", "?", "#", "%", "+"]:
+            op = inner[i]
+            return name, op, inner[i + 1 :]
+        return name, "__invalid__", None
+    if inner[0].isdigit():
+        name = inner[0]
+        i = 1
+        if i >= len(inner):
+            return name, None, None
+        if inner[i] == "@":
+            if i + 1 >= len(inner) or inner[i + 1] not in transform_ops or i + 2 != len(inner):
+                return name, "__invalid__", None
+            return name, "@" + inner[i + 1], None
         if inner[i] == ":" and (i + 1 >= len(inner) or inner[i + 1] not in "-=?+"):
             return name, ":substr", inner[i + 1 :]
         if inner[i] == "/":
@@ -524,6 +550,10 @@ def _split_braced_var(inner: str) -> tuple[str | None, str | None, str | None]:
         name = "".join(name_chars)
     if i >= len(inner):
         return name, None, None
+    if inner[i] == "@":
+        if i + 1 >= len(inner) or inner[i + 1] not in transform_ops or i + 2 != len(inner):
+            return name, "__invalid__", None
+        return name, "@" + inner[i + 1], None
     if inner[i] == ":" and (i + 1 >= len(inner) or inner[i + 1] not in "-=?+"):
         return name, ":substr", inner[i + 1 :]
     if inner[i] == "/":
