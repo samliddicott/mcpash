@@ -77,7 +77,7 @@ Reference summary source: `docs/posix-shall-trace.md`.
 | BASH_XTRACEFD semantics | covered | `tests/diff/cases/bash-man-bash_xtracefd.sh` | Xtrace stream routing to configured FD is covered with dedicated differential evidence. |
 | TMOUT interactive auto-logout | partial | `tests/compat/run_interactive_tmout_matrix.sh` | Bash exits idle interactive shell with TMOUT; mctash currently does not auto-logout. |
 | HISTTIMEFORMAT behavior depth | covered | `tests/diff/cases/bash-man-variables-surface.sh`, `tests/diff/cases/bash-man-histtimeformat.sh` | Dedicated comparator case now covers history timestamp formatting behavior. |
-| Prompt escape depth (`PS2`/`PS4`) | partial | `tests/compat/run_interactive_ux_matrix.sh` | PS1 prompt behavior covered; PS2/PS4 escape semantics need dedicated assertions. |
+| Prompt escape depth (`PS2`/`PS4`) | covered | `tests/compat/run_interactive_ux_matrix.sh` | PS2/PS4 escape semantics are now covered with dedicated PTY assertions. |
 | Upstream `builtins.tests` strict lane | covered | `tests/compat/run_bash_posix_upstream_matrix.sh`, `docs/reports/bash-posix-upstream-gap-latest.md`, `docs/reports/bash-upstream-builtins-gap-latest.md` | Strict gating scope is active and current upstream core lane is green. |
 
 ## POSIX Lane In-Scope Interactive Closure

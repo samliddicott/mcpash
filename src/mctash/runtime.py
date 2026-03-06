@@ -4755,7 +4755,7 @@ class Runtime:
         for i, arg in enumerate(argv):
             items.append(self._trace_quote(arg, force=force_quote[i] if i < len(force_quote) else False))
         ps4 = self._get_var("PS4")
-        prefix = ps4 if ps4 != "" else "+ "
+        prefix = self._expand_prompt_string(ps4) if ps4 != "" else "+ "
         self._print_xtrace(prefix + " ".join(items))
 
     def _print_xtrace(self, text: str) -> None:

@@ -28,6 +28,13 @@ PS1='${debian_chroot:+($debian_chroot)}\$ '
 echo PROMPTVARS_OFF
 shopt -s promptvars
 PS1='X\uY\wZ\$ '
+PS2='PS2:\u:\W\$ '
+echo "ps2-start
+ps2-end"
+PS4='PS4:\u:\W: '
+set -x
+echo PS4_MARK
+set +x
 exit
 EOF
 )"
@@ -62,6 +69,18 @@ done
 # Prompt expansion lane marker: PS1 with \u \w \$ should produce prompt line containing X..Y..Z..
 grep -Eq 'X.*Y.*Z[#$] ' "$tmpdir/mctash.out" || {
   echo "[FAIL] mctash missing expanded PS1 marker" >&2
+  exit 1
+}
+
+# PS2 marker: continuation prompt should include expanded PS2 prefix.
+grep -Eq 'PS2:.*:.*[#$] ' "$tmpdir/mctash.out" || {
+  echo "[FAIL] mctash missing expanded PS2 marker" >&2
+  exit 1
+}
+
+# PS4 marker: xtrace output should include expanded PS4 prefix.
+grep -Eq 'PS4:.*:.* echo PS4_MARK' "$tmpdir/mctash.out" || {
+  echo "[FAIL] mctash missing expanded PS4 marker" >&2
   exit 1
 }
 
