@@ -4230,13 +4230,20 @@ class Runtime:
             saved_stdin = sys.stdin
             saved_stdout = sys.stdout
             saved_fd1 = None
+            saved_fd0 = None
             py_stdout = None
             tmp = None
+            tmp_in = None
             try:
                 if input_text is None:
                     sys.stdin = saved_stdin
                 else:
                     sys.stdin = io.StringIO(input_text)
+                    tmp_in = tempfile.TemporaryFile()
+                    tmp_in.write(data if data is not None else b"")
+                    tmp_in.seek(0)
+                    saved_fd0 = os.dup(0)
+                    os.dup2(tmp_in.fileno(), 0)
                 if capture:
                     tmp = tempfile.TemporaryFile()
                     try:
@@ -4288,8 +4295,13 @@ class Runtime:
                 if saved_fd1 is not None:
                     os.dup2(saved_fd1, 1)
                     os.close(saved_fd1)
+                if saved_fd0 is not None:
+                    os.dup2(saved_fd0, 0)
+                    os.close(saved_fd0)
                 if tmp is not None:
                     tmp.close()
+                if tmp_in is not None:
+                    tmp_in.close()
                 self.env = saved_env
 
         try:
@@ -5662,10 +5674,10 @@ class Runtime:
         names = args[i:]
         if not names:
             if not self._cmd_hash and self._bash_compat_level is not None:
-                print("hash: hash table empty")
+                print("hash: hash table empty", flush=True)
                 return 0
             for name in sorted(self._cmd_hash.keys()):
-                print(f"{name}={self._cmd_hash[name]}")
+                print(f"{name}={self._cmd_hash[name]}", flush=True)
             return 0
         status = 0
         for name in names:
@@ -5675,7 +5687,7 @@ class Runtime:
                 status = 1
                 continue
             if verbose:
-                print(f"{name}={path}")
+                print(f"{name}={path}", flush=True)
         return status
 
     def _run_alias(self, args: List[str]) -> int:
@@ -5871,7 +5883,7 @@ class Runtime:
                 if n > 128:
                     n -= 128
                 try:
-                    print(signal.Signals(n).name.replace("SIG", ""))
+                    print(signal.Signals(n).name.replace("SIG", ""), flush=True)
                     return 0
                 except Exception:
                     self._report_error(self._diag_msg(DiagnosticKey.INVALID_SIGNAL_SPEC, sig=val), line=self.current_line, context="kill")
@@ -5880,7 +5892,7 @@ class Runtime:
             if key is None or key == "EXIT":
                 self._report_error(self._diag_msg(DiagnosticKey.INVALID_SIGNAL_SPEC, sig=val), line=self.current_line, context="kill")
                 return 1
-            print(self._signal_number(key))
+            print(self._signal_number(key), flush=True)
             return 0
         sig_num = signal.SIGTERM
         i = 0
@@ -8528,10 +8540,10 @@ class Runtime:
             if names:
                 for name in names:
                     if self._has_function(name):
-                        print(name)
+                        print(name, flush=True)
                 return 0
             for name in self._function_names():
-                print(name)
+                print(name, flush=True)
             return 0
         if show_func_defs:
             status = 0
@@ -8590,9 +8602,9 @@ class Runtime:
                             else:
                                 key_expr = _dq(k_s)
                             parts.append(f"[{key_expr}]={_dq(str(v))}")
-                        print(f"declare -A {name}=({' '.join(parts)} )")
+                        print(f"declare -A {name}=({' '.join(parts)} )", flush=True)
                     else:
-                        print(f"declare -A {name}")
+                        print(f"declare -A {name}", flush=True)
                 elif "array" in attrs:
                     typed = self._typed_vars.get(name)
                     if isinstance(typed, list) and any(v is not None for v in typed):
@@ -8601,13 +8613,13 @@ class Runtime:
                             if v is None:
                                 continue
                             parts.append(f"[{idx}]={_dq(str(v))}")
-                        print(f"declare -a {name}=({' '.join(parts)})")
+                        print(f"declare -a {name}=({' '.join(parts)})", flush=True)
                     else:
-                        print(f"declare -a {name}")
+                        print(f"declare -a {name}", flush=True)
                 elif "integer" in attrs:
-                    print(f"declare -i {name}={_dq(value)}")
+                    print(f"declare -i {name}={_dq(value)}", flush=True)
                 else:
-                    print(f"{prefix} {name}={_dq(value)}")
+                    print(f"{prefix} {name}={_dq(value)}", flush=True)
             return status
 
         effective_local_scope = local_scope and not force_global

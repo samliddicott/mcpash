@@ -15,7 +15,7 @@ Current result:
 
 - bash rc: `2`
 - mctash rc: `2`
-- stdout diff lines: `59`
+- stdout diff lines: `19`
 - stderr diff lines: `0`
 
 Artifacts:
@@ -36,13 +36,13 @@ Implemented in this tranche:
 - `unset` now matches bash fallback semantics (`unset name` can remove functions when no variable exists) while respecting explicit `-v`.
 - `test -v` now handles array/assoc/scalar subscripted forms used by upstream coverage.
 - typed assignment behavior now respects declared array/assoc attributes during plain assignment commands.
+- in-process pipeline capture now redirects fd0 for builtin/function stages, fixing `. /dev/stdin` pipeline sourcing behavior.
+- `echo` now honors `shopt xpg_echo` escape decoding for upstream builtins coverage.
 
 Remaining high-impact mismatch buckets:
 
-1. hash builtin output ordering/placement mismatch in `builtins.tests`.
-2. source-on-stdin pipeline behavior mismatch (`source6.sub` missing `three - OK` lane).
-3. remaining `declare -p` formatting/order deltas for assoc arrays in `builtins4.sub`.
-4. one residual command/exit-status output mismatch near end of `builtins.tests`.
+1. one extra `hash: hash table empty` line in `builtins.tests`.
+2. assoc-array `declare -p` key ordering mismatch in `builtins4.sub` (`[one][two][three]` vs bash output order in this corpus run).
 
 Next closure order:
 
