@@ -81,7 +81,12 @@ def main(argv: List[str] | None = None) -> int:
             print("mctash: -c requires an argument", file=sys.stderr)
             return 2
         source = argv[1]
-        script_name = argv[2] if len(argv) > 2 else ""
+        if len(argv) > 2:
+            script_name = argv[2]
+        else:
+            script_name = _resolve_invocation_name(sys.argv[0])
+            if script_name in {"__main__.py", "python", "python3", "python3.10"}:
+                script_name = "bash" if os.environ.get("BASH_COMPAT") else "mctash"
         script_args = argv[3:] if len(argv) > 3 else []
         rt = Runtime()
         _apply_startup_options(rt, startup_changes)

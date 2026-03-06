@@ -15,7 +15,7 @@ Current result:
 
 - bash rc: `2`
 - mctash rc: `2`
-- stdout diff lines: `184`
+- stdout diff lines: `160`
 - stderr diff lines: `13`
 
 Artifacts:
@@ -30,6 +30,8 @@ Implemented in this tranche:
 - `umask` gained symbolic assignment support for `who=perms` forms used by upstream builtins coverage.
 - `export`/`export -n` now tracks explicit export attribute state (used by `declare -p` rendering).
 - source/dot diagnostics in bash-style mode now emit `. : name: file not found` form for bare-name lookup failures.
+- non-posix special-builtin assignment-prefix behavior now restores prefix names unless builtin semantics require persistence.
+- `-c` with no explicit argv0 now gets a stable default script name (`bash` in bash-compat lane) for parity-sensitive `$0` tests.
 
 Remaining high-impact mismatch buckets:
 

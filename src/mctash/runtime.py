@@ -2451,14 +2451,43 @@ class Runtime:
         if self._is_builtin_enabled(name):
             is_special = name in self.SPECIAL_BUILTINS
             if is_special:
-                self.env = local_env
+                if self.options.get("posix", False):
+                    self.env = local_env
+                    try:
+                        with self._redirected_fds(redirects):
+                            return self._run_builtin(name, argv)
+                    except RuntimeError as e:
+                        msg = str(e)
+                        self._print_stderr(msg)
+                        return self._runtime_error_status(msg)
+                persist_assigns = self._declaration_assigns_should_persist(argv)
+                saved_env = dict(self.env)
                 try:
-                    with self._redirected_fds(redirects):
-                        return self._run_builtin(name, argv)
-                except RuntimeError as e:
-                    msg = str(e)
-                    self._print_stderr(msg)
-                    return self._runtime_error_status(msg)
+                    self.env = local_env
+                    try:
+                        with self._redirected_fds(redirects):
+                            status = self._run_builtin(name, argv)
+                    except RuntimeError as e:
+                        msg = str(e)
+                        self._print_stderr(msg)
+                        return self._runtime_error_status(msg)
+                finally:
+                    result_env = dict(self.env)
+                    merged = dict(saved_env)
+                    for k, v in result_env.items():
+                        if persist_assigns or k not in assign_names:
+                            merged[k] = v
+                    for k in list(merged.keys()):
+                        if k not in result_env and (persist_assigns or k not in assign_names):
+                            merged.pop(k, None)
+                    if not persist_assigns:
+                        for k in assign_names:
+                            if k in saved_env:
+                                merged[k] = saved_env[k]
+                            else:
+                                merged.pop(k, None)
+                    self.env = merged
+                return status
             saved_env = self.env
             try:
                 self.env = local_env
@@ -4553,13 +4582,41 @@ class Runtime:
             if self._is_builtin_enabled(name):
                 is_special = name in self.SPECIAL_BUILTINS
                 if is_special:
-                    self.env = local_env
+                    if self.options.get("posix", False):
+                        self.env = local_env
+                        try:
+                            with self._redirected_fds(node.redirects):
+                                return self._run_builtin(name, argv)
+                        except RuntimeError as e:
+                            print(str(e), file=sys.stderr)
+                            return 1
+                    persist_assigns = self._declaration_assigns_should_persist(argv)
+                    saved_env = dict(self.env)
                     try:
-                        with self._redirected_fds(node.redirects):
-                            return self._run_builtin(name, argv)
-                    except RuntimeError as e:
-                        print(str(e), file=sys.stderr)
-                        return 1
+                        self.env = local_env
+                        try:
+                            with self._redirected_fds(node.redirects):
+                                status = self._run_builtin(name, argv)
+                        except RuntimeError as e:
+                            print(str(e), file=sys.stderr)
+                            return 1
+                    finally:
+                        result_env = dict(self.env)
+                        merged = dict(saved_env)
+                        for k, v in result_env.items():
+                            if persist_assigns or k not in assign_names:
+                                merged[k] = v
+                        for k in list(merged.keys()):
+                            if k not in result_env and (persist_assigns or k not in assign_names):
+                                merged.pop(k, None)
+                        if not persist_assigns:
+                            for k in assign_names:
+                                if k in saved_env:
+                                    merged[k] = saved_env[k]
+                                else:
+                                    merged.pop(k, None)
+                        self.env = merged
+                    return status
                 saved_env = self.env
                 try:
                     self.env = local_env
