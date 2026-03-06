@@ -1785,7 +1785,12 @@ class Runtime:
                     if op == "+=":
                         local_env[name] = local_env.get(name, "") + value
                     else:
-                        local_env[name] = value
+                        attrs = self._var_attrs.get(name, set())
+                        if "array" in attrs or "assoc" in attrs:
+                            self._assign_shell_var(name, value)
+                            local_env[name] = self._get_var(name)
+                        else:
+                            local_env[name] = value
                 if self.options.get("x", False):
                     trace_assigns = [
                         Assignment(
@@ -1807,6 +1812,9 @@ class Runtime:
                 self.env = saved_env
             for n in assigned_names:
                 if n in compound_assigned:
+                    continue
+                attrs = self._var_attrs.get(n, set())
+                if "array" in attrs or "assoc" in attrs:
                     continue
                 self._typed_vars.pop(n, None)
             self.env.update(local_env)
@@ -2303,7 +2311,12 @@ class Runtime:
                         compound_assigned.add(name)
                         local_env[name] = self._get_var(name)
                         continue
-                    local_env[name] = value
+                    attrs = self._var_attrs.get(name, set())
+                    if "array" in attrs or "assoc" in attrs:
+                        self._assign_shell_var(name, value)
+                        local_env[name] = self._get_var(name)
+                    else:
+                        local_env[name] = value
                 should_persist_env = any(
                     not (r.op == ">&" and (r.fd is None or r.fd == 1) and r.target == "1")
                     for r in redirects
@@ -2311,6 +2324,9 @@ class Runtime:
                 if should_persist_env:
                     for n in assigned_names:
                         if n in compound_assigned:
+                            continue
+                        attrs = self._var_attrs.get(n, set())
+                        if "array" in attrs or "assoc" in attrs:
                             continue
                         self._typed_vars.pop(n, None)
                     saved_env.clear()
@@ -2357,7 +2373,12 @@ class Runtime:
                     local_env[name] = self._get_var(name)
                     self.env = local_env
                     continue
-                local_env[name] = value
+                attrs = self._var_attrs.get(name, set())
+                if "array" in attrs or "assoc" in attrs:
+                    self._assign_shell_var(name, value)
+                    local_env[name] = self._get_var(name)
+                else:
+                    local_env[name] = value
                 self.env = local_env
         finally:
             self.env = saved_env
@@ -2378,6 +2399,9 @@ class Runtime:
                     return self._runtime_error_status(msg)
             for n in assigned_names:
                 if n in compound_assigned:
+                    continue
+                attrs = self._var_attrs.get(n, set())
+                if "array" in attrs or "assoc" in attrs:
                     continue
                 self._typed_vars.pop(n, None)
             self.env.update(local_env)
@@ -4446,6 +4470,9 @@ class Runtime:
                         for n in assigned_names:
                             if n in compound_assigned:
                                 continue
+                            attrs = self._var_attrs.get(n, set())
+                            if "array" in attrs or "assoc" in attrs:
+                                continue
                             self._typed_vars.pop(n, None)
                         saved_env.clear()
                         saved_env.update(self.env)
@@ -4492,7 +4519,12 @@ class Runtime:
                     if op == "+=":
                         local_env[name] = local_env.get(name, "") + value
                     else:
-                        local_env[name] = value
+                        attrs = self._var_attrs.get(name, set())
+                        if "array" in attrs or "assoc" in attrs:
+                            self._assign_shell_var(name, value)
+                            local_env[name] = self._get_var(name)
+                        else:
+                            local_env[name] = value
                     self.env = local_env
             finally:
                 self.env = saved_env
@@ -4508,6 +4540,9 @@ class Runtime:
                     return 1
                 for n in assigned_names:
                     if n in compound_assigned:
+                        continue
+                    attrs = self._var_attrs.get(n, set())
+                    if "array" in attrs or "assoc" in attrs:
                         continue
                     self._typed_vars.pop(n, None)
                 self.env.update(local_env)
@@ -4837,9 +4872,25 @@ class Runtime:
             target = argv[1] if len(argv) > 1 else self.env.get("HOME", "/")
             try:
                 old = os.getcwd()
-                os.chdir(target)
+                resolved = target
+                used_cdpath = False
+                if (
+                    target
+                    and not os.path.isabs(target)
+                    and not target.startswith(".")
+                    and "CDPATH" in self.env
+                ):
+                    for base in self.env.get("CDPATH", "").split(":"):
+                        candidate = os.path.join(base if base else ".", target)
+                        if os.path.isdir(candidate):
+                            resolved = candidate
+                            used_cdpath = bool(base)
+                            break
+                os.chdir(resolved)
                 self.env["OLDPWD"] = old
                 self.env["PWD"] = os.getcwd()
+                if used_cdpath:
+                    print(self.env["PWD"])
                 self._sync_dir_stack_current()
                 return 0
             except OSError:
@@ -5224,6 +5275,7 @@ class Runtime:
             else:
                 self._report_error(f"{path}: No such file or directory", line=self.current_line)
             return 1
+        source_args = list(args)
         saved_positional = list(self.positional) if args else None
         self.source_stack.append(path)
         self._sync_root_frame()
@@ -5271,7 +5323,10 @@ class Runtime:
             status = 2
         finally:
             if saved_positional is not None:
-                self.set_positional_args(saved_positional)
+                # `.`/`source` with arguments restores caller positional params
+                # only when the sourced script leaves `$@` unchanged.
+                if self.positional == source_args:
+                    self.set_positional_args(saved_positional)
             if self.source_stack:
                 self.source_stack.pop()
             self._sync_root_frame()
@@ -7059,13 +7114,16 @@ class Runtime:
                     vals_for_key = self._array_visible_values(typed)
                 elif isinstance(typed, dict) and "assoc" in attrs:
                     vals_for_key = [str(v) for v in reversed(list(typed.values()))]
+                else:
+                    base_v, base_set = self._get_var_with_state(base)
+                    vals_for_key = [base_v] if base_set else []
             if op == "__len__":
                 if key in {"@", "*"}:
                     if isinstance(typed, list):
                         return str(len(vals_for_key))
                     if isinstance(typed, dict) and "assoc" in attrs:
                         return str(len(vals_for_key))
-                    return "0"
+                    return str(len(vals_for_key))
             if key in {"@", "*"}:
                 vals: list[str] = vals_for_key
                 if op is None:
@@ -7939,6 +7997,20 @@ class Runtime:
     def _assign_compound_var(self, name: str, op: str, values: list[str]) -> None:
         if self._bash_compat_level is None:
             raise RuntimeError(f"{name}: compound assignment requires BASH_COMPAT")
+        attrs = self._var_attrs.get(name, set())
+        if "assoc" in attrs:
+            cur_map = self._typed_vars.get(name)
+            out_map: dict[str, str] = dict(cur_map) if (op == "+=" and isinstance(cur_map, dict)) else {}
+            for raw in values:
+                m = re.match(r"^\[(.*)\]=(.*)$", str(raw))
+                if m is None:
+                    continue
+                key = self._eval_assoc_subscript_key(m.group(1))
+                out_map[str(key)] = self._expand_assignment_word(m.group(2))
+            self._typed_vars[name] = out_map
+            self._set_var_attrs(name, assoc=True)
+            self._set_subscript_projection(name, str(out_map.get("0", "")))
+            return
         cur = self._typed_vars.get(name)
         cur_vals: list[object] = []
         if isinstance(cur, list):
@@ -7949,8 +8021,10 @@ class Runtime:
             cur_vals = [str(v) for v in values]
         self._typed_vars[name] = cur_vals
         self._set_var_attrs(name, array=True)
-        vis = self._array_visible_values(cur_vals)
-        self._set_subscript_projection(name, vis[0] if vis else "")
+        proj = ""
+        if len(cur_vals) > 0 and cur_vals[0] is not None:
+            proj = str(cur_vals[0])
+        self._set_subscript_projection(name, proj)
 
     def _parse_compound_assignment_rhs(self, rhs: str) -> list[str] | None:
         text = rhs.strip()
@@ -8026,8 +8100,10 @@ class Runtime:
             cur_arr.extend([None] * (idx + 1 - len(cur_arr)))
         cur_arr[idx] = value
         self._typed_vars[base] = cur_arr
-        vis = self._array_visible_values(cur_arr)
-        self._set_subscript_projection(base, vis[0] if vis else "")
+        proj = ""
+        if len(cur_arr) > 0 and cur_arr[0] is not None:
+            proj = str(cur_arr[0])
+        self._set_subscript_projection(base, proj)
         self._set_var_attrs(base, array=True)
         return True
 
@@ -8108,6 +8184,17 @@ class Runtime:
             if cell is None:
                 return "", False
             return str(cell), True
+        attrs = self._var_attrs.get(name, set())
+        if "assoc" in attrs:
+            typed = self._typed_vars.get(name)
+            if isinstance(typed, dict) and "0" in typed:
+                return str(typed["0"]), True
+            return "", False
+        if "array" in attrs:
+            typed = self._typed_vars.get(name)
+            if isinstance(typed, list) and len(typed) > 0 and typed[0] is not None:
+                return str(typed[0]), True
+            return "", False
         for scope in reversed(self.local_stack):
             if name in scope:
                 return scope[name], True
@@ -8320,6 +8407,23 @@ class Runtime:
         if name in self.readonly_vars:
             raise RuntimeError(self._diag_msg(DiagnosticKey.READONLY_VAR, name=name))
         value = self._coerce_var_value(name, value)
+        attrs = self._var_attrs.get(name, set())
+        if "assoc" in attrs:
+            cur = self._typed_vars.get(name)
+            amap = dict(cur) if isinstance(cur, dict) else {}
+            amap["0"] = value
+            self._typed_vars[name] = amap
+            self._set_subscript_projection(name, str(amap.get("0", "")))
+            return
+        if "array" in attrs:
+            cur = self._typed_vars.get(name)
+            arr = list(cur) if isinstance(cur, list) else []
+            if not arr:
+                arr = [None]
+            arr[0] = value
+            self._typed_vars[name] = arr
+            self._set_subscript_projection(name, value)
+            return
         self._typed_vars.pop(name, None)
         tied = self._py_ties.get(name)
         if tied is not None:
@@ -8434,7 +8538,8 @@ class Runtime:
             func_names = names if names else self._function_names()
             for name in func_names:
                 if not self._has_function(name):
-                    self._report_error(f"{cmd_name}: {name}: not found", line=self.current_line)
+                    if print_vars:
+                        self._report_error(f"{cmd_name}: {name}: not found", line=self.current_line)
                     status = 1
                     continue
                 body = self.functions_asdl.get(name)
@@ -8777,6 +8882,7 @@ class Runtime:
 
     def _run_unset(self, args: List[str]) -> int:
         mode_vars = True
+        explicit_vars_mode = False
         idx = 0
         while idx < len(args):
             arg = args[idx]
@@ -8795,6 +8901,7 @@ class Runtime:
                 for ch in arg[1:]:
                     if ch == "v":
                         mode_vars = True
+                        explicit_vars_mode = True
                     elif ch == "f":
                         mode_vars = False
                     else:
@@ -8844,6 +8951,11 @@ class Runtime:
                     vis = self._array_visible_values(typed)
                     self._set_subscript_projection(base, vis[0] if vis else "")
                     continue
+            had_var = False
+            if name in self._typed_vars or name in self._var_attrs:
+                had_var = True
+            else:
+                _, had_var = self._get_var_with_state(name)
             self._typed_vars.pop(name, None)
             removed_local = False
             for scope in reversed(self.local_stack):
@@ -8855,8 +8967,12 @@ class Runtime:
                 continue
             if name in self.env:
                 del self.env[name]
+            self._var_attrs.pop(name, None)
             if name == "OPTIND":
                 self._getopts_state = None
+            if not had_var and not explicit_vars_mode:
+                self.functions.pop(name, None)
+                self.functions_asdl.pop(name, None)
         return status
 
     def _eval_assoc_subscript_key(self, key: str) -> str:
@@ -8892,6 +9008,23 @@ class Runtime:
         if name in self.readonly_vars:
             raise RuntimeError(self._diag_msg(DiagnosticKey.READONLY_VAR, name=name))
         value = self._coerce_var_value(name, value)
+        attrs = self._var_attrs.get(name, set())
+        if "assoc" in attrs:
+            cur = self._typed_vars.get(name)
+            amap = dict(cur) if isinstance(cur, dict) else {}
+            amap["0"] = value
+            self._typed_vars[name] = amap
+            self._set_subscript_projection(name, str(amap.get("0", "")))
+            return
+        if "array" in attrs:
+            cur = self._typed_vars.get(name)
+            arr = list(cur) if isinstance(cur, list) else []
+            if not arr:
+                arr = [None]
+            arr[0] = value
+            self._typed_vars[name] = arr
+            self._set_subscript_projection(name, value)
+            return
         self._typed_vars.pop(name, None)
         tied = self._py_ties.get(name)
         if tied is not None:
@@ -9968,6 +10101,8 @@ class Runtime:
             break
         args = args[i:]
         data = " ".join(args)
+        if self._shopts.get("xpg_echo", False):
+            data = self._decode_backslash_escapes(data)
         if newline:
             data += "\n"
         if self._force_broken_pipe and self._fd_redirect_depth == 0:
@@ -11267,7 +11402,7 @@ class Runtime:
         for item in node.items:
             out.extend(self._format_ast_andor_for_type(item.node, indent))
         if not out:
-            out.append(" " * indent + ":;")
+            out.append(" " * indent + ":")
         return out
 
     def _format_ast_andor_for_type(self, node: AndOr, indent: int) -> list[str]:
@@ -11278,14 +11413,14 @@ class Runtime:
             text_parts.append(self._format_ast_pipeline_inline_for_type(pl))
             if i < len(node.operators):
                 text_parts.append(node.operators[i])
-        return [" " * indent + " ".join(text_parts) + ";"]
+        return [" " * indent + " ".join(text_parts)]
 
     def _format_ast_pipeline_for_type(self, node: Pipeline, indent: int) -> list[str]:
         if len(node.commands) == 1:
             return self._format_ast_command_for_type(node.commands[0], indent)
         prefix = "! " if node.negate else ""
         text = " | ".join(self._format_ast_command_inline_for_type(c) for c in node.commands)
-        return [" " * indent + prefix + text + ";"]
+        return [" " * indent + prefix + text]
 
     def _format_ast_pipeline_inline_for_type(self, node: Pipeline) -> str:
         prefix = "! " if node.negate else ""
@@ -11305,12 +11440,12 @@ class Runtime:
             text = " ".join(items) if items else ":"
             if text == "time":
                 return [pad + "time "]
-            return [pad + text + ";"]
+            return [pad + text]
         if isinstance(node, ForCommand):
             head = f"for {node.name}"
             if node.explicit_in:
                 head += " in " + " ".join(w.text for w in node.items)
-            lines = [pad + head + ";", pad + "do"]
+            lines = [pad + head, pad + "do"]
             lines.extend(self._format_ast_list_for_type(node.body, indent + 4))
             lines.append(pad + "done")
             return lines
@@ -11548,6 +11683,8 @@ class Runtime:
         result = False
         if len(tokens) >= 2 and tokens[0] == "-e":
             result = os.path.exists(tokens[1])
+        elif len(tokens) >= 2 and tokens[0] == "-v":
+            result = self._test_var_is_set(tokens[1])
         elif len(tokens) >= 2 and tokens[0] == "-n":
             result = tokens[1] != ""
         elif len(tokens) >= 2 and tokens[0] == "-z":
@@ -11587,6 +11724,34 @@ class Runtime:
         elif len(tokens) == 1:
             result = tokens[0] != ""
         return 0 if (result ^ negate) else 1
+
+    def _test_var_is_set(self, expr: str) -> bool:
+        parsed = self._parse_subscripted_name(expr)
+        if parsed is not None:
+            base, key = parsed
+            attrs = self._var_attrs.get(base, set())
+            typed = self._typed_vars.get(base)
+            if key in {"@", "*"}:
+                if "assoc" in attrs and isinstance(typed, dict):
+                    return len(typed) > 0
+                if "array" in attrs and isinstance(typed, list):
+                    return any(v is not None for v in typed)
+                _, is_set = self._get_var_with_state(base)
+                return is_set
+            if "assoc" in attrs and isinstance(typed, dict):
+                akey = self._eval_assoc_subscript_key(key)
+                return akey in typed
+            if "array" in attrs and isinstance(typed, list):
+                i_key = self._eval_index_subscript(key, typed, strict=False, name=base)
+                return i_key is not None and 0 <= i_key < len(typed) and typed[i_key] is not None
+            return False
+        attrs = self._var_attrs.get(expr, set())
+        if "assoc" in attrs:
+            return False
+        if "array" in attrs:
+            return False
+        _, is_set = self._get_var_with_state(expr)
+        return is_set
 
     def _eval_source(
         self,

@@ -15,8 +15,8 @@ Current result:
 
 - bash rc: `2`
 - mctash rc: `2`
-- stdout diff lines: `160`
-- stderr diff lines: `13`
+- stdout diff lines: `59`
+- stderr diff lines: `0`
 
 Artifacts:
 
@@ -32,14 +32,17 @@ Implemented in this tranche:
 - source/dot diagnostics in bash-style mode now emit `. : name: file not found` form for bare-name lookup failures.
 - non-posix special-builtin assignment-prefix behavior now restores prefix names unless builtin semantics require persistence.
 - `-c` with no explicit argv0 now gets a stable default script name (`bash` in bash-compat lane) for parity-sensitive `$0` tests.
+- sourced positional-parameter semantics now preserve caller `$@` only when source args remain unchanged, matching bash behavior in `source3/source4` lanes.
+- `unset` now matches bash fallback semantics (`unset name` can remove functions when no variable exists) while respecting explicit `-v`.
+- `test -v` now handles array/assoc/scalar subscripted forms used by upstream coverage.
+- typed assignment behavior now respects declared array/assoc attributes during plain assignment commands.
 
 Remaining high-impact mismatch buckets:
 
-1. assignment-prefix behavior around `eval`/special-builtin environment persistence.
-2. `exec -a/-l` argv0 reporting mismatches in upstream lane.
-3. positional-parameter behavior in sourced-script path tests (`source4.sub` lane).
-4. array/assoc + `typeset`/`unset` behavior in `builtins5.sub` and `builtins6.sub`.
-5. function-definition rendering and a few residual output ordering/formatting deltas.
+1. hash builtin output ordering/placement mismatch in `builtins.tests`.
+2. source-on-stdin pipeline behavior mismatch (`source6.sub` missing `three - OK` lane).
+3. remaining `declare -p` formatting/order deltas for assoc arrays in `builtins4.sub`.
+4. one residual command/exit-status output mismatch near end of `builtins.tests`.
 
 Next closure order:
 
