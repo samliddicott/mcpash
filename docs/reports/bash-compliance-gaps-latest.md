@@ -6,9 +6,7 @@ This report tracks observed gaps from runnable evidence.
 
 ## Explicit Known Gaps
 
-1. `TMOUT` interactive behavior (`C6.VAR.BASH.TMOUT`) is partial.
-   - Evidence: `tests/compat/run_interactive_tmout_matrix.sh`
-2. Interactive SIGINT foreground-command continuation (`C8.JOB.13`) is partial.
+1. Interactive SIGINT foreground-command continuation (`C8.JOB.13`) is partial.
    - Evidence: `tests/compat/run_interactive_sigint_matrix.sh`
 
 ## Known Unknowns (Compliance-Risk Tracking)

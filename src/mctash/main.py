@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import signal
 import shlex
 import sys
 from typing import Dict, List, Tuple
@@ -646,7 +647,30 @@ def _run_interactive(rt: Runtime) -> int:
                     except Exception:
                         pass
             prompt_raw = rt.env.get("PS2", "> ") if buffer else rt.env.get("PS1", "$ ")
-            line = input(_expand_prompt(rt, prompt_raw))
+            timeout_secs: int | None = None
+            tmout_raw = rt._get_var("TMOUT")
+            if tmout_raw.isdigit():
+                t = int(tmout_raw, 10)
+                if t > 0:
+                    timeout_secs = t
+            old_handler = None
+            armed = False
+            if timeout_secs is not None and hasattr(signal, "SIGALRM"):
+                old_handler = signal.getsignal(signal.SIGALRM)
+
+                def _tmout_handler(_signum, _frame):
+                    raise TimeoutError()
+
+                signal.signal(signal.SIGALRM, _tmout_handler)
+                signal.alarm(timeout_secs)
+                armed = True
+            try:
+                line = input(_expand_prompt(rt, prompt_raw))
+            finally:
+                if armed and hasattr(signal, "SIGALRM"):
+                    signal.alarm(0)
+                    if old_handler is not None:
+                        signal.signal(signal.SIGALRM, old_handler)
             eof_count = 0
         except EOFError:
             if rt.options.get("I", False) and os.isatty(0):
@@ -663,6 +687,12 @@ def _run_interactive(rt: Runtime) -> int:
             rt.last_status = status
             buffer.clear()
             continue
+        except TimeoutError:
+            print("timed out waiting for input: auto-logout")
+            status = 0
+            rt.last_status = status
+            rt._trap_status_hint = status
+            break
         if not buffer:
             expanded, err = _expand_history_bang(rt, line + "\n")
             if err is not None:
