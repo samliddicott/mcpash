@@ -1,6 +1,6 @@
 # Bash Upstream Builtins Gap Report
 
-Date: 2026-03-05
+Date: 2026-03-06
 
 Source corpus:
 
@@ -15,29 +15,29 @@ Current result:
 
 - bash rc: `2`
 - mctash rc: `2`
-- stdout diff lines: `251`
-- stderr diff lines: `27`
+- stdout diff lines: `184`
+- stderr diff lines: `13`
 
 Artifacts:
 
-- `tests/bash/upstream/baserock-bash-5.1-testing/run-lanes/diff/builtins.bcompat.out.diff`
-- `tests/bash/upstream/baserock-bash-5.1-testing/run-lanes/diff/builtins.bcompat.err.diff`
+- `tests/bash/upstream/baserock-bash-5.1-testing/run-lanes/diff/builtins.tests.out.diff`
+- `tests/bash/upstream/baserock-bash-5.1-testing/run-lanes/diff/builtins.tests.err.diff`
 
 Implemented in this tranche:
 
-- `exit status` non-numeric now exits with status `2` (no traceback crash).
-- `type` gained bash-compatible `-t` and `-a` behavior in bash-compat mode while preserving ash-lane behavior.
-- `exec` gained `-a`, `-l`, `-c` option handling.
-- `declare -f` accepted and prints function definitions.
-- POSIX special-builtin set corrected for `enable -s` (`exec`/`times` included; non-special entries removed).
+- arithmetic-command parsing now disambiguates `((...))` vs nested grouping better and handles empty `(( ))` form without syntax abort.
+- alias expansion now preserves syntax-sensitive aliases earlier in parse and supports variable expansion for runtime alias words.
+- `umask` gained symbolic assignment support for `who=perms` forms used by upstream builtins coverage.
+- `export`/`export -n` now tracks explicit export attribute state (used by `declare -p` rendering).
+- source/dot diagnostics in bash-style mode now emit `. : name: file not found` form for bare-name lookup failures.
 
 Remaining high-impact mismatch buckets:
 
-1. `declare` and assignment edge behavior in `declare -p` and assignment-prefix forms.
-2. array/assoc + `typeset` behavior in `builtins4.sub` / `builtins5.sub`.
-3. source/path edge flows (`source5.sub`/`source7.sub`) and parser behavior in those scripts.
-4. diagnostics parity for several builtin error paths.
-5. residual output formatting differences (`declare` rendering, function dump formatting, and selected builtin listings).
+1. assignment-prefix behavior around `eval`/special-builtin environment persistence.
+2. `exec -a/-l` argv0 reporting mismatches in upstream lane.
+3. positional-parameter behavior in sourced-script path tests (`source4.sub` lane).
+4. array/assoc + `typeset`/`unset` behavior in `builtins5.sub` and `builtins6.sub`.
+5. function-definition rendering and a few residual output ordering/formatting deltas.
 
 Next closure order:
 

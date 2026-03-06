@@ -172,6 +172,8 @@ class Parser:
         return trailing
 
     def _alias_affects_syntax(self, text: str) -> bool:
+        if ";" in text or "\n" in text:
+            return True
         alias_reader = TokenReader(text)
         alias_ctx = LexContext(reserved_words=RESERVED_WORDS, allow_reserved=True, allow_newline=False)
         tok = alias_reader.next(alias_ctx)
@@ -479,11 +481,19 @@ class Parser:
         tok1 = self._peek_n(1)
         if (
             tok
+            and tok.kind == "OP"
+            and tok.value == "(("
+        ):
+            if self._looks_like_arith_command():
+                return self.parse_arith_command()
+        if (
+            tok
             and tok1
             and ((tok.kind == "OP" and tok.value == "(") or (self._is_word(tok) and tok.value == "("))
             and ((tok1.kind == "OP" and tok1.value == "(") or (self._is_word(tok1) and tok1.value == "("))
         ):
-            return self.parse_arith_command()
+            if self._looks_like_arith_command():
+                return self.parse_arith_command()
         if self._is_word(tok) and tok.value == "!":
             ntok = self._peek_n(1)
             if ntok is None or (ntok.kind == "OP" and ntok.value in ["\n", ";", "&", "|"]):
@@ -662,13 +672,34 @@ class Parser:
                     )
                     continue
                 else:
-                    argv.append(Word(tok.value))
+                    word_text = tok.value
+                    word_line, word_col, word_index = tok.line, tok.col, tok.index
+                    self._advance()
+                    if (
+                        argv
+                        and argv[0].text in {"declare", "typeset", "local", "readonly", "export"}
+                        and self._is_assignment(word_text)
+                    ):
+                        _, _, rhs = self._split_assignment(word_text)
+                        if rhs == "":
+                            comp = self._parse_compound_assignment_rhs()
+                            if comp is not None:
+                                word_text = word_text + comp
+                        elif rhs.startswith("("):
+                            depth = rhs.count("(") - rhs.count(")")
+                            while depth > 0:
+                                cur = self._peek()
+                                if cur is None or (cur.kind == "OP" and cur.value == "\n"):
+                                    raise ParseError("syntax error: missing ')' in compound assignment")
+                                word_text = word_text + " " + cur.value
+                                depth += cur.value.count("(") - cur.value.count(")")
+                                self._advance()
+                    argv.append(Word(word_text))
                     lst_argv.append(
                         self._resolve_word(
-                            parse_word(tok.value, line=tok.line, col=tok.col, index=tok.index)
+                            parse_word(word_text, line=word_line, col=word_col, index=word_index)
                         )
                     )
-                    self._advance()
                 continue
             break
         if not argv and not assignments and not redirects:
@@ -687,17 +718,97 @@ class Parser:
             return simple_cmd, LstShAssignmentCommand(assignments=lst_assignments, redirects=lst_redirects)
         return simple_cmd, lst_simple_cmd
 
+    def _looks_like_arith_command(self) -> bool:
+        """Heuristic disambiguation for command form `(( ... ))`.
+
+        In shell grammar this token prefix is ambiguous with nested subshell/grouping
+        forms like `((echo x); echo y)`. Keep arithmetic parsing only when there is
+        no top-level list separator before the matching closing `))`.
+        """
+        tok0 = self._peek_n(0)
+        depth = 1
+        arith_paren = 0
+        i = 1 if (tok0 is not None and tok0.kind == "OP" and tok0.value == "((") else 2
+        while True:
+            tok = self._peek_n(i)
+            if tok is None:
+                return True
+            tok1 = self._peek_n(i + 1)
+            if (tok.kind == "OP" and tok.value == "(") or (self._is_word(tok) and tok.value == "("):
+                arith_paren += 1
+                i += 1
+                continue
+            if tok.kind == "OP" and tok.value == "((":
+                depth += 1
+                i += 1
+                continue
+            if (
+                tok1
+                and ((tok.kind == "OP" and tok.value == "(") or (self._is_word(tok) and tok.value == "("))
+                and ((tok1.kind == "OP" and tok1.value == "(") or (self._is_word(tok1) and tok1.value == "("))
+            ):
+                depth += 1
+                i += 2
+                continue
+            if tok.kind == "OP" and tok.value == "))":
+                if arith_paren > 0:
+                    arith_paren -= 1
+                    i += 1
+                    continue
+                depth -= 1
+                if depth == 0:
+                    return True
+                i += 1
+                continue
+            if (
+                tok1
+                and ((tok.kind == "OP" and tok.value == ")") or (self._is_word(tok) and tok.value == ")"))
+                and ((tok1.kind == "OP" and tok1.value == ")") or (self._is_word(tok1) and tok1.value == ")"))
+            ):
+                if arith_paren > 0:
+                    arith_paren -= 1
+                    i += 1
+                    continue
+                depth -= 1
+                if depth == 0:
+                    return True
+                i += 2
+                continue
+            if (tok.kind == "OP" and tok.value == ")") or (self._is_word(tok) and tok.value == ")"):
+                if arith_paren > 0:
+                    arith_paren -= 1
+                i += 1
+                continue
+            if depth == 1 and tok.kind == "OP" and tok.value in {";", "\n", "&", "|"}:
+                return False
+            i += 1
+
     def parse_arith_command(self) -> tuple[SimpleCommand, LstSimpleCommand]:
         # Parse arithmetic command form: (( expr ))
-        self._expect_group_token("(")
-        self._expect_group_token("(")
+        open_tok = self._peek()
+        if open_tok is not None and open_tok.kind == "OP" and open_tok.value == "((":
+            self._advance()
+        else:
+            self._expect_group_token("(")
+            self._expect_group_token("(")
         parts: List[str] = []
         depth = 1
+        arith_paren = 0
         while True:
             tok = self._peek()
             if tok is None:
                 raise ParseError("syntax error: expected '))'")
             tok1 = self._peek_n(1)
+            if (tok.kind == "OP" and tok.value == "(") or (self._is_word(tok) and tok.value == "("):
+                arith_paren += 1
+                self._advance()
+                parts.append(tok.value)
+                continue
+            if tok.kind == "OP" and tok.value == "((":
+                depth += 1
+                parts.append("((")
+                self._advance()
+                continue
             if (
                 tok1
                 and ((tok.kind == "OP" and tok.value == "(") or (self._is_word(tok) and tok.value == "("))
@@ -713,6 +824,11 @@ class Parser:
                 and ((tok.kind == "OP" and tok.value == ")") or (self._is_word(tok) and tok.value == ")"))
                 and ((tok1.kind == "OP" and tok1.value == ")") or (self._is_word(tok1) and tok1.value == ")"))
             ):
+                if arith_paren > 0:
+                    arith_paren -= 1
+                    self._advance()
+                    parts.append(tok.value)
+                    continue
                 depth -= 1
                 self._advance()
                 self._advance()
@@ -720,6 +836,21 @@ class Parser:
                     break
                 parts.append("))")
                 continue
+            if tok.kind == "OP" and tok.value == "))":
+                if arith_paren > 0:
+                    arith_paren -= 1
+                    self._advance()
+                    parts.append(")")
+                    continue
+                depth -= 1
+                self._advance()
+                if depth == 0:
+                    break
+                parts.append("))")
+                continue
+            if (tok.kind == "OP" and tok.value == ")") or (self._is_word(tok) and tok.value == ")"):
+                if arith_paren > 0:
+                    arith_paren -= 1
             self._advance()
             parts.append(tok.value)
         # Preserve arithmetic token adjacency so `(( x == 4 ))` becomes `x==4`
@@ -793,7 +924,32 @@ class Parser:
 
     def _parse_compound_assignment_rhs(self) -> str | None:
         tok = self._peek()
-        if tok is None or tok.kind != "OP" or tok.value != "(":
+        if tok is None:
+            return None
+        if tok.kind == "WORD" and tok.value.startswith("("):
+            src = self.reader.source
+            start_index = tok.index
+            i = start_index
+            depth = 0
+            while i < len(src):
+                ch = src[i]
+                if ch == "(":
+                    depth += 1
+                elif ch == ")":
+                    depth -= 1
+                    if depth == 0:
+                        end_index = i + 1
+                        while True:
+                            cur = self._peek()
+                            if cur is None or cur.index >= end_index:
+                                break
+                            self._advance()
+                        return src[start_index:end_index]
+                elif ch == "\n" and depth > 0:
+                    raise ParseError("syntax error: missing ')' in compound assignment")
+                i += 1
+            raise ParseError("syntax error: missing ')' in compound assignment")
+        if tok.kind != "OP" or tok.value != "(":
             return None
         start_index = tok.index
         self._advance()  # '('

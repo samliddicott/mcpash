@@ -571,6 +571,7 @@ class Runtime:
     SPECIAL_BUILTINS = {
         ":",
         ".",
+        "source",
         "break",
         "continue",
         "eval",
@@ -789,6 +790,7 @@ class Runtime:
         mode = self.env.get("MCTASH_MODE", "").strip().lower()
         if mode == "bash" or self.env.get("BASH_COMPAT", "").strip():
             self._seed_bash_special_vars()
+            self._shopts["sourcepath"] = True
         diag_style = self.env.get("MCTASH_DIAG_STYLE", "").strip().lower()
         if diag_style not in {"ash", "bash"}:
             diag_style = "bash" if mode == "bash" else "ash"
@@ -1015,6 +1017,24 @@ class Runtime:
             return 0
         sig = getattr(signal, f"SIG{name}", None)
         return int(sig) if sig is not None else 0
+
+    def _signal_names_by_number(self) -> list[tuple[int, str]]:
+        pairs: list[tuple[int, str]] = []
+        seen: set[int] = set()
+        for sig in signal.Signals:
+            num = int(sig)
+            if num in seen:
+                continue
+            seen.add(num)
+            pairs.append((num, sig.name.replace("SIG", "")))
+        pairs.sort(key=lambda x: x[0])
+        return pairs
+
+    def _print_signal_table(self) -> None:
+        parts: list[str] = []
+        for num, name in self._signal_names_by_number():
+            parts.append(f" {num}) {name}")
+        print(" ".join(parts))
 
     def _format_error(self, msg: str, line: int | None = None, context: str | None = None) -> str:
         if self.source_stack:
@@ -2400,12 +2420,6 @@ class Runtime:
             self._cmd_sub_used = False
 
         name = argv[0]
-        if name in {"declare", "typeset", "local"} and assign_pairs:
-            for assign in assign_pairs:
-                aname = str(assign.get("name") or "")
-                aop = str(assign.get("op") or "=")
-                aval = self._asdl_rhs_word_to_text(assign.get("val") or {})
-                argv.append(f"{aname}{aop}{aval}")
         assign_names = {str(a.get("name") or "") for a in assign_pairs}
         if self._has_function(name):
             saved_env = dict(self.env)
@@ -2456,19 +2470,21 @@ class Runtime:
                     self._print_stderr(msg)
                     return self._runtime_error_status(msg)
                 if name in self.ENV_MUTATING_BUILTINS:
+                    persist_assigns = self._declaration_assigns_should_persist(argv)
                     result_env = dict(self.env)
                     merged = dict(saved_env)
                     for k, v in result_env.items():
-                        if k not in assign_names:
+                        if persist_assigns or k not in assign_names:
                             merged[k] = v
                     for k in list(merged.keys()):
-                        if k not in result_env and k not in assign_names:
+                        if k not in result_env and (persist_assigns or k not in assign_names):
                             merged.pop(k, None)
-                    for k in assign_names:
-                        if k in saved_env:
-                            merged[k] = saved_env[k]
-                        else:
-                            merged.pop(k, None)
+                    if not persist_assigns:
+                        for k in assign_names:
+                            if k in saved_env:
+                                merged[k] = saved_env[k]
+                            else:
+                                merged.pop(k, None)
                     saved_env.clear()
                     saved_env.update(merged)
                 return status
@@ -4507,9 +4523,6 @@ class Runtime:
             if self._cmd_sub_used:
                 self._cmd_sub_used = False
             name = argv[0]
-            if name in {"declare", "typeset", "local"} and node.assignments:
-                for a in node.assignments:
-                    argv.append(f"{a.name}{a.op}{a.value}")
             assign_names = {a.name for a in node.assignments}
             if self._has_function(name):
                 saved_env = dict(self.env)
@@ -4557,19 +4570,21 @@ class Runtime:
                         print(str(e), file=sys.stderr)
                         return 1
                     if name in self.ENV_MUTATING_BUILTINS:
+                        persist_assigns = self._declaration_assigns_should_persist(argv)
                         result_env = dict(self.env)
                         merged = dict(saved_env)
                         for k, v in result_env.items():
-                            if k not in assign_names:
+                            if persist_assigns or k not in assign_names:
                                 merged[k] = v
                         for k in list(merged.keys()):
-                            if k not in result_env and k not in assign_names:
+                            if k not in result_env and (persist_assigns or k not in assign_names):
                                 merged.pop(k, None)
-                        for k in assign_names:
-                            if k in saved_env:
-                                merged[k] = saved_env[k]
-                            else:
-                                merged.pop(k, None)
+                        if not persist_assigns:
+                            for k in assign_names:
+                                if k in saved_env:
+                                    merged[k] = saved_env[k]
+                                else:
+                                    merged.pop(k, None)
                         saved_env.clear()
                         saved_env.update(merged)
                     return status
@@ -4780,7 +4795,10 @@ class Runtime:
                 self._print_stderr(f"{name}: restricted")
                 return 1
             args = argv[2:]
-            return self._run_source(path, args)
+            status = self._run_source(path, args, builtin_name=name)
+            if status != 0 and self.options.get("posix", False) and not self.options.get("i", False):
+                raise SystemExit(status)
+            return status
         if name == "local":
             return self._run_local(argv[1:])
         if name == "eval":
@@ -5028,6 +5046,32 @@ class Runtime:
             raise ContinueLoop(count)
         return 2
 
+    def _declaration_assigns_should_persist(self, argv: List[str]) -> bool:
+        if not argv:
+            return False
+        name = argv[0]
+        if name in {"export", "readonly"}:
+            return True
+        if name not in {"declare", "typeset", "local"}:
+            return False
+        has_print_only = False
+        has_effective_flag = False
+        for a in argv[1:]:
+            if a == "--":
+                continue
+            if a.startswith("-") and a != "-":
+                for ch in a[1:]:
+                    if ch in {"p", "f", "F"}:
+                        has_print_only = True
+                    else:
+                        has_effective_flag = True
+                continue
+            if "=" in a:
+                return True
+        if has_effective_flag:
+            return True
+        return not has_print_only
+
     def _parse_exec_named_fd_var(self, token: str) -> str | None:
         m = re.fullmatch(r"\{([A-Za-z_][A-Za-z0-9_]*)\}", token)
         if m is None:
@@ -5104,8 +5148,8 @@ class Runtime:
 
         return None
 
-    def _run_source(self, path: str, args: List[str]) -> int:
-        if "/" not in path:
+    def _run_source(self, path: str, args: List[str], builtin_name: str | None = None) -> int:
+        if "/" not in path and self._shopts.get("sourcepath", False):
             for d in self.env.get("PATH", os.defpath).split(os.pathsep):
                 candidate = os.path.join(d, path)
                 if os.path.isfile(candidate):
@@ -5115,6 +5159,13 @@ class Runtime:
             with open(path, "r", encoding="utf-8", errors="surrogateescape") as f:
                 source = f.read()
         except OSError:
+            if builtin_name in {".", "source"} and "/" not in path:
+                if self._diag.style == "bash":
+                    self._report_error(f".: {path}: file not found", line=self.current_line)
+                else:
+                    self._report_error(f"{path}: No such file or directory", line=self.current_line)
+            else:
+                self._report_error(f"{path}: No such file or directory", line=self.current_line)
             return 1
         saved_positional = list(self.positional) if args else None
         self.source_stack.append(path)
@@ -5370,7 +5421,10 @@ class Runtime:
         if not argv:
             return 127
         if argv[0] == "":
-            self._report_error(self._diag_msg(DiagnosticKey.PERMISSION_DENIED), line=self.current_line, context=context)
+            if self._bash_compat_level is not None:
+                self._report_error(self._diag_msg(DiagnosticKey.COMMAND_NOT_FOUND, name=""), line=self.current_line, context=context)
+            else:
+                self._report_error(self._diag_msg(DiagnosticKey.PERMISSION_DENIED), line=self.current_line, context=context)
             return 127
         if self._is_restricted() and "/" in argv[0]:
             self._print_stderr(f"{argv[0]}: restricted: cannot specify `/' in command names")
@@ -5495,6 +5549,9 @@ class Runtime:
             return 2
         names = args[i:]
         if not names:
+            if not self._cmd_hash and self._bash_compat_level is not None:
+                print("hash: hash table empty")
+                return 0
             for name in sorted(self._cmd_hash.keys()):
                 print(f"{name}={self._cmd_hash[name]}")
             return 0
@@ -5692,6 +5749,27 @@ class Runtime:
     def _run_kill(self, args: List[str]) -> int:
         if not args:
             return 1
+        if args[0] == "-l":
+            if len(args) == 1:
+                self._print_signal_table()
+                return 0
+            val = args[1]
+            if val.isdigit():
+                n = int(val, 10)
+                if n > 128:
+                    n -= 128
+                try:
+                    print(signal.Signals(n).name.replace("SIG", ""))
+                    return 0
+                except Exception:
+                    self._report_error(self._diag_msg(DiagnosticKey.INVALID_SIGNAL_SPEC, sig=val), line=self.current_line, context="kill")
+                    return 1
+            key = self._normalize_signal_spec(val)
+            if key is None or key == "EXIT":
+                self._report_error(self._diag_msg(DiagnosticKey.INVALID_SIGNAL_SPEC, sig=val), line=self.current_line, context="kill")
+                return 1
+            print(self._signal_number(key))
+            return 0
         sig_num = signal.SIGTERM
         i = 0
         targets: List[str] = []
@@ -5879,13 +5957,82 @@ class Runtime:
         return "".join(out)
 
     def _run_umask(self, args: List[str]) -> int:
+        symbolic = False
+        print_mode = False
+        i = 0
+        while i < len(args) and args[i].startswith("-") and args[i] != "-":
+            opt = args[i]
+            if opt == "--":
+                i += 1
+                break
+            for ch in opt[1:]:
+                if ch == "S":
+                    symbolic = True
+                elif ch == "p":
+                    print_mode = True
+                else:
+                    return 2
+            i += 1
+        args = args[i:]
         if not args:
             cur = os.umask(0)
             os.umask(cur)
-            print(f"{cur:04o}")
+            if symbolic:
+                def _perm(tri: int, who: str) -> str:
+                    bits = 7 - tri
+                    out = who + "="
+                    if bits & 4:
+                        out += "r"
+                    if bits & 2:
+                        out += "w"
+                    if bits & 1:
+                        out += "x"
+                    return out
+
+                u = (cur >> 6) & 0x7
+                g = (cur >> 3) & 0x7
+                o = cur & 0x7
+                txt = ",".join([_perm(u, "u"), _perm(g, "g"), _perm(o, "o")])
+                if print_mode:
+                    print(f"umask -S {txt}")
+                else:
+                    print(txt)
+            else:
+                if print_mode:
+                    print(f"umask {cur:04o}")
+                else:
+                    print(f"{cur:04o}")
+            return 0
+        spec = args[0]
+        if any(ch in spec for ch in "=,+-"):
+            # Minimal symbolic form support used by bash upstream corpus:
+            # comma-separated who=perms clauses (e.g. u=rwx,g=rwx,o=rx).
+            cur = os.umask(0)
+            os.umask(cur)
+            mode = 0o777 & (~cur)
+            who_bits = {"u": 0o700, "g": 0o070, "o": 0o007, "a": 0o777}
+            perm_bits = {"r": 0o444, "w": 0o222, "x": 0o111}
+            for clause in spec.split(","):
+                if not clause:
+                    return 2
+                m = re.fullmatch(r"([ugoa]*)([=])([rwx]*)", clause)
+                if m is None:
+                    return 2
+                who, op, perms = m.group(1), m.group(2), m.group(3)
+                who = who or "a"
+                scope = 0
+                for ch in who:
+                    scope |= who_bits[ch]
+                if op != "=":
+                    return 2
+                mask = 0
+                for p in perms:
+                    mask |= perm_bits[p]
+                mode = (mode & ~scope) | (mask & scope)
+            os.umask((~mode) & 0o777)
             return 0
         try:
-            mask = int(args[0], 8)
+            mask = int(spec, 8)
         except ValueError:
             return 2
         os.umask(mask)
@@ -6074,7 +6221,10 @@ class Runtime:
                 break
             seen.add(word)
             trailing = value.endswith(" ")
-            parts = shlex.split(value)
+            raw_parts = shlex.split(value)
+            parts: List[str] = []
+            for raw in raw_parts:
+                parts.append(self._expand_word(raw))
             if not parts:
                 argv = argv[:idx] + argv[idx + 1 :]
                 break
@@ -7764,6 +7914,31 @@ class Runtime:
             vals.append(self._expand_assignment_word(tok.value))
         return vals
 
+    def _parse_assoc_compound_assignment_rhs(self, rhs: str) -> dict[str, str] | None:
+        text = rhs.strip()
+        if not (text.startswith("(") and text.endswith(")")):
+            return None
+        inner = text[1:-1]
+        if inner.strip() == "":
+            return {}
+        out: dict[str, str] = {}
+        reader = TokenReader(inner)
+        ctx = LexContext(reserved_words=set(), allow_reserved=False, allow_newline=False)
+        while True:
+            tok = reader.next(ctx)
+            if tok is None:
+                break
+            if tok.kind != "WORD":
+                return None
+            m = re.match(r"^\[(.*)\]=(.*)$", tok.value)
+            if m is None:
+                return None
+            key_raw = m.group(1)
+            val_raw = m.group(2)
+            key = self._eval_assoc_subscript_key(key_raw)
+            out[str(key)] = self._expand_assignment_word(val_raw)
+        return out
+
     def _assign_subscripted_var(self, name: str, value: str) -> bool:
         parsed = self._parse_subscripted_name(name)
         if parsed is None:
@@ -8172,6 +8347,22 @@ class Runtime:
             idx += 1
 
         names = args[idx:]
+        if names:
+            folded: List[str] = []
+            j = 0
+            while j < len(names):
+                spec = names[j]
+                if "=" in spec:
+                    _, rhs0 = spec.split("=", 1)
+                    if rhs0.startswith("("):
+                        depth = rhs0.count("(") - rhs0.count(")")
+                        while depth > 0 and j + 1 < len(names):
+                            j += 1
+                            spec = spec + " " + names[j]
+                            depth += names[j].count("(") - names[j].count(")")
+                folded.append(spec)
+                j += 1
+            names = folded
         if show_funcs:
             if names:
                 for name in names:
@@ -8186,6 +8377,7 @@ class Runtime:
             func_names = names if names else self._function_names()
             for name in func_names:
                 if not self._has_function(name):
+                    self._report_error(f"{cmd_name}: {name}: not found", line=self.current_line)
                     status = 1
                     continue
                 body = self.functions_asdl.get(name)
@@ -8207,25 +8399,53 @@ class Runtime:
             if not names:
                 return 0
             status = 0
+            def _dq(value: str) -> str:
+                return '"' + value.replace("\\", "\\\\").replace('"', '\\"').replace("$", "\\$") + '"'
             for name in names:
                 if not self._is_valid_name(name):
-                    self._report_error(
-                        self._diag_msg(DiagnosticKey.DECLARE_NOT_FOUND, name=name),
-                        line=self.current_line,
-                        context=cmd_name,
-                    )
+                    self._report_error(f"{cmd_name}: {name}: not found", line=self.current_line)
                     status = 1
                     continue
                 attrs = self._var_attrs.get(name, set())
-                value = self._get_var(name)
+                value, is_set = self._get_var_with_state(name)
+                if not is_set and "array" not in attrs and "assoc" not in attrs:
+                    self._report_error(f"{cmd_name}: {name}: not found", line=self.current_line)
+                    status = 1
+                    continue
+                prefix = "declare --"
+                if "exported" in attrs:
+                    prefix = "declare -x"
+                elif "readonly" in attrs:
+                    prefix = "declare -r"
                 if "assoc" in attrs:
-                    print(f"declare -A {name}")
+                    typed = self._typed_vars.get(name)
+                    if isinstance(typed, dict) and typed:
+                        parts = []
+                        for k, v in typed.items():
+                            k_s = str(k)
+                            if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", k_s) or re.fullmatch(r"[0-9]+", k_s):
+                                key_expr = k_s
+                            else:
+                                key_expr = _dq(k_s)
+                            parts.append(f"[{key_expr}]={_dq(str(v))}")
+                        print(f"declare -A {name}=({' '.join(parts)} )")
+                    else:
+                        print(f"declare -A {name}")
                 elif "array" in attrs:
-                    print(f"declare -a {name}")
+                    typed = self._typed_vars.get(name)
+                    if isinstance(typed, list) and any(v is not None for v in typed):
+                        parts = []
+                        for idx, v in enumerate(typed):
+                            if v is None:
+                                continue
+                            parts.append(f"[{idx}]={_dq(str(v))}")
+                        print(f"declare -a {name}=({' '.join(parts)})")
+                    else:
+                        print(f"declare -a {name}")
                 elif "integer" in attrs:
-                    print(f"declare -i {name}='{value}'")
+                    print(f"declare -i {name}={_dq(value)}")
                 else:
-                    print(f"declare -- {name}='{value}'")
+                    print(f"{prefix} {name}={_dq(value)}")
             return status
 
         effective_local_scope = local_scope and not force_global
@@ -8272,6 +8492,58 @@ class Runtime:
                         line=self.current_line,
                     )
                     return 1
+                target_attrs = set(self._var_attrs.get(name, set()))
+                target_attrs.update(attr_flags.keys())
+                is_assoc_target = "assoc" in target_attrs
+                is_array_target = "array" in target_attrs and not is_assoc_target
+                if is_assoc_target:
+                    assoc_values = self._parse_assoc_compound_assignment_rhs(value)
+                    if assoc_values is not None:
+                        cur = self._typed_vars.get(name)
+                        base: dict[str, str] = dict(cur) if (op == "+=" and isinstance(cur, dict)) else {}
+                        base.update(assoc_values)
+                        self._typed_vars[name] = base
+                        attrs_apply = dict(attr_flags)
+                        attrs_apply["assoc"] = True
+                        self._set_var_attrs(name, **attrs_apply)
+                        self._set_subscript_projection(name, str(base.get("0", "")))
+                        continue
+                    expanded_assoc_value = self._expand_assignment_word(value)
+                    cur = self._typed_vars.get(name)
+                    base = dict(cur) if (op == "+=" and isinstance(cur, dict)) else {}
+                    base["0"] = (str(base.get("0", "")) + expanded_assoc_value) if op == "+=" else expanded_assoc_value
+                    self._typed_vars[name] = base
+                    attrs_apply = dict(attr_flags)
+                    attrs_apply["assoc"] = True
+                    self._set_var_attrs(name, **attrs_apply)
+                    self._set_subscript_projection(name, str(base.get("0", "")))
+                    continue
+                if is_array_target:
+                    comp_vals = self._parse_compound_assignment_rhs(value)
+                    if comp_vals is not None:
+                        self._assign_compound_var(name, op, comp_vals)
+                        attrs_apply = dict(attr_flags)
+                        attrs_apply["array"] = True
+                        self._set_var_attrs(name, **attrs_apply)
+                        continue
+                    expanded_arr_value = self._expand_assignment_word(value)
+                    cur = self._typed_vars.get(name)
+                    base_list: list[object]
+                    if op == "+=" and isinstance(cur, list):
+                        base_list = list(cur)
+                        if base_list:
+                            first = "" if base_list[0] is None else str(base_list[0])
+                            base_list[0] = first + expanded_arr_value
+                        else:
+                            base_list = [expanded_arr_value]
+                    else:
+                        base_list = [expanded_arr_value]
+                    self._typed_vars[name] = base_list
+                    attrs_apply = dict(attr_flags)
+                    attrs_apply["array"] = True
+                    self._set_var_attrs(name, **attrs_apply)
+                    self._set_subscript_projection(name, str(base_list[0]) if base_list else "")
+                    continue
                 expanded = self._expand_assignment_word(value)
                 if op == "+=":
                     expanded = self._get_var(name) + expanded
@@ -8405,7 +8677,7 @@ class Runtime:
                     op = "+="
                     name = name[:-1]
                 if unexport:
-                    self.env.pop(name, None)
+                    self._set_var_attrs(name, exported=False)
                     continue
                 if name in self.readonly_vars:
                     msg = self._diag_msg(DiagnosticKey.READONLY_VAR, name=name)
@@ -8416,11 +8688,13 @@ class Runtime:
                     self.env[name] = self.env.get(name, "") + value
                 else:
                     self.env[name] = value
+                self._set_var_attrs(name, exported=True)
             else:
                 if unexport:
-                    self.env.pop(arg, None)
+                    self._set_var_attrs(arg, exported=False)
                 else:
                     self.env[arg] = self.env.get(arg, "")
+                    self._set_var_attrs(arg, exported=True)
         return status
 
     def _run_readonly(self, args: List[str]) -> int:
@@ -9449,8 +9723,6 @@ class Runtime:
 
     def _get_var_attrs(self, name: str) -> dict[str, bool]:
         attrs = set(self._var_attrs.get(name, set()))
-        if name in self.env:
-            attrs.add("exported")
         if name in self.readonly_vars:
             attrs.add("readonly")
         return {key: True for key in sorted(attrs)}
@@ -9470,9 +9742,9 @@ class Runtime:
                 continue
             if key == "exported":
                 if enabled:
-                    self.env[name] = self._get_var(name)
+                    attrs.add("exported")
                 else:
-                    self.env.pop(name, None)
+                    attrs.discard("exported")
                 continue
             if enabled:
                 attrs.add(key)
@@ -10056,6 +10328,10 @@ class Runtime:
                 src = sorted(self.SPECIAL_BUILTINS)
             else:
                 src = sorted(self.BUILTINS)
+            if disable:
+                if show_all:
+                    return [n for n in src if n in self.disabled_builtins]
+                return [n for n in src if n in self.disabled_builtins]
             if show_all:
                 return src
             return [n for n in src if self._is_builtin_enabled(n)]
@@ -10739,14 +11015,14 @@ class Runtime:
                         return 0
                     return 1
                 if self._has_function(name):
-                    print(name)
+                    print(f"{name} is a function")
                     return 0
                 if self._is_builtin_enabled(name):
-                    print(name)
+                    print(f"{name} is a shell builtin")
                     return 0
                 path = self._find_in_path(name, lookup_path)
                 if path:
-                    print(path)
+                    print(f"{name} is {path}")
                     return 0
                 print(self._diag_msg(DiagnosticKey.COMMAND_NOT_FOUND, name=name), file=sys.stderr)
                 return 1
@@ -10787,6 +11063,9 @@ class Runtime:
             return int(e.code) if e.code is not None else 0
 
     def _run_trap(self, args: List[str]) -> int:
+        if len(args) == 1 and args[0] == "-l":
+            self._print_signal_table()
+            return 0
         if not args:
             for sig, action in sorted(self.traps.items()):
                 print(f"trap -- '{action}' {sig}", flush=True)
