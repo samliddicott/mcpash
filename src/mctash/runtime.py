@@ -751,6 +751,9 @@ class Runtime:
         self._bg_started_at: Dict[int, float] = {}
         self._bg_cmdline: Dict[int, str] = {}
         self._last_job_lookup_error: str | None = None
+        self._bg_notifications: list[int] = []
+        self._bg_notify_emitted: set[int] = set()
+        self._bg_lock = threading.Lock()
         self._coproc_procs: Dict[int, subprocess.Popen] = {}
         self._thread_ctx = threading.local()
         self._fd_redirect_depth: int = 0
@@ -1117,6 +1120,40 @@ class Runtime:
             self._trap_entry_status = saved
             self._running_trap = False
 
+    def _format_job_notification_line(self, job_id: int) -> str:
+        status = self._bg_status.get(job_id, 0)
+        state = "Done"
+        if status < 0:
+            try:
+                sig_name = signal.Signals(-status).name.replace("SIG", "")
+            except Exception:
+                sig_name = f"SIG{-status}"
+            state = sig_name
+        cmd = self._bg_cmdline.get(job_id, "")
+        return f"[{job_id}] {state}{(' ' + cmd) if cmd else ''}"
+
+    def _record_bg_job_completion(self, job_id: int, status: int) -> None:
+        with self._bg_lock:
+            self._bg_status[job_id] = status
+            if job_id not in self._bg_notifications:
+                self._bg_notifications.append(job_id)
+            emit_now = bool(self.options.get("i", False) and self.options.get("b", False))
+            if emit_now and job_id not in self._bg_notify_emitted:
+                print(self._format_job_notification_line(job_id))
+                self._bg_notify_emitted.add(job_id)
+
+    def _emit_deferred_job_notifications(self) -> None:
+        if not self.options.get("i", False):
+            return
+        with self._bg_lock:
+            pending = list(self._bg_notifications)
+            self._bg_notifications.clear()
+        for job_id in pending:
+            if job_id in self._bg_notify_emitted:
+                continue
+            print(self._format_job_notification_line(job_id))
+            self._bg_notify_emitted.add(job_id)
+
     def _run_exit_trap(self, status: int) -> int:
         action = self.traps.get("EXIT")
         if not action:
@@ -1291,7 +1328,7 @@ class Runtime:
 
                         def _watch_proc() -> None:
                             try:
-                                self._bg_status[job_id] = proc.wait()
+                                self._record_bg_job_completion(job_id, proc.wait())
                             finally:
                                 self._bg_pids.pop(job_id, None)
 
@@ -1357,7 +1394,7 @@ class Runtime:
                 try:
                     bg_body = ListNode(items=[ListItem(node=item.node, background=False)])
                     status = bg_rt._run_subshell(bg_body)
-                    self._bg_status[job_id] = status
+                    self._record_bg_job_completion(job_id, status)
                 finally:
                     # In shared-fd fallback modes (no CLONE_FILES unshare),
                     # explicitly close fds that this background runtime opened.
@@ -1806,7 +1843,7 @@ class Runtime:
 
             def _wait_coproc() -> None:
                 rc = proc.wait()
-                self._bg_status[job_id] = rc
+                self._record_bg_job_completion(job_id, rc)
                 self._coproc_procs.pop(job_id, None)
 
             th = threading.Thread(target=_wait_coproc, daemon=True)
@@ -2219,7 +2256,7 @@ class Runtime:
 
                     def _watch_proc() -> None:
                         try:
-                            self._bg_status[job_id] = proc.wait()
+                            self._record_bg_job_completion(job_id, proc.wait())
                         finally:
                             self._bg_pids.pop(job_id, None)
 
@@ -2282,7 +2319,7 @@ class Runtime:
                 status = bg_rt._run_subshell_asdl(
                     {"type": "command.CommandList", "children": [{"type": "command.Sentence", "child": child}]}
                 )
-                self._bg_status[job_id] = status
+                self._record_bg_job_completion(job_id, status)
             finally:
                 bg_rt._close_tracked_fds_not_in(parent_fd_baseline)
                 self._bg_pids.pop(job_id, None)
@@ -11250,6 +11287,11 @@ class Runtime:
             pid = self._bg_pids.pop(jid, None)
             self._bg_started_at.pop(jid, None)
             self._bg_cmdline.pop(jid, None)
+            self._bg_notify_emitted.discard(jid)
+            try:
+                self._bg_notifications.remove(jid)
+            except ValueError:
+                pass
             self._disowned_nohup.discard(jid)
             if pid is not None:
                 self._bg_pid_to_job.pop(pid, None)

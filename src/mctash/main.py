@@ -640,6 +640,7 @@ def _run_interactive(rt: Runtime) -> int:
     while True:
         try:
             if not buffer:
+                rt._emit_deferred_job_notifications()
                 pcmd = rt.env.get("PROMPT_COMMAND", "")
                 if pcmd:
                     try:
