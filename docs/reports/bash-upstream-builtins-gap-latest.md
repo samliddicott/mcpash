@@ -43,6 +43,20 @@ Remaining high-impact mismatch buckets:
 
 1. assoc-array `declare -p` key ordering mismatch in `builtins4.sub` (`[one][two][three]` vs bash output order in this corpus run).
 
+Rationale for treating assoc key order as non-contractual:
+
+- Chet Ramey (bash maintainer): “There’s no guarantee that will happen. It’s a hash table.”
+  - https://lists.nongnu.org/archive/html/bug-bash/2019-08/msg00032.html
+- Reporter example showing declaration order differs from printed/iterated order:
+  - https://lists.nongnu.org/archive/html/bug-bash/2019-08/msg00030.html
+- Greg Wooledge guidance: if ordering is needed, use a separate indexed array:
+  - https://lists.nongnu.org/archive/html/bug-bash/2019-08/msg00031.html
+
+Test policy applied:
+
+- Upstream lane now normalizes `declare -A ...` pair ordering in stdout diffs
+  before comparison (semantic comparison for associative maps).
+
 Next closure order:
 
 1. `declare` / `typeset` parity tranche.

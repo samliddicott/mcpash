@@ -57,6 +57,7 @@ for c in "${cases[@]}"; do
   ( cd "$TROOT" && timeout -k 5 "$case_timeout" env "${case_bash_compat_env[@]}" THIS_SH="$RDIR/bash_posix_wrapper.sh" bash --posix "./$c" >"$b_out" 2>"$b_err" ) || b_rc=$?
   ( cd "$TROOT" && timeout -k 5 "$case_timeout" env "${case_bash_compat_env[@]}" THIS_SH="$RDIR/mctash_posix_wrapper.sh" PYTHONPATH="$ROOT/src" MCTASH_MODE=posix MCTASH_DIAG_STYLE=bash MCTASH_MAX_VMEM_KB=786432 python3 -m mctash --posix "./$c" >"$m_out" 2>"$m_err" ) || m_rc=$?
   out_m=0; err_m=0
+  out_left="$b_out"; out_right="$m_out"
   err_left="$b_err"; err_right="$m_err"
   if [[ "$c" == "posixpipe.tests" ]]; then
     # Timing output is inherently non-deterministic across implementations/runs.
@@ -94,8 +95,56 @@ for c in "${cases[@]}"; do
       $0 == "./posixexp.tests: line 97: syntax error: unterminated quoted string" {next}
       {print}
     ' "$m_err" >"$err_right"
+  elif [[ "$c" == "builtins.tests" ]]; then
+    # Associative-array declaration key order is not guaranteed by bash.
+    # Normalize `declare -A name=([k]=v ... )` lines to sorted-key order
+    # before stdout comparison to keep this lane semantic.
+    out_left="$RDIR/bash/${c}.out.norm"
+    out_right="$RDIR/mctash/${c}.out.norm"
+    python3 - "$b_out" "$out_left" <<'PY'
+import re, sys
+src, dst = sys.argv[1], sys.argv[2]
+pat = re.compile(r'^(declare -A [A-Za-z_][A-Za-z0-9_]*=\()(.+)( \))$')
+item = re.compile(r'(\[[^]]+\]=(?:"(?:\\.|[^"])*"|[^ ]+))')
+out = []
+for line in open(src, encoding='utf-8', errors='surrogateescape'):
+    s = line.rstrip('\n')
+    m = pat.match(s)
+    if not m:
+        out.append(s)
+        continue
+    prefix, inner, suffix = m.groups()
+    parts = item.findall(inner)
+    if not parts:
+        out.append(s)
+        continue
+    parts.sort()
+    out.append(prefix + " ".join(parts) + suffix)
+open(dst, 'w', encoding='utf-8', errors='surrogateescape').write("\n".join(out) + "\n")
+PY
+    python3 - "$m_out" "$out_right" <<'PY'
+import re, sys
+src, dst = sys.argv[1], sys.argv[2]
+pat = re.compile(r'^(declare -A [A-Za-z_][A-Za-z0-9_]*=\()(.+)( \))$')
+item = re.compile(r'(\[[^]]+\]=(?:"(?:\\.|[^"])*"|[^ ]+))')
+out = []
+for line in open(src, encoding='utf-8', errors='surrogateescape'):
+    s = line.rstrip('\n')
+    m = pat.match(s)
+    if not m:
+        out.append(s)
+        continue
+    prefix, inner, suffix = m.groups()
+    parts = item.findall(inner)
+    if not parts:
+        out.append(s)
+        continue
+    parts.sort()
+    out.append(prefix + " ".join(parts) + suffix)
+open(dst, 'w', encoding='utf-8', errors='surrogateescape').write("\n".join(out) + "\n")
+PY
   fi
-  diff -u "$b_out" "$m_out" > "$RDIR/diff/${c}.out.diff" || out_m=1
+  diff -u "$out_left" "$out_right" > "$RDIR/diff/${c}.out.diff" || out_m=1
   diff -u "$err_left" "$err_right" > "$RDIR/diff/${c}.err.diff" || err_m=1
   lane="core"
   for i in "${info_cases[@]}"; do
