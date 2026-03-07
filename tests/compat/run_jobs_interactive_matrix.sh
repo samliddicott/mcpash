@@ -53,6 +53,42 @@ check_pair() {
   fi
 }
 
+extract_bg_banner_norm() {
+  local file="$1"
+  grep -E '^\[[0-9]+\][[:space:]]+[0-9]+$' "$file" | head -n1 | sed -E 's/^\[[0-9]+\][[:space:]]+[0-9]+$/[J] PID/'
+}
+
+check_banner_pair() {
+  local label="$1"
+  local bash_cmd="$2"
+  local mctash_cmd="$3"
+  local b_rc m_rc
+  b_rc="$(run_pty_case "${label}.bash" "$bash_cmd")"
+  m_rc="$(run_pty_case "${label}.mctash" "$mctash_cmd")"
+  local b_out="$tmpdir/${label}.bash.out"
+  local m_out="$tmpdir/${label}.mctash.out"
+  local b_norm m_norm
+  b_norm="$(extract_bg_banner_norm "$b_out")"
+  m_norm="$(extract_bg_banner_norm "$m_out")"
+  echo "=== jobs:${label} ==="
+  echo "  bash rc=${b_rc} mctash rc=${m_rc}"
+  echo "  bash banner: ${b_norm:-<none>}"
+  echo "  mct banner:  ${m_norm:-<none>}"
+  if [[ "$STRICT" == "1" ]]; then
+    if [[ "$b_rc" -ne "$m_rc" ]]; then
+      echo "[FAIL] jobs ${label}: rc mismatch" >&2
+      fail=1
+    fi
+    if [[ -z "$b_norm" || -z "$m_norm" ]]; then
+      echo "[FAIL] jobs ${label}: missing background launch banner" >&2
+      fail=1
+    elif [[ "$b_norm" != "$m_norm" ]]; then
+      echo "[FAIL] jobs ${label}: banner format mismatch" >&2
+      fail=1
+    fi
+  fi
+}
+
 ash_shell="ash -i -c 'set -m; sleep 0.05 & jobs >/dev/null 2>&1; echo JM:jobs:$?; fg %1 >/dev/null 2>&1; echo JM:fg:$?; wait >/dev/null 2>&1; echo JM:done'"
 mctash_shell="cd '$ROOT' && PYTHONPATH='$ROOT/src' python3 -m mctash -i -c 'set -m; sleep 0.05 & jobs >/dev/null 2>&1; echo JM:jobs:$?; fg %1 >/dev/null 2>&1; echo JM:fg:$?; wait >/dev/null 2>&1; echo JM:done'"
 check_pair "fg-basic" "$ash_shell" "$mctash_shell"
@@ -68,6 +104,14 @@ check_pair "jobspec-command-forms" "$bash_shell3" "$mctash_shell3"
 bash_shell4="bash --posix -i -c 'set -m; yes | head -n 1 >/dev/null & jc=\$(jobs | wc -l); printf \"JM:jc:%s\\n\" \"\$jc\"; wait %1 >/dev/null 2>&1; echo JM:w:$?'"
 mctash_shell4="cd '$ROOT' && MCTASH_DIAG_STYLE=bash PYTHONPATH='$ROOT/src' python3 -m mctash --posix -i -c 'set -m; yes | head -n 1 >/dev/null & jc=\$(jobs | wc -l); printf \"JM:jc:%s\\n\" \"\$jc\"; wait %1 >/dev/null 2>&1; echo JM:w:$?'"
 check_pair "pipeline-one-job" "$bash_shell4" "$mctash_shell4"
+
+bash_shell4b="bash --posix -i -c 'set -m; sleep 0.5 | cat >/dev/null & sleep 0.5 | cat >/dev/null & jc=\$(jobs | wc -l); printf \"JM:jc2:%s\\n\" \"\$jc\"; wait %1 >/dev/null 2>&1; echo JM:w1:$?; wait %2 >/dev/null 2>&1; echo JM:w2:$?'"
+mctash_shell4b="cd '$ROOT' && MCTASH_DIAG_STYLE=bash PYTHONPATH='$ROOT/src' python3 -m mctash --posix -i -c 'set -m; sleep 0.5 | cat >/dev/null & sleep 0.5 | cat >/dev/null & jc=\$(jobs | wc -l); printf \"JM:jc2:%s\\n\" \"\$jc\"; wait %1 >/dev/null 2>&1; echo JM:w1:$?; wait %2 >/dev/null 2>&1; echo JM:w2:$?'"
+check_pair "pipeline-job-table" "$bash_shell4b" "$mctash_shell4b"
+
+bash_shell4c="bash --posix -i -c 'set -m; sleep 0.2 & echo JM:after:$?; wait >/dev/null 2>&1; echo JM:done'"
+mctash_shell4c="cd '$ROOT' && MCTASH_DIAG_STYLE=bash PYTHONPATH='$ROOT/src' python3 -m mctash --posix -i -c 'set -m; sleep 0.2 & echo JM:after:$?; wait >/dev/null 2>&1; echo JM:done'"
+check_banner_pair "bg-launch-banner" "$bash_shell4c" "$mctash_shell4c"
 
 bash_shell5="bash --posix -i -c 'set +H; set -m; sleep 5 & pid=\$!; kill -STOP \$pid; wait %1; st=\$?; echo JM:wait:\$st; kill -CONT \$pid >/dev/null 2>&1 || true; kill \$pid >/dev/null 2>&1 || true; wait \$pid >/dev/null 2>&1 || true; echo JM:done'"
 mctash_shell5="cd '$ROOT' && MCTASH_DIAG_STYLE=bash PYTHONPATH='$ROOT/src' python3 -m mctash --posix -i -c 'set +H; set -m; sleep 5 & pid=\$!; kill -STOP \$pid; wait %1; st=\$?; echo JM:wait:\$st; kill -CONT \$pid >/dev/null 2>&1 || true; kill \$pid >/dev/null 2>&1 || true; wait \$pid >/dev/null 2>&1 || true; echo JM:done'"

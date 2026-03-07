@@ -1182,6 +1182,13 @@ class Runtime:
         cmd = self._bg_cmdline.get(job_id, "")
         return f"[{job_id}] {state}{(' ' + cmd) if cmd else ''}"
 
+    def _emit_job_launch_banner(self, job_id: int, pid: int | None) -> None:
+        if not self.options.get("i", False):
+            return
+        if pid is None:
+            return
+        print(f"[{job_id}] {pid}", flush=True)
+
     def _push_job_event(self, job_id: int, event: str, value: int | None = None) -> None:
         with self._job_event_lock:
             self._job_events.append((job_id, event, value))
@@ -1458,6 +1465,7 @@ class Runtime:
                         self._register_job_spawn(job_id)
                         self._last_bg_job = job_id
                         self._last_bg_pid = proc.pid
+                        self._emit_job_launch_banner(job_id, proc.pid)
                         th.start()
                         return 0
             except Exception:
@@ -1538,6 +1546,7 @@ class Runtime:
                 pid = self._bg_pids.get(job_id)
                 if pid is not None:
                     self._last_bg_pid = pid
+                    self._emit_job_launch_banner(job_id, pid)
                     break
                 if not thread.is_alive():
                     break
@@ -2390,6 +2399,7 @@ class Runtime:
                     self._register_job_spawn(job_id)
                     self._last_bg_job = job_id
                     self._last_bg_pid = proc.pid
+                    self._emit_job_launch_banner(job_id, proc.pid)
                     th.start()
                     return 0
         except Exception:
@@ -2462,6 +2472,7 @@ class Runtime:
             pid = self._bg_pids.get(job_id)
             if pid is not None:
                 self._last_bg_pid = pid
+                self._emit_job_launch_banner(job_id, pid)
                 break
             if not thread.is_alive():
                 break
