@@ -27,10 +27,10 @@ normalize() {
   local dst="$2"
   local clean="$tmpdir/clean.$(basename "$src")"
   sed -E 's/\x1b\[[0-9;?]*[[:alpha:]]//g' "$src" >"$clean"
-  {
-    grep 'JM:phase' "$clean" | sed -E 's/.*(JM:phase[0-9]).*/\1/' || true
-    grep 'Done' "$clean" | sed -E 's/^\[[0-9]+\][^D]*Done.*/DONE/' || true
-  } >"$dst"
+  awk '
+    /^JM:phase[0-9]$/ { print; next }
+    /^\[[0-9]+\][^D]*Done($| )/ { print "DONE"; next }
+  ' "$clean" >"$dst"
 }
 
 run_case() {
