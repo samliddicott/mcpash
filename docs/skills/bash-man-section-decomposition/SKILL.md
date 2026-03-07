@@ -68,6 +68,21 @@ This skill is for **spec decomposition first**. Runtime implementation is separa
 - Planned tests may be listed in `tests` column as future case IDs, but status stays `partial`.
 - A row can be `covered` when strict semantic evidence is green, even if an informational mechanism probe is still variant-dependent.
 
+## Feature-First Prioritization
+When planning implementation from the matrix/gap board, prioritize in this order:
+1. Existing partially-implemented features (close semantic gaps before adding surface area).
+2. Existing covered-but-fragile features (stability/hardening).
+3. New feature surface.
+
+Score feature groups with:
+- parity impact (POSIX/bash mismatch severity),
+- user frequency (common workflows first),
+- cross-cutting leverage (one fix closes multiple rows),
+- risk/complexity (prefer high-impact medium-risk slices),
+- evidence quality (strict comparator tests available).
+
+Default policy: finish existing partials first, unless a new foundational capability unlocks multiple blocked partial groups.
+
 ## Recommended Commands
 ```bash
 MANWIDTH=120 man bash | col -b > /tmp/man_bash.txt
