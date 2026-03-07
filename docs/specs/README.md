@@ -15,6 +15,7 @@ This directory contains first-class language specifications for mctash.
 - POSIX trace tables: `docs/posix-shall-trace.md`, `docs/posix-2.9-2.10-trace.md`
 - Edge corpus report: `docs/reports/param-brace-quote-edge-matrix-latest.md`
 - Feature index (cross-source grouped requirements + test/status links): `docs/specs/feature-index.md`, `docs/specs/feature-index.tsv`
+- Feature gap board (feature-grouped non-covered backlog): `docs/specs/feature-gap-board.md`, `docs/specs/feature-gap-board.tsv`
 
 ## Update policy
 

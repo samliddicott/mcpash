@@ -170,6 +170,8 @@ def generate() -> int:
 
     out_tsv = ROOT / "docs/specs/feature-index.tsv"
     out_md = ROOT / "docs/specs/feature-index.md"
+    out_gap_tsv = ROOT / "docs/specs/feature-gap-board.tsv"
+    out_gap_md = ROOT / "docs/specs/feature-gap-board.md"
 
     with out_tsv.open("w", encoding="utf-8", newline="") as f:
         writer = csv.writer(f, delimiter="\t")
@@ -199,6 +201,43 @@ def generate() -> int:
                     r["default"],
                     r["posix"],
                     r["tests"],
+                    r["notes"],
+                ]
+            )
+
+    def is_gap_status(v: str) -> bool:
+        vv = (v or "").strip().lower()
+        return vv not in ("", "covered")
+
+    gap_rows = [r for r in combined if is_gap_status(r["default"]) or is_gap_status(r["posix"])]
+    gap_rows.sort(key=lambda r: (r["topic"], r["req_id"]))
+
+    with out_gap_tsv.open("w", encoding="utf-8", newline="") as f:
+        writer = csv.writer(f, delimiter="\t")
+        writer.writerow(
+            [
+                "topic",
+                "req_id",
+                "source",
+                "source_ref",
+                "mctash_default",
+                "mctash_posix",
+                "tests",
+                "feature",
+                "notes",
+            ]
+        )
+        for r in gap_rows:
+            writer.writerow(
+                [
+                    r["topic"],
+                    r["req_id"],
+                    r["source"],
+                    r["source_ref"],
+                    r["default"],
+                    r["posix"],
+                    r["tests"],
+                    r["feature"],
                     r["notes"],
                 ]
             )
@@ -263,8 +302,45 @@ def generate() -> int:
         lines.append("")
 
     out_md.write_text("\n".join(lines), encoding="utf-8")
+
+    gap_by_topic: dict[str, list[dict[str, str]]] = defaultdict(list)
+    for r in gap_rows:
+        gap_by_topic[r["topic"]].append(r)
+
+    glines: list[str] = []
+    glines.append("# Feature Gap Board")
+    glines.append("")
+    glines.append(f"Generated: {ts}")
+    glines.append("")
+    glines.append("Purpose: implementation-first backlog grouped by feature topic (rows where either default or posix status is not `covered`).")
+    glines.append("")
+    glines.append("## Topic Backlog Summary")
+    glines.append("")
+    glines.append("| Topic | Gap Rows |")
+    glines.append("|---|---:|")
+    for topic in sorted(gap_by_topic):
+        glines.append(f"| `{topic}` | {len(gap_by_topic[topic])} |")
+    glines.append("")
+    glines.append("## Gap Topics")
+    glines.append("")
+    for topic in sorted(gap_by_topic):
+        rows = gap_by_topic[topic]
+        glines.append(f"### `{topic}`")
+        glines.append("")
+        glines.append("| Req ID | Source | Status (default/posix) | Tests | Feature |")
+        glines.append("|---|---|---|---|---|")
+        for r in rows:
+            status = f"{r['default'] or '-'} / {r['posix'] or '-'}"
+            glines.append(
+                f"| `{r['req_id']}` | `{r['source']}` | `{status}` | `{r['tests'] or '-'}` | {r['feature']} |"
+            )
+        glines.append("")
+
+    out_gap_md.write_text("\n".join(glines), encoding="utf-8")
     print(f"wrote {out_tsv}")
     print(f"wrote {out_md}")
+    print(f"wrote {out_gap_tsv}")
+    print(f"wrote {out_gap_md}")
     return 0
 
 

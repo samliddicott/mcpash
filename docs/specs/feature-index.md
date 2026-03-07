@@ -1,6 +1,6 @@
 # Feature Index
 
-Generated: 2026-03-07 21:06:47Z
+Generated: 2026-03-07 21:09:14Z
 
 Purpose: group requirement rows by feature/topic so design, implementation, and tests can be handled as coherent feature stories instead of row-by-row patches.
 
