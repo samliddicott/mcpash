@@ -64,7 +64,7 @@ This note maps `JOB CONTROL` requirement rows `C8.JOB.14` through `C8.JOB.29` to
 - `C8.JOB.20-21`: still partial (suspend control chars and delayed suspend behavior).
 - `C8.JOB.26`: still partial (`trap CHLD` per-child semantics are not yet modeled in threaded runtime).
 - `C8.JOB.27`: still partial (exit warning/second-exit termination flow for stopped jobs).
-- `C8.JOB.28-29`: still partial (`wait` state-change vs `wait -f` termination split requires explicit stopped/continued state modeling).
+- `C8.JOB.28-29`: covered (`wait` now uses explicit state model for stop-transition return; `wait -f` remains termination-only).
 
 ## Progress Notes
 - Implemented resolver support for jobspec core and match forms:

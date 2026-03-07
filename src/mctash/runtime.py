@@ -1170,6 +1170,13 @@ class Runtime:
         self._set_job_state(job_id, JOB_DONE)
         self._push_job_event(job_id, "done", status)
 
+    def _latest_job_event_value(self, job_id: int, event: str) -> int | None:
+        with self._job_event_lock:
+            for jid, ev, value in reversed(self._job_events):
+                if jid == job_id and ev == event:
+                    return value
+        return None
+
     def _record_bg_job_completion(self, job_id: int, status: int) -> None:
         with self._bg_lock:
             self._bg_status[job_id] = status
@@ -5978,6 +5985,13 @@ class Runtime:
             th = self._bg_jobs.get(job_id)
             if th is not None:
                 while th.is_alive():
+                    if not wait_for_termination:
+                        state = self._job_state.get(job_id)
+                        if state == JOB_STOPPED:
+                            sig_num = self._latest_job_event_value(job_id, "stopped")
+                            if sig_num is None:
+                                sig_num = int(signal.SIGSTOP)
+                            return 128 + sig_num
                     th.join(0.05)
                     if self._pending_signals:
                         sig_name = self._pending_signals[0]

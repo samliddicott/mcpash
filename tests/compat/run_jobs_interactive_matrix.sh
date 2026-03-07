@@ -69,6 +69,14 @@ bash_shell4="bash --posix -i -c 'set -m; yes | head -n 1 >/dev/null & jc=\$(jobs
 mctash_shell4="cd '$ROOT' && MCTASH_DIAG_STYLE=bash PYTHONPATH='$ROOT/src' python3 -m mctash --posix -i -c 'set -m; yes | head -n 1 >/dev/null & jc=\$(jobs | wc -l); printf \"JM:jc:%s\\n\" \"\$jc\"; wait %1 >/dev/null 2>&1; echo JM:w:$?'"
 check_pair "pipeline-one-job" "$bash_shell4" "$mctash_shell4"
 
+bash_shell5="bash --posix -i -c 'set +H; set -m; sleep 5 & pid=\$!; kill -STOP \$pid; wait %1; st=\$?; echo JM:wait:\$st; kill -CONT \$pid >/dev/null 2>&1 || true; kill \$pid >/dev/null 2>&1 || true; wait \$pid >/dev/null 2>&1 || true; echo JM:done'"
+mctash_shell5="cd '$ROOT' && MCTASH_DIAG_STYLE=bash PYTHONPATH='$ROOT/src' python3 -m mctash --posix -i -c 'set +H; set -m; sleep 5 & pid=\$!; kill -STOP \$pid; wait %1; st=\$?; echo JM:wait:\$st; kill -CONT \$pid >/dev/null 2>&1 || true; kill \$pid >/dev/null 2>&1 || true; wait \$pid >/dev/null 2>&1 || true; echo JM:done'"
+check_pair "wait-state-change" "$bash_shell5" "$mctash_shell5"
+
+bash_shell6="bash --posix -i -c 'set +H; set -m; sleep 5 & pid=\$!; ( sleep 0.2; kill -STOP \$pid; sleep 0.2; kill -CONT \$pid; sleep 0.2; kill \$pid ) & wait -f %1; st=\$?; echo JM:waitf:\$st; wait \$pid >/dev/null 2>&1 || true; echo JM:done'"
+mctash_shell6="cd '$ROOT' && MCTASH_DIAG_STYLE=bash PYTHONPATH='$ROOT/src' python3 -m mctash --posix -i -c 'set +H; set -m; sleep 5 & pid=\$!; ( sleep 0.2; kill -STOP \$pid; sleep 0.2; kill -CONT \$pid; sleep 0.2; kill \$pid ) & wait -f %1; st=\$?; echo JM:waitf:\$st; wait \$pid >/dev/null 2>&1 || true; echo JM:done'"
+check_pair "wait-f-termination" "$bash_shell6" "$mctash_shell6"
+
 if [[ "$STRICT" != "1" ]]; then
   echo "[INFO] STRICT=0: interactive jobs matrix is informational"
 fi
