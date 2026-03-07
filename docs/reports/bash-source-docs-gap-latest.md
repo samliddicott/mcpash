@@ -1,6 +1,6 @@
 # Bash Source-Docs Gap Report
 
-Generated: 2026-03-07 17:06:34Z
+Generated: 2026-03-07 17:32:08Z
 
 Sources:
 - https://tiswww.case.edu/php/chet/bash/POSIX
@@ -27,15 +27,15 @@ Sources:
 - `BPOSIX.CORE.001` (bash/POSIX): matrix partial; case mismatch present: bash-posix-doc-001.sh
 - `BPOSIX.CORE.002` (bash/POSIX): matrix partial; case mismatch present: bash-posix-doc-002.sh
 - `BPOSIX.CORE.007` (bash/POSIX): matrix partial; case mismatch present: bash-posix-doc-007.sh
-- `BPOSIX.CORE.011` (bash/POSIX): matrix partial; mapped case execution present
-- `BPOSIX.CORE.012` (bash/POSIX): matrix partial; mapped case execution present
+- `BPOSIX.CORE.011` (bash/POSIX): matrix partial; case mismatch present: bash-posix-doc-011.sh
+- `BPOSIX.CORE.012` (bash/POSIX): matrix partial; case mismatch present: bash-posix-doc-012.sh
 - `BPOSIX.CORE.013` (bash/POSIX): matrix partial; mapped case execution present
 - `BPOSIX.CORE.014` (bash/POSIX): matrix partial; mapped case execution present
 - `BPOSIX.CORE.015` (bash/POSIX): matrix partial; mapped case execution present
-- `BPOSIX.CORE.016` (bash/POSIX): matrix partial; mapped case execution present
+- `BPOSIX.CORE.016` (bash/POSIX): matrix partial; case mismatch present: bash-posix-doc-016.sh
 - `BPOSIX.CORE.017` (bash/POSIX): matrix partial; mapped case execution present
-- `BPOSIX.CORE.018` (bash/POSIX): matrix partial; mapped case execution present
-- `BPOSIX.CORE.019` (bash/POSIX): matrix partial; mapped case execution present
+- `BPOSIX.CORE.018` (bash/POSIX): matrix partial; case mismatch present: bash-posix-doc-018.sh
+- `BPOSIX.CORE.019` (bash/POSIX): matrix partial; case mismatch present: bash-posix-doc-019.sh
 - `BPOSIX.CORE.020` (bash/POSIX): matrix partial; mapped case execution present
 - `BPOSIX.CORE.021` (bash/POSIX): matrix partial; mapped case execution present
 - `BPOSIX.CORE.022` (bash/POSIX): matrix partial; mapped case execution present
@@ -150,7 +150,16 @@ Sources:
 - `bash-posix-doc-008.sh`: `/home/sam/Projects/pybash/tests/diff/logs/bash-source-docs-gap/bash-posix-doc-008.sh.runner.out`
 - `bash-posix-doc-009.sh`: `/home/sam/Projects/pybash/tests/diff/logs/bash-source-docs-gap/bash-posix-doc-009.sh.runner.out`
 - `bash-posix-doc-010.sh`: `/home/sam/Projects/pybash/tests/diff/logs/bash-source-docs-gap/bash-posix-doc-010.sh.runner.out`
-- `bash-posix-doc-011-020.sh`: `/home/sam/Projects/pybash/tests/diff/logs/bash-source-docs-gap/bash-posix-doc-011-020.sh.runner.out`
+- `bash-posix-doc-011.sh`: `/home/sam/Projects/pybash/tests/diff/logs/bash-source-docs-gap/bash-posix-doc-011.sh.runner.out`
+- `bash-posix-doc-012.sh`: `/home/sam/Projects/pybash/tests/diff/logs/bash-source-docs-gap/bash-posix-doc-012.sh.runner.out`
+- `bash-posix-doc-013.sh`: `/home/sam/Projects/pybash/tests/diff/logs/bash-source-docs-gap/bash-posix-doc-013.sh.runner.out`
+- `bash-posix-doc-014.sh`: `/home/sam/Projects/pybash/tests/diff/logs/bash-source-docs-gap/bash-posix-doc-014.sh.runner.out`
+- `bash-posix-doc-015.sh`: `/home/sam/Projects/pybash/tests/diff/logs/bash-source-docs-gap/bash-posix-doc-015.sh.runner.out`
+- `bash-posix-doc-016.sh`: `/home/sam/Projects/pybash/tests/diff/logs/bash-source-docs-gap/bash-posix-doc-016.sh.runner.out`
+- `bash-posix-doc-017.sh`: `/home/sam/Projects/pybash/tests/diff/logs/bash-source-docs-gap/bash-posix-doc-017.sh.runner.out`
+- `bash-posix-doc-018.sh`: `/home/sam/Projects/pybash/tests/diff/logs/bash-source-docs-gap/bash-posix-doc-018.sh.runner.out`
+- `bash-posix-doc-019.sh`: `/home/sam/Projects/pybash/tests/diff/logs/bash-source-docs-gap/bash-posix-doc-019.sh.runner.out`
+- `bash-posix-doc-020.sh`: `/home/sam/Projects/pybash/tests/diff/logs/bash-source-docs-gap/bash-posix-doc-020.sh.runner.out`
 - `bash-posix-doc-021-030.sh`: `/home/sam/Projects/pybash/tests/diff/logs/bash-source-docs-gap/bash-posix-doc-021-030.sh.runner.out`
 - `bash-posix-doc-031-040.sh`: `/home/sam/Projects/pybash/tests/diff/logs/bash-source-docs-gap/bash-posix-doc-031-040.sh.runner.out`
 - `bash-posix-doc-041-050.sh`: `/home/sam/Projects/pybash/tests/diff/logs/bash-source-docs-gap/bash-posix-doc-041-050.sh.runner.out`
