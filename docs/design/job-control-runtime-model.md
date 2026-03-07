@@ -78,4 +78,5 @@ This note maps `JOB CONTROL` requirement rows `C8.JOB.14` through `C8.JOB.29` to
 - `C8.JOB.24` is now parity-covered for shorthand dispatch (`%jobspec`/`%jobspec &`) including redirect-safe forms in non-interactive and PTY interactive lanes.
 - `C8.JOB.16` is parity-covered at current runtime scope via interactive pipeline-to-single-job assertions (`run_jobs_interactive_matrix.sh`).
 - Extended `run_job_notify_matrix.sh` normalization to preserve marker ordering, enabling strict deferred-vs-immediate notification timing parity checks (`C8.JOB.25`).
+- Added shell process-group readiness scaffolding for interactive monitor mode (`set -m`) as groundwork for strict keyboard-generated foreground SIGINT routing (`C8.JOB.17`), while keeping the row partial.
 - Added and extended `run_job_exitwarn_matrix.sh` coverage for interactive `exit` warning/continue behavior and second-exit stopped-job termination (`C8.JOB.27`).

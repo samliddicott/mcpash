@@ -760,6 +760,7 @@ class Runtime:
         self._job_events: list[tuple[int, str, int | None]] = []
         self._job_event_lock = threading.Lock()
         self._checkjobs_warned_once = False
+        self._job_control_ready = False
         self._last_job_lookup_error: str | None = None
         self._bg_notifications: list[int] = []
         self._bg_notify_emitted: set[int] = set()
@@ -961,6 +962,30 @@ class Runtime:
 
     def set_login_shell(self, enabled: bool) -> None:
         self._is_login_shell = bool(enabled)
+
+    def _ensure_job_control_ready(self) -> None:
+        if self._job_control_ready:
+            return
+        if not (self.options.get("i", False) and os.isatty(0) and hasattr(os, "tcsetpgrp")):
+            return
+        try:
+            # Keep shell in its own process group for foreground handoff.
+            os.setpgid(0, 0)
+        except OSError:
+            pass
+        tty_fd: int | None = None
+        try:
+            tty_fd = os.open("/dev/tty", os.O_RDWR)
+            os.tcsetpgrp(tty_fd, os.getpgrp())
+            self._job_control_ready = True
+        except OSError:
+            self._job_control_ready = False
+        finally:
+            if tty_fd is not None:
+                try:
+                    os.close(tty_fd)
+                except OSError:
+                    pass
 
     def run(self, script: Script) -> int:
         return self._exec_list(script.body)
@@ -5862,13 +5887,54 @@ class Runtime:
                         pass
                 try:
                     job_id = getattr(self._thread_ctx, "job_id", None)
+                    if self.options.get("m", False):
+                        self._ensure_job_control_ready()
+                    interactive_fg = bool(
+                        not isinstance(job_id, int)
+                        and self.options.get("i", False)
+                        and self.options.get("m", False)
+                        and self._job_control_ready
+                        and os.isatty(0)
+                        and hasattr(os, "tcsetpgrp")
+                    )
+
+                    def _child_preexec() -> None:
+                        self._preexec_reset_signals()
+                        if interactive_fg:
+                            try:
+                                os.setpgid(0, 0)
+                            except OSError:
+                                pass
+
                     proc = subprocess.Popen(
                         exec_argv,
                         executable=resolved if argv0_override is not None else None,
                         env=child_env,
                         start_new_session=bool(isinstance(job_id, int)),
-                        preexec_fn=self._preexec_reset_signals,
+                        preexec_fn=_child_preexec,
                     )
+                    tty_fd: int | None = None
+                    shell_pgid: int | None = None
+                    if interactive_fg:
+                        try:
+                            tty_fd = os.open("/dev/tty", os.O_RDWR)
+                            shell_pgid = os.getpgrp()
+                            # Avoid being stopped while switching foreground
+                            # process group in interactive shells.
+                            old_ttou = signal.getsignal(signal.SIGTTOU)
+                            signal.signal(signal.SIGTTOU, signal.SIG_IGN)
+                            try:
+                                os.tcsetpgrp(tty_fd, proc.pid)
+                            finally:
+                                signal.signal(signal.SIGTTOU, old_ttou)
+                        except OSError:
+                            if tty_fd is not None:
+                                try:
+                                    os.close(tty_fd)
+                                except OSError:
+                                    pass
+                            tty_fd = None
+                            shell_pgid = None
                     if isinstance(job_id, int):
                         self._bg_pids[job_id] = proc.pid
                         self._bg_pid_to_job[proc.pid] = job_id
@@ -5890,6 +5956,20 @@ class Runtime:
                                 except OSError:
                                     pass
                                 sent_sigint = True
+                    if tty_fd is not None and shell_pgid is not None:
+                        try:
+                            old_ttou = signal.getsignal(signal.SIGTTOU)
+                            signal.signal(signal.SIGTTOU, signal.SIG_IGN)
+                            try:
+                                os.tcsetpgrp(tty_fd, shell_pgid)
+                            finally:
+                                signal.signal(signal.SIGTTOU, old_ttou)
+                        except OSError:
+                            pass
+                        try:
+                            os.close(tty_fd)
+                        except OSError:
+                            pass
                     if self._pending_signals and self.traps.get("TERM"):
                         if "TERM" in self._pending_signals:
                             self._run_pending_traps()
@@ -9430,6 +9510,8 @@ class Runtime:
                 self.options["m"] = False
                 return 0
             self.options[opt] = enabled
+            if opt == "m" and enabled:
+                self._ensure_job_control_ready()
             return 0
 
         if not args:
