@@ -2,8 +2,8 @@
 # DIFF_BASELINE: bash
 set -euo pipefail
 
-# Source-doc scaffold probe; refine to strict row-level assertions in follow-up.
-
-echo "JM:EXTRA:001:scaffold"
-echo "JM:EXTRA:002:scaffold"
-echo "JM:EXTRA:003:scaffold"
+# Aggregated semantic probe for EXTRA rows.
+CASE_DIR="$(cd "$(dirname "$0")" && pwd)"
+for n in 001 002 003; do
+  . "$CASE_DIR/bash-posix-doc-extra-${n}.sh"
+done

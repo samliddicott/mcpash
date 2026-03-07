@@ -2,6 +2,8 @@
 # DIFF_BASELINE: bash
 set -euo pipefail
 
-# Source-doc scaffold probe; refine to strict row-level assertions in follow-up.
-
-echo "JM:COMPAT:32:scaffold"
+# Aggregated semantic probe for COMPAT level 32.
+CASE_DIR="$(cd "$(dirname "$0")" && pwd)"
+for n in 001; do
+  . "$CASE_DIR/bash-compat-doc-32-${n}.sh"
+done

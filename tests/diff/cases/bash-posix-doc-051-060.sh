@@ -2,15 +2,8 @@
 # DIFF_BASELINE: bash
 set -euo pipefail
 
-# Source-doc scaffold probe; refine to strict row-level assertions in follow-up.
-
-echo "JM:051:scaffold"
-echo "JM:052:scaffold"
-echo "JM:053:scaffold"
-echo "JM:054:scaffold"
-echo "JM:055:scaffold"
-echo "JM:056:scaffold"
-echo "JM:057:scaffold"
-echo "JM:058:scaffold"
-echo "JM:059:scaffold"
-echo "JM:060:scaffold"
+# Aggregated semantic probe for rows 051..060.
+CASE_DIR="$(cd "$(dirname "$0")" && pwd)"
+for n in 051 052 053 054 055 056 057 058 059 060; do
+  . "$CASE_DIR/bash-posix-doc-${n}.sh"
+done
