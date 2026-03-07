@@ -13,4 +13,8 @@ wait "$p2"; rc2=$?
 set -e
 # Give trap execution a moment to flush.
 sleep 0.05
-echo "JM:074:rc1=$rc1 rc2=$rc2 chld=$c074"
+ok=0
+if [ "$rc1" -eq 145 ] && [ "$rc2" -eq 145 ] && [ "$c074" -ge 1 ]; then
+  ok=1
+fi
+echo "JM:074:ok=$ok rc1=$rc1 rc2=$rc2"
