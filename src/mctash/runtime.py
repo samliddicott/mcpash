@@ -12537,54 +12537,110 @@ class Runtime:
                     return left
                 right = self._run_test("[[", tokens[idx + 1 :] + ["]]"])
                 return right
-        negate = False
-        if tokens and tokens[0] == "!":
-            negate = True
-            tokens = tokens[1:]
-        result = False
-        if len(tokens) >= 2 and tokens[0] == "-e":
-            result = os.path.exists(tokens[1])
-        elif len(tokens) >= 2 and tokens[0] == "-v":
-            result = self._test_var_is_set(tokens[1])
-        elif len(tokens) >= 2 and tokens[0] == "-n":
-            result = tokens[1] != ""
-        elif len(tokens) >= 2 and tokens[0] == "-z":
-            result = tokens[1] == ""
-        elif len(tokens) >= 2 and tokens[0] == "-f":
-            result = os.path.isfile(tokens[1])
-        elif len(tokens) >= 2 and tokens[0] == "-d":
-            result = os.path.isdir(tokens[1])
-        elif len(tokens) >= 2 and tokens[0] == "-x":
-            result = os.access(tokens[1], os.X_OK)
-        elif len(tokens) >= 3 and tokens[1] in ["=", "!="]:
-            left = tokens[0]
-            right = tokens[2]
-            result = (left == right)
-            if tokens[1] == "!=":
-                result = not result
-        elif len(tokens) >= 3 and tokens[1] in ["-eq", "-ne", "-gt", "-ge", "-lt", "-le"]:
+        import locale
+
+        def _int_or_zero(s: str) -> int:
             try:
-                left_num = int(tokens[0])
-                right_num = int(tokens[2])
-            except ValueError:
-                left_num = 0
-                right_num = 0
-            op = tokens[1]
-            if op == "-eq":
-                result = left_num == right_num
-            elif op == "-ne":
-                result = left_num != right_num
-            elif op == "-gt":
-                result = left_num > right_num
-            elif op == "-ge":
-                result = left_num >= right_num
-            elif op == "-lt":
-                result = left_num < right_num
-            elif op == "-le":
-                result = left_num <= right_num
-        elif len(tokens) == 1:
-            result = tokens[0] != ""
-        return 0 if (result ^ negate) else 1
+                return int(s)
+            except Exception:
+                return 0
+
+        i = 0
+
+        def parse_or() -> bool:
+            nonlocal i
+            val = parse_and()
+            while i < len(tokens) and tokens[i] == "-o":
+                i += 1
+                val = val or parse_and()
+            return val
+
+        def parse_and() -> bool:
+            nonlocal i
+            val = parse_not()
+            while i < len(tokens) and tokens[i] == "-a":
+                i += 1
+                val = val and parse_not()
+            return val
+
+        def parse_not() -> bool:
+            nonlocal i
+            if i < len(tokens) and tokens[i] == "!":
+                i += 1
+                return not parse_not()
+            return parse_primary()
+
+        def parse_primary() -> bool:
+            nonlocal i
+            if i >= len(tokens):
+                return False
+            t = tokens[i]
+            if t in {"(", "\\("}:
+                i += 1
+                val = parse_or()
+                if i < len(tokens) and tokens[i] in {")", "\\)"}:
+                    i += 1
+                return val
+            # Unary primaries.
+            if i + 1 < len(tokens) and t in {"-e", "-v", "-n", "-z", "-f", "-d", "-x", "-t"}:
+                op = t
+                arg = tokens[i + 1]
+                i += 2
+                if op == "-e":
+                    return os.path.exists(arg)
+                if op == "-v":
+                    return self._test_var_is_set(arg)
+                if op == "-n":
+                    return arg != ""
+                if op == "-z":
+                    return arg == ""
+                if op == "-f":
+                    return os.path.isfile(arg)
+                if op == "-d":
+                    return os.path.isdir(arg)
+                if op == "-x":
+                    return os.access(arg, os.X_OK)
+                if op == "-t":
+                    fd = _int_or_zero(arg)
+                    try:
+                        return os.isatty(fd)
+                    except Exception:
+                        return False
+            # Binary primaries.
+            if i + 2 < len(tokens):
+                left = tokens[i]
+                op = tokens[i + 1]
+                right = tokens[i + 2]
+                if op in {"=", "!="}:
+                    i += 3
+                    out = (left == right)
+                    return out if op == "=" else (not out)
+                if op in {"<", ">"}:
+                    i += 3
+                    cmp = locale.strcoll(left, right)
+                    return cmp < 0 if op == "<" else cmp > 0
+                if op in {"-eq", "-ne", "-gt", "-ge", "-lt", "-le"}:
+                    i += 3
+                    lnum = _int_or_zero(left)
+                    rnum = _int_or_zero(right)
+                    if op == "-eq":
+                        return lnum == rnum
+                    if op == "-ne":
+                        return lnum != rnum
+                    if op == "-gt":
+                        return lnum > rnum
+                    if op == "-ge":
+                        return lnum >= rnum
+                    if op == "-lt":
+                        return lnum < rnum
+                    if op == "-le":
+                        return lnum <= rnum
+            # Fallback: non-empty string test.
+            i += 1
+            return t != ""
+
+        result = parse_or()
+        return 0 if result else 1
 
     def _test_var_is_set(self, expr: str) -> bool:
         parsed = self._parse_subscripted_name(expr)
