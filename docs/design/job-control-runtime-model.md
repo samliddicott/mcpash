@@ -57,6 +57,7 @@ This note maps `JOB CONTROL` requirement rows `C8.JOB.14` through `C8.JOB.29` to
 - Full parity for `C8.JOB.17` requires explicit foreground process-group control (`tcsetpgrp`) and robust restoration paths.
 - `C8.JOB.18-19` may need tighter PTY harness control to deterministically trigger SIGTTIN/SIGTTOU.
 - `C8.JOB.21` (`^Y`) is terminal-driver dependent and should be validated with strict comparator scope notes.
+- `C8.JOB.13` strict closure is sensitive to how PTY `^C` bytes are transformed into signals while Python waits on foreground children; current direct-byte harness can be nondeterministic.
 
 ## Remaining Open Rows (Post-Tranche)
 - `C8.JOB.17`: covered in scoped comparator policy (interactive SIGINT matrix kept informational; foreground process-group readiness groundwork is in place).
@@ -79,4 +80,17 @@ This note maps `JOB CONTROL` requirement rows `C8.JOB.14` through `C8.JOB.29` to
 - `C8.JOB.16` is parity-covered at current runtime scope via interactive pipeline-to-single-job assertions (`run_jobs_interactive_matrix.sh`).
 - Extended `run_job_notify_matrix.sh` normalization to preserve marker ordering, enabling strict deferred-vs-immediate notification timing parity checks (`C8.JOB.25`).
 - Added shell process-group readiness scaffolding for interactive monitor mode (`set -m`) as groundwork for foreground signal routing (`C8.JOB.17`) within the current scoped comparator policy.
+
+## C8.JOB.13 Follow-Up Model Revision
+- Add a dedicated foreground-tty control layer in runtime:
+  - Track `foreground_pid` / `foreground_pgid` as first-class runtime state while an external foreground command runs.
+  - Centralize foreground handoff/restore (`tcsetpgrp`) and signal forwarding in one helper path instead of ad-hoc polling logic.
+  - Distinguish signal-origin events:
+    - kernel-delivered SIGINT (normal interactive behavior),
+    - PTY literal `^C` fallback path (test-harness dependent),
+    - explicit `kill -INT` flows.
+- Add a deterministic comparator lane for `C8.JOB.13` that validates:
+  - shell remains alive after interrupt,
+  - foreground command is interrupted,
+  - prompt returns and next command executes.
 - Added and extended `run_job_exitwarn_matrix.sh` coverage for interactive `exit` warning/continue behavior and second-exit stopped-job termination (`C8.JOB.27`).
