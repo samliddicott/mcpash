@@ -1471,6 +1471,10 @@ class Runtime:
                 bg_rt._bg_pid_to_job = self._bg_pid_to_job
                 bg_rt._bg_started_at = self._bg_started_at
                 bg_rt._bg_cmdline = self._bg_cmdline
+                bg_rt._bg_stopped = self._bg_stopped
+                bg_rt._job_state = self._job_state
+                bg_rt._job_events = self._job_events
+                bg_rt._job_event_lock = self._job_event_lock
                 bg_rt._last_bg_job = self._last_bg_job
                 bg_rt._last_bg_pid = self._last_bg_pid
                 bg_rt._shared_store_path = self._shared_store_path
@@ -2395,6 +2399,10 @@ class Runtime:
             bg_rt._bg_pid_to_job = self._bg_pid_to_job
             bg_rt._bg_started_at = self._bg_started_at
             bg_rt._bg_cmdline = self._bg_cmdline
+            bg_rt._bg_stopped = self._bg_stopped
+            bg_rt._job_state = self._job_state
+            bg_rt._job_events = self._job_events
+            bg_rt._job_event_lock = self._job_event_lock
             bg_rt._last_bg_job = self._last_bg_job
             bg_rt._last_bg_pid = self._last_bg_pid
             bg_rt._shared_store_path = self._shared_store_path

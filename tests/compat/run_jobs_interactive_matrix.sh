@@ -77,6 +77,10 @@ bash_shell6="bash --posix -i -c 'set +H; set -m; sleep 5 & pid=\$!; ( sleep 0.2;
 mctash_shell6="cd '$ROOT' && MCTASH_DIAG_STYLE=bash PYTHONPATH='$ROOT/src' python3 -m mctash --posix -i -c 'set +H; set -m; sleep 5 & pid=\$!; ( sleep 0.2; kill -STOP \$pid; sleep 0.2; kill -CONT \$pid; sleep 0.2; kill \$pid ) & wait -f %1; st=\$?; echo JM:waitf:\$st; wait \$pid >/dev/null 2>&1 || true; echo JM:done'"
 check_pair "wait-f-termination" "$bash_shell6" "$mctash_shell6"
 
+bash_shell7="bash --posix -i -c 'set +H; set -m; sleep 5 & pid=\$!; ( sleep 0.2; kill -TSTP \$pid ) & fg %1 >/dev/null 2>&1; echo JM:fgstop:$?; jobs | grep -q Stopped; echo JM:stopped:$?; kill -CONT %1 >/dev/null 2>&1 || true; kill %1 >/dev/null 2>&1 || true; wait %1 >/dev/null 2>&1 || true; echo JM:done'"
+mctash_shell7="cd '$ROOT' && MCTASH_DIAG_STYLE=bash PYTHONPATH='$ROOT/src' python3 -m mctash --posix -i -c 'set +H; set -m; sleep 5 & pid=\$!; ( sleep 0.2; kill -TSTP \$pid ) & fg %1 >/dev/null 2>&1; echo JM:fgstop:$?; jobs | grep -q Stopped; echo JM:stopped:$?; kill -CONT %1 >/dev/null 2>&1 || true; kill %1 >/dev/null 2>&1 || true; wait %1 >/dev/null 2>&1 || true; echo JM:done'"
+check_pair "fg-stop-signal-equivalent" "$bash_shell7" "$mctash_shell7"
+
 if [[ "$STRICT" != "1" ]]; then
   echo "[INFO] STRICT=0: interactive jobs matrix is informational"
 fi
