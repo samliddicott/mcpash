@@ -95,3 +95,25 @@ This note maps `JOB CONTROL` requirement rows `C8.JOB.14` through `C8.JOB.29` to
   - prompt returns and next command executes.
 - Retained literal `^C` PTY lane as informational diagnostics only.
 - Added and extended `run_job_exitwarn_matrix.sh` coverage for interactive `exit` warning/continue behavior and second-exit stopped-job termination (`C8.JOB.27`).
+
+## Foreground Execution Invariants
+The interactive foreground model now relies on explicit invariants that tests can assert:
+
+1. Ownership invariant:
+   - when a foreground external command is running, terminal foreground process group maps to the command's process group.
+2. Ordering invariant:
+   - launch -> foreground handoff -> wait/monitor -> foreground restore.
+3. Signal invariant:
+   - interactive interrupt targets foreground command path first; shell remains alive.
+4. Continuity invariant:
+   - after interrupt, prompt returns and subsequent command executes in same shell session.
+
+## Observability + Test Lanes
+- Strict lane (`run_interactive_sigint_matrix.sh`):
+  - deterministic signal-equivalent interruption (`SIGINT` to foreground child),
+  - validates ownership + continuity invariants.
+- Informational lane (`run_interactive_sigint_matrix.sh`):
+  - literal PTY `^C` probe,
+  - non-gating because control-character translation varies across PTY/readline environments.
+- Runtime debug toggle:
+  - `MCTASH_JOB_DEBUG=1` emits foreground handoff/restore + forwarded-signal breadcrumbs to stderr for focused investigations.

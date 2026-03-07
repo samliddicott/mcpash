@@ -53,7 +53,7 @@ def _drain(master: int, out: bytearray, seconds: float) -> None:
         out.extend(chunk)
 
 
-def _run_case(cmd: list[str], env: dict[str, str], lane: str) -> tuple[int, str]:
+def _run_case(cmd: list[str], env: dict[str, str], lane: str) -> tuple[int, str, bool, str]:
     master, slave = pty.openpty()
     proc = subprocess.Popen(
         cmd,
@@ -65,8 +65,10 @@ def _run_case(cmd: list[str], env: dict[str, str], lane: str) -> tuple[int, str]
         preexec_fn=os.setsid,
         env=env,
     )
-    os.close(slave)
     out = bytearray()
+    inv_ok = True
+    inv_checked = False
+    inv_note = "ok"
 
     _read_until_prompt(master, proc, out, 2.0)
     os.write(master, b"sleep 5\n")
@@ -97,9 +99,32 @@ def _run_case(cmd: list[str], env: dict[str, str], lane: str) -> tuple[int, str]
             time.sleep(0.05)
         if child_pid is not None:
             try:
+                child_pgid = os.getpgid(child_pid)
+                tty_fg = None
+                try:
+                    tty_fg = os.tcgetpgrp(slave)
+                except OSError:
+                    try:
+                        tty_fg = os.tcgetpgrp(master)
+                    except OSError:
+                        tty_fg = None
+                if tty_fg is not None and tty_fg > 1:
+                    inv_checked = True
+                    if child_pgid != tty_fg:
+                        inv_ok = False
+                        inv_note = f"fg-invariant mismatch: tty_fg={tty_fg} child_pgid={child_pgid}"
+                else:
+                    inv_note = "fg-invariant not probeable in this harness environment"
+            except Exception as e:
+                inv_ok = False
+                inv_note = f"fg-invariant probe error: {e}"
+            try:
                 os.kill(child_pid, signal.SIGINT)
             except Exception:
                 pass
+        else:
+            inv_ok = False
+            inv_note = "fg-invariant probe error: sleep child pid not found"
     else:
         # Literal terminal INTR char lane (informational).
         os.write(master, b"\x03")
@@ -119,7 +144,8 @@ def _run_case(cmd: list[str], env: dict[str, str], lane: str) -> tuple[int, str]
                 pass
             proc.wait(timeout=2)
         os.close(master)
-        return int(proc.returncode or 1), out.decode("utf-8", "replace")
+        os.close(slave)
+        return int(proc.returncode or 1), out.decode("utf-8", "replace"), (inv_ok if inv_checked else True), inv_note
 
     os.write(master, f"echo {MARK}\nexit\n".encode("utf-8"))
     _drain(master, out, 2.0)
@@ -137,14 +163,15 @@ def _run_case(cmd: list[str], env: dict[str, str], lane: str) -> tuple[int, str]
             pass
         proc.wait(timeout=2)
     os.close(master)
-    return int(proc.returncode or 0), out.decode("utf-8", "replace")
+    os.close(slave)
+    return int(proc.returncode or 0), out.decode("utf-8", "replace"), (inv_ok if inv_checked else True), inv_note
 
 
 def _check(name: str, cmd: list[str], env: dict[str, str], lane: str) -> tuple[bool, str]:
-    rc, out = _run_case(cmd, env, lane)
-    ok = rc == 0 and MARK in out
+    rc, out, inv_ok, inv_note = _run_case(cmd, env, lane)
+    ok = rc == 0 and MARK in out and (lane != "strict-child-sigint" or inv_ok)
     if not ok:
-        return False, f"{name} lane={lane} rc={rc}\n{out[-2000:]}"
+        return False, f"{name} lane={lane} rc={rc} inv={inv_note}\n{out[-2000:]}"
     return True, out
 
 

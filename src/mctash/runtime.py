@@ -987,6 +987,14 @@ class Runtime:
                 except OSError:
                     pass
 
+    def _job_debug(self, msg: str) -> None:
+        if self.env.get("MCTASH_JOB_DEBUG", "") not in {"1", "true", "yes", "on"}:
+            return
+        try:
+            print(f"[mctash-job] {msg}", file=sys.stderr, flush=True)
+        except Exception:
+            pass
+
     def run(self, script: Script) -> int:
         return self._exec_list(script.body)
 
@@ -5924,6 +5932,9 @@ class Runtime:
                             signal.signal(signal.SIGTTOU, signal.SIG_IGN)
                             try:
                                 os.tcsetpgrp(tty_fd, proc.pid)
+                                self._job_debug(
+                                    f"fg-handoff shell_pgid={shell_pgid} fg_pid={proc.pid}"
+                                )
                             finally:
                                 signal.signal(signal.SIGTTOU, old_ttou)
                         except OSError:
@@ -5952,6 +5963,7 @@ class Runtime:
                             if (not sent_sigint) and ("INT" in self._pending_signals):
                                 try:
                                     os.kill(proc.pid, signal.SIGINT)
+                                    self._job_debug(f"forward-sigint fg_pid={proc.pid}")
                                 except OSError:
                                     pass
                                 sent_sigint = True
@@ -5961,6 +5973,9 @@ class Runtime:
                             signal.signal(signal.SIGTTOU, signal.SIG_IGN)
                             try:
                                 os.tcsetpgrp(tty_fd, shell_pgid)
+                                self._job_debug(
+                                    f"fg-restore shell_pgid={shell_pgid} fg_pid={proc.pid}"
+                                )
                             finally:
                                 signal.signal(signal.SIGTTOU, old_ttou)
                         except OSError:
