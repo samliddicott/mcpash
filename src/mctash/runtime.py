@@ -750,6 +750,7 @@ class Runtime:
         self._bg_pid_to_job: Dict[int, int] = {}
         self._bg_started_at: Dict[int, float] = {}
         self._bg_cmdline: Dict[int, str] = {}
+        self._bg_stopped: set[int] = set()
         self._last_job_lookup_error: str | None = None
         self._bg_notifications: list[int] = []
         self._bg_notify_emitted: set[int] = set()
@@ -1135,6 +1136,7 @@ class Runtime:
     def _record_bg_job_completion(self, job_id: int, status: int) -> None:
         with self._bg_lock:
             self._bg_status[job_id] = status
+            self._bg_stopped.discard(job_id)
             if job_id not in self._bg_notifications:
                 self._bg_notifications.append(job_id)
             emit_now = bool(self.options.get("i", False) and self.options.get("b", False))
@@ -5298,6 +5300,8 @@ class Runtime:
         if name in ["[", "[[", "test"]:
             return self._run_test(name, argv[1:])
         if name == "exit":
+            if self._print_exit_job_warning():
+                return 1
             if len(argv) > 1:
                 try:
                     code = int(argv[1], 10)
@@ -6050,7 +6054,10 @@ class Runtime:
             pid = self._bg_pids.get(job_id)
             th = self._bg_jobs.get(job_id)
             done = (th is None) or (not th.is_alive())
-            state = "Done" if done else "Running"
+            if job_id in self._bg_stopped:
+                state = "Stopped(SIGSTOP)"
+            else:
+                state = "Done" if done else "Running"
             if pid_only:
                 if pid is not None:
                     print(pid)
@@ -6060,6 +6067,38 @@ class Runtime:
             else:
                 print(f"[{job_id}] {state}")
         return 0
+
+    def _active_jobs_for_exit_warning(self) -> list[int]:
+        job_ids = self._active_job_ids()
+        out: list[int] = []
+        for jid in job_ids:
+            if jid in self._bg_stopped:
+                out.append(jid)
+                continue
+            th = self._bg_jobs.get(jid)
+            if th is not None and th.is_alive():
+                out.append(jid)
+        return sorted(out)
+
+    def _print_exit_job_warning(self) -> bool:
+        if not (self.options.get("i", False) and self._shopts.get("checkjobs", False)):
+            return False
+        active = self._active_jobs_for_exit_warning()
+        if not active:
+            return False
+        # bash --posix interactive comparator reports a generic running-jobs
+        # warning in our PTY harness, even when jobs were STOP-signaled.
+        msg = "There are running jobs."
+        self._print_stderr(msg)
+        for jid in active:
+            cmd = self._bg_cmdline.get(jid, "")
+            if jid in self._bg_stopped:
+                state = "Stopped(SIGSTOP)"
+            else:
+                state = "Running"
+            suffix = f" {cmd}" if cmd else ""
+            self._print_stderr(f"[{jid}] {state}{suffix}")
+        return True
 
     def _run_fg(self, args: List[str]) -> int:
         if len(args) > 1:
@@ -6079,6 +6118,7 @@ class Runtime:
             return 1
         if job_id not in self._bg_jobs and job_id not in self._bg_status:
             return 1
+        self._bg_stopped.discard(job_id)
         status = self._run_wait([f"%{job_id}"])
         self.last_status = status
         if status != 0:
@@ -6104,6 +6144,7 @@ class Runtime:
             return 1
         if job_id not in self._bg_jobs and job_id not in self._bg_status:
             return 1
+        self._bg_stopped.discard(job_id)
         print(f"[{job_id}]")
         return 0
 
@@ -6205,6 +6246,24 @@ class Runtime:
                         time.sleep(min_age - age)
             try:
                 os.kill(pid, sig_num)
+                if job_id_for_target is not None:
+                    if sig_num in {
+                        getattr(signal, "SIGSTOP", -1),
+                        getattr(signal, "SIGTSTP", -1),
+                        getattr(signal, "SIGTTIN", -1),
+                        getattr(signal, "SIGTTOU", -1),
+                    }:
+                        self._bg_stopped.add(job_id_for_target)
+                    elif sig_num in {getattr(signal, "SIGCONT", -1)}:
+                        self._bg_stopped.discard(job_id_for_target)
+                    elif sig_num in {
+                        getattr(signal, "SIGTERM", -1),
+                        getattr(signal, "SIGKILL", -1),
+                        getattr(signal, "SIGHUP", -1),
+                        getattr(signal, "SIGINT", -1),
+                        getattr(signal, "SIGQUIT", -1),
+                    }:
+                        self._bg_stopped.discard(job_id_for_target)
             except Exception:
                 status = 1
         return status
@@ -11287,6 +11346,7 @@ class Runtime:
             pid = self._bg_pids.pop(jid, None)
             self._bg_started_at.pop(jid, None)
             self._bg_cmdline.pop(jid, None)
+            self._bg_stopped.discard(jid)
             self._bg_notify_emitted.discard(jid)
             try:
                 self._bg_notifications.remove(jid)
