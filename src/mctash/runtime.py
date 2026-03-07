@@ -996,6 +996,10 @@ class Runtime:
         if action is not None:
             if action == "":
                 return
+            if name == "CHLD" and name in self._pending_signals:
+                # Coalesce CHLD deliveries while one is already pending to
+                # avoid recursive trap storms during wait/child-reap windows.
+                return
             self._pending_signals.append(name)
             return
         if name in {"CHLD", "WINCH"}:
@@ -1102,7 +1106,7 @@ class Runtime:
         return 1
 
     def _run_pending_traps(self) -> None:
-        if self._get_subshell_depth() > 0:
+        if self._get_subshell_depth() > 0 or self._running_trap:
             return
         while self._pending_signals:
             sig = self._pending_signals.pop(0)
@@ -5998,6 +6002,9 @@ class Runtime:
                     th.join(0.05)
                     if self._pending_signals:
                         sig_name = self._pending_signals[0]
+                        if sig_name == "CHLD":
+                            self._run_pending_traps()
+                            continue
                         self._run_pending_traps()
                         sig_num = self._signal_number(sig_name)
                         return 128 + sig_num if sig_num else 1
