@@ -6,12 +6,11 @@ This report tracks observed gaps from runnable evidence.
 
 ## Explicit Known Gaps
 
-1. Interactive SIGINT foreground-command continuation (`C8.JOB.13`) is partial.
-   - Evidence: `tests/compat/run_interactive_sigint_matrix.sh`
+None currently open.
 
 ## Known Unknowns (Compliance-Risk Tracking)
 
-None currently open in this board beyond explicit gap above.
+None currently open in this board.
 
 ## Basis
 

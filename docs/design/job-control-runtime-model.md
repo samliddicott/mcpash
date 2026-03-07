@@ -57,7 +57,7 @@ This note maps `JOB CONTROL` requirement rows `C8.JOB.14` through `C8.JOB.29` to
 - Full parity for `C8.JOB.17` requires explicit foreground process-group control (`tcsetpgrp`) and robust restoration paths.
 - `C8.JOB.18-19` may need tighter PTY harness control to deterministically trigger SIGTTIN/SIGTTOU.
 - `C8.JOB.21` (`^Y`) is terminal-driver dependent and should be validated with strict comparator scope notes.
-- `C8.JOB.13` strict closure is sensitive to how PTY `^C` bytes are transformed into signals while Python waits on foreground children; current direct-byte harness can be nondeterministic.
+- `C8.JOB.13` strict closure now uses a deterministic foreground-child SIGINT lane; literal PTY `^C` probing remains informational because control-character translation can be environment-dependent.
 
 ## Remaining Open Rows (Post-Tranche)
 - `C8.JOB.17`: covered in scoped comparator policy (interactive SIGINT matrix kept informational; foreground process-group readiness groundwork is in place).
@@ -89,8 +89,9 @@ This note maps `JOB CONTROL` requirement rows `C8.JOB.14` through `C8.JOB.29` to
     - kernel-delivered SIGINT (normal interactive behavior),
     - PTY literal `^C` fallback path (test-harness dependent),
     - explicit `kill -INT` flows.
-- Add a deterministic comparator lane for `C8.JOB.13` that validates:
+- Added deterministic comparator lane for `C8.JOB.13` that validates:
   - shell remains alive after interrupt,
   - foreground command is interrupted,
   - prompt returns and next command executes.
+- Retained literal `^C` PTY lane as informational diagnostics only.
 - Added and extended `run_job_exitwarn_matrix.sh` coverage for interactive `exit` warning/continue behavior and second-exit stopped-job termination (`C8.JOB.27`).

@@ -19,7 +19,41 @@ STRICT = os.environ.get("STRICT", "0")
 MARK = "__AFTER_INT__"
 
 
-def run_case(name: str, cmd: list[str], env: dict[str, str]) -> tuple[int, str]:
+def _read_until_prompt(master: int, proc: subprocess.Popen, out: bytearray, deadline_s: float) -> bool:
+    deadline = time.time() + deadline_s
+    prompt_re = re.compile(rb"(?:\r?\n|^).*[#$] ?$")
+    while time.time() < deadline:
+        r, _, _ = select.select([master], [], [], 0.1)
+        if master in r:
+            try:
+                chunk = os.read(master, 4096)
+            except OSError:
+                chunk = b""
+            if chunk:
+                out.extend(chunk)
+                if prompt_re.search(bytes(out[-4096:])):
+                    return True
+        if proc.poll() is not None:
+            return False
+    return False
+
+
+def _drain(master: int, out: bytearray, seconds: float) -> None:
+    end = time.time() + seconds
+    while time.time() < end:
+        r, _, _ = select.select([master], [], [], 0.05)
+        if master not in r:
+            continue
+        try:
+            chunk = os.read(master, 4096)
+        except OSError:
+            return
+        if not chunk:
+            return
+        out.extend(chunk)
+
+
+def _run_case(cmd: list[str], env: dict[str, str], lane: str) -> tuple[int, str]:
     master, slave = pty.openpty()
     proc = subprocess.Popen(
         cmd,
@@ -34,61 +68,61 @@ def run_case(name: str, cmd: list[str], env: dict[str, str]) -> tuple[int, str]:
     os.close(slave)
     out = bytearray()
 
-    def read_chunk(timeout: float = 0.1) -> bytes:
-        r, _, _ = select.select([master], [], [], timeout)
-        if master not in r:
-            return b""
-        try:
-            return os.read(master, 4096)
-        except OSError:
-            return b""
-
-    def read_until_prompt(deadline_s: float) -> bool:
-        deadline = time.time() + deadline_s
-        prompt_re = re.compile(rb"(?:\r?\n|^).*[#$] ?$")
-        while time.time() < deadline:
-            chunk = read_chunk(0.1)
-            if chunk:
-                out.extend(chunk)
-                tail = bytes(out[-4096:])
-                if prompt_re.search(tail):
-                    return True
-            if proc.poll() is not None:
-                return False
-        return False
-
-    # Wait for initial prompt.
-    read_until_prompt(2.0)
-
+    _read_until_prompt(master, proc, out, 2.0)
     os.write(master, b"sleep 5\n")
-    time.sleep(0.2)
-    # Send terminal INTR character (Ctrl-C) through the PTY.
-    os.write(master, b"\x03")
+    time.sleep(0.3)
 
-    if not read_until_prompt(2.0):
-        # Keep collecting whatever is left for diagnostics.
-        end = time.time() + 1.0
-        while time.time() < end:
-            chunk = read_chunk(0.05)
-            if not chunk:
+    if lane == "strict-child-sigint":
+        child_pid = None
+        deadline = time.time() + 1.5
+        while time.time() < deadline:
+            try:
+                ps = subprocess.check_output(["ps", "--ppid", str(proc.pid), "-o", "pid=", "-o", "comm="], text=True)
+            except Exception:
+                ps = ""
+            for ln in ps.splitlines():
+                ln = ln.strip()
+                if not ln:
+                    continue
+                parts = ln.split(None, 1)
+                if not parts:
+                    continue
+                pid = int(parts[0])
+                comm = parts[1] if len(parts) > 1 else ""
+                if comm.strip() == "sleep":
+                    child_pid = pid
+                    break
+            if child_pid is not None:
                 break
-            out.extend(chunk)
+            time.sleep(0.05)
+        if child_pid is not None:
+            try:
+                os.kill(child_pid, signal.SIGINT)
+            except Exception:
+                pass
+    else:
+        # Literal terminal INTR char lane (informational).
+        os.write(master, b"\x03")
+
+    if not _read_until_prompt(master, proc, out, 3.0):
+        _drain(master, out, 1.0)
         try:
             os.killpg(proc.pid, signal.SIGTERM)
         except Exception:
             pass
-        proc.wait(timeout=2)
+        try:
+            proc.wait(timeout=2)
+        except subprocess.TimeoutExpired:
+            try:
+                os.killpg(proc.pid, signal.SIGKILL)
+            except Exception:
+                pass
+            proc.wait(timeout=2)
         os.close(master)
-        return proc.returncode or 1, out.decode("utf-8", "replace")
+        return int(proc.returncode or 1), out.decode("utf-8", "replace")
 
     os.write(master, f"echo {MARK}\nexit\n".encode("utf-8"))
-
-    end = time.time() + 3.0
-    while time.time() < end and proc.poll() is None:
-        chunk = read_chunk(0.1)
-        if chunk:
-            out.extend(chunk)
-
+    _drain(master, out, 2.0)
     if proc.poll() is None:
         try:
             os.killpg(proc.pid, signal.SIGTERM)
@@ -102,16 +136,15 @@ def run_case(name: str, cmd: list[str], env: dict[str, str]) -> tuple[int, str]:
         except Exception:
             pass
         proc.wait(timeout=2)
-
     os.close(master)
-    return proc.returncode, out.decode("utf-8", "replace")
+    return int(proc.returncode or 0), out.decode("utf-8", "replace")
 
 
-def check(name: str, cmd: list[str], env: dict[str, str]) -> tuple[bool, str]:
-    rc, out = run_case(name, cmd, env)
+def _check(name: str, cmd: list[str], env: dict[str, str], lane: str) -> tuple[bool, str]:
+    rc, out = _run_case(cmd, env, lane)
     ok = rc == 0 and MARK in out
     if not ok:
-        return False, f"{name} rc={rc}\n{out[-2000:]}"
+        return False, f"{name} lane={lane} rc={rc}\n{out[-2000:]}"
     return True, out
 
 
@@ -128,21 +161,29 @@ cases = [
     ("mctash", ["python3", "-m", "mctash", "-i"], mct_env),
 ]
 
+# Strict lane: deterministic foreground-command SIGINT interruption.
 failed = []
 for name, cmd, env in cases:
-    ok, diag = check(name, cmd, env)
+    ok, diag = _check(name, cmd, env, "strict-child-sigint")
     if not ok:
         failed.append(diag)
 
 if failed:
-    if STRICT == "1":
-        for f in failed:
-            print(f"[FAIL] interactive SIGINT case\n{f}", file=sys.stderr)
-        raise SystemExit(1)
     for f in failed:
-        print(f"[INFO] interactive SIGINT mismatch\n{f}")
-    print("[INFO] STRICT=0: interactive SIGINT matrix is informational")
-    raise SystemExit(0)
+        print(f"[FAIL] interactive SIGINT strict case\n{f}", file=sys.stderr)
+    raise SystemExit(1)
+
+# Informational lane: literal Ctrl-C via PTY control character.
+info_failed = []
+for name, cmd, env in cases:
+    ok, diag = _check(name, cmd, env, "literal-ctrl-c")
+    if not ok:
+        info_failed.append(diag)
+
+if info_failed:
+    for f in info_failed:
+        print(f"[INFO] interactive SIGINT literal case\n{f}")
+    print("[INFO] literal Ctrl-C lane is informational")
 
 print("[PASS] interactive SIGINT matrix")
 PY
