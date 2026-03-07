@@ -5895,6 +5895,8 @@ class Runtime:
                             self._run_pending_traps()
                             if self.options.get("e", False):
                                 raise SystemExit(0)
+                    if status < 0:
+                        return 128 + (-status)
                     return status
                 except FileNotFoundError:
                     msg = self._diag_msg(DiagnosticKey.COMMAND_NOT_FOUND, name=argv[0])
