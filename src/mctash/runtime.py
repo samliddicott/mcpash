@@ -12078,6 +12078,31 @@ class Runtime:
         if len(args) == 1 and args[0] == "-l":
             self._print_signal_table()
             return 0
+        if args and args[0] == "-p":
+            targets: list[str] = []
+            if len(args) == 1:
+                # bash --posix prints all known signals for `trap -p` with no
+                # args, including default dispositions.
+                targets = ["EXIT"] + [name for _, name in self._signal_names_by_number()]
+            else:
+                for sig in args[1:]:
+                    key = self._normalize_signal_spec(sig)
+                    if key is None:
+                        line = (self.current_line + 1) if self.current_line is not None else None
+                        self._report_error(
+                            self._diag_msg(DiagnosticKey.INVALID_SIGNAL_SPEC, sig=sig),
+                            line=line,
+                            context="trap",
+                        )
+                        return 1
+                    targets.append(key)
+            for key in targets:
+                if key in self.traps:
+                    action = self.traps.get(key, "")
+                    print(f"trap -- '{action}' {key}", flush=True)
+                else:
+                    print(f"trap -- - {key}", flush=True)
+            return 0
         if not args:
             for sig, action in sorted(self.traps.items()):
                 print(f"trap -- '{action}' {sig}", flush=True)
