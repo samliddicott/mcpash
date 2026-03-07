@@ -1196,6 +1196,39 @@ class Runtime:
                 print(self._format_job_notification_line(job_id))
                 self._bg_notify_emitted.add(job_id)
 
+    def _watch_job_process(self, job_id: int, proc: subprocess.Popen) -> None:
+        try:
+            monitor = bool(self.options.get("i", False) and self.options.get("m", False))
+            wuntraced = int(getattr(os, "WUNTRACED", 0))
+            wcontinued = int(getattr(os, "WCONTINUED", 0))
+            flags = (wuntraced | wcontinued) if monitor else 0
+            if flags == 0:
+                self._record_bg_job_completion(job_id, proc.wait())
+                return
+            while True:
+                try:
+                    pid, st = os.waitpid(proc.pid, flags)
+                except ChildProcessError:
+                    polled = proc.poll()
+                    self._record_bg_job_completion(job_id, 0 if polled is None else polled)
+                    return
+                if pid == 0:
+                    continue
+                if os.WIFSTOPPED(st):
+                    self._mark_job_stopped(job_id, os.WSTOPSIG(st))
+                    continue
+                if hasattr(os, "WIFCONTINUED") and os.WIFCONTINUED(st):
+                    self._mark_job_continued(job_id)
+                    continue
+                if os.WIFEXITED(st):
+                    self._record_bg_job_completion(job_id, os.WEXITSTATUS(st))
+                    return
+                if os.WIFSIGNALED(st):
+                    self._record_bg_job_completion(job_id, -os.WTERMSIG(st))
+                    return
+        finally:
+            self._bg_pids.pop(job_id, None)
+
     def _emit_deferred_job_notifications(self) -> None:
         if not self.options.get("i", False):
             return
@@ -1381,10 +1414,7 @@ class Runtime:
                             )
 
                         def _watch_proc() -> None:
-                            try:
-                                self._record_bg_job_completion(job_id, proc.wait())
-                            finally:
-                                self._bg_pids.pop(job_id, None)
+                            self._watch_job_process(job_id, proc)
 
                         th = threading.Thread(target=_watch_proc, daemon=True)
                         self._bg_jobs[job_id] = th
@@ -2312,10 +2342,7 @@ class Runtime:
                         )
 
                     def _watch_proc() -> None:
-                        try:
-                            self._record_bg_job_completion(job_id, proc.wait())
-                        finally:
-                            self._bg_pids.pop(job_id, None)
+                        self._watch_job_process(job_id, proc)
 
                     th = threading.Thread(target=_watch_proc, daemon=True)
                     self._bg_jobs[job_id] = th
