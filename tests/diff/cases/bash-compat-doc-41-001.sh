@@ -2,8 +2,8 @@
 # DIFF_BASELINE: bash
 set -euo pipefail
 
-# Bash COMPAT delta row probe
-# Requirement: BCOMPAT.41.001
-# Feature: in posix mode, `time' may be followed by options and still be recognized as a reserved word (this is POSIX interpretation 267)
-
-echo 'JM:BCOMPAT_41_001:probe'
+# BCOMPAT.41.001: `time` reserved word option parsing in POSIX mode.
+set +e
+out="$(time -p : 2>&1)"; rc=$?
+set -e
+printf 'JM:BCOMPAT_41_001:rc=%s tail=%s\n' "$rc" "$(printf '%s\n' "$out" | tail -n1)"

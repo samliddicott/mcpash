@@ -2,8 +2,15 @@
 # DIFF_BASELINE: bash
 set -euo pipefail
 
-# Bash POSIX 6.11.2 core row probe
-# Requirement: BPOSIX.CORE.074
-# Feature: The arrival of ‘SIGCHLD’ when a trap is set on ‘SIGCHLD’ does not interrupt the ‘wait’ builtin and cause it to return immediately. The trap command is run once for each child that exits.
-
-echo 'JM:BPOSIX_CORE_074:probe'
+# Item 74: CHLD traps and wait behavior.
+c074=0
+trap 'c074=$((c074 + 1))' CHLD
+sleep 0.05 & p1=$!
+sleep 0.10 & p2=$!
+set +e
+wait "$p1"; rc1=$?
+wait "$p2"; rc2=$?
+set -e
+# Give trap execution a moment to flush.
+sleep 0.05
+echo "JM:074:rc1=$rc1 rc2=$rc2 chld=$c074"

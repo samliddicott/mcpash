@@ -2,8 +2,10 @@
 # DIFF_BASELINE: bash
 set -euo pipefail
 
-# Bash COMPAT delta row probe
-# Requirement: BCOMPAT.31.002
-# Feature: quoting the rhs of the [[ command's regexp matching operator (=~) has no special effect
-
-echo 'JM:BCOMPAT_31_002:probe'
+# BCOMPAT.31.002: quoted RHS of [[ =~ ]] behavior.
+s='ab'
+set +e
+[[ $s =~ a. ]]; rc_unq=$?
+[[ $s =~ "a." ]]; rc_q=$?
+set -e
+printf 'JM:BCOMPAT_31_002:unq=%s q=%s\n' "$rc_unq" "$rc_q"

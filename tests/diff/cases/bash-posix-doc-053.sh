@@ -2,8 +2,16 @@
 # DIFF_BASELINE: bash
 set -euo pipefail
 
-# Bash POSIX 6.11.2 core row probe
-# Requirement: BPOSIX.CORE.053
-# Feature: When listing the history, the ‘fc’ builtin does not include an indication of whether or not a history entry has been modified.
+ROOT_DIR="$(cd "$(dirname "$0")/../../.." && pwd)"
+# Item 53: fc listing modified marker omitted
+set +e
+fc -l >/tmp/fc53.out 2>/tmp/fc53.err
+st=$?
+set -e
+if [[ $st -ne 0 ]]; then
+  echo JM:053:st:${st}
+else
+  if grep -q '\*' /tmp/fc53.out; then echo JM:053:star; else echo JM:053:nostar; fi
+fi
+rm -f /tmp/fc53.out /tmp/fc53.err
 
-echo 'JM:BPOSIX_CORE_053:probe'

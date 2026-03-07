@@ -2,8 +2,8 @@
 # DIFF_BASELINE: bash
 set -euo pipefail
 
-# Bash POSIX 6.11.2 core row probe
-# Requirement: BPOSIX.CORE.060
-# Feature: The ‘printf’ builtin uses ‘double’ (via ‘strtod’) to convert arguments corresponding to floating point conversion specifiers, instead of ‘long double’ if it's available.  The ‘L’ length modifier forces ‘printf’ to use ‘long double’ if it's available.
+ROOT_DIR="$(cd "$(dirname "$0")/../../.." && pwd)"
+# Item 60: printf floating conversion mode probe
+printf 'JM:060:%s
+' "$(printf '%.3f' 1.125)"
 
-echo 'JM:BPOSIX_CORE_060:probe'

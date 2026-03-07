@@ -2,8 +2,12 @@
 # DIFF_BASELINE: bash
 set -euo pipefail
 
-# Bash POSIX 6.11.2 core row probe
-# Requirement: BPOSIX.CORE.055
-# Feature: ‘fc’ treats extra arguments as an error instead of ignoring them.
+ROOT_DIR="$(cd "$(dirname "$0")/../../.." && pwd)"
+# Item 55: fc extra args error
+set +e
+fc 1 2 3 >/tmp/fc55.out 2>/tmp/fc55.err
+st=$?
+set -e
+echo JM:055:${st}
+rm -f /tmp/fc55.out /tmp/fc55.err
 
-echo 'JM:BPOSIX_CORE_055:probe'

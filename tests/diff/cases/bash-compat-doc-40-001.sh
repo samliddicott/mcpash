@@ -2,8 +2,9 @@
 # DIFF_BASELINE: bash
 set -euo pipefail
 
-# Bash COMPAT delta row probe
-# Requirement: BCOMPAT.40.001
-# Feature: the < and > operators to the [[ command do not consider the current locale when comparing strings; they use ASCII ordering. Bash versions prior to bash-4.1 use ASCII collation and strcmp(3); bash-4.1 and later use the current locale's collation sequence and strcoll(3).
-
-echo 'JM:BCOMPAT_40_001:probe'
+# BCOMPAT.40.001: locale-vs-ASCII [[ ordering probe.
+set +e
+LC_ALL=C [[ Z < a ]]; rc_c=$?
+LC_ALL=C.UTF-8 [[ Z < a ]]; rc_utf=$?
+set -e
+printf 'JM:BCOMPAT_40_001:C=%s UTF=%s\n' "$rc_c" "$rc_utf"

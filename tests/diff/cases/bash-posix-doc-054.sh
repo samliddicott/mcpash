@@ -2,8 +2,13 @@
 # DIFF_BASELINE: bash
 set -euo pipefail
 
-# Bash POSIX 6.11.2 core row probe
-# Requirement: BPOSIX.CORE.054
-# Feature: The default editor used by ‘fc’ is ‘ed’.
+ROOT_DIR="$(cd "$(dirname "$0")/../../.." && pwd)"
+# Item 54: default fc editor is ed
+set +e
+unset FCEDIT EDITOR VISUAL
+fc -e - -1 >/tmp/fc54.out 2>/tmp/fc54.err
+st=$?
+set -e
+echo JM:054:${st}
+rm -f /tmp/fc54.out /tmp/fc54.err
 
-echo 'JM:BPOSIX_CORE_054:probe'

@@ -2,8 +2,10 @@
 # DIFF_BASELINE: bash
 set -euo pipefail
 
-# Bash POSIX 6.11.2 core row probe
-# Requirement: BPOSIX.CORE.027
-# Feature: The ‘vi’ editing mode will invoke the ‘vi’ editor directly when the ‘v’ command is run, instead of checking ‘$VISUAL’ and ‘$EDITOR’.
-
-echo 'JM:BPOSIX_CORE_027:probe'
+# Item 27: vi `v` command editor preference behavior.
+if command -v script >/dev/null 2>&1; then
+  out="$(script -qec "VISUAL=false EDITOR=false bash --posix -i -c 'set -o vi; fc -s 2>/dev/null || true'" /dev/null 2>/dev/null | tr -d '\r')"
+  printf '%s\n' "$out" | sed -n '1,6p'
+else
+  echo JM:027:noscript
+fi

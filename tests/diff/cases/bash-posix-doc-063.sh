@@ -2,8 +2,10 @@
 # DIFF_BASELINE: bash
 set -euo pipefail
 
-# Bash POSIX 6.11.2 core row probe
-# Requirement: BPOSIX.CORE.063
-# Feature: When the ‘set’ builtin is invoked without options, it does not display shell function names and definitions.
-
-echo 'JM:BPOSIX_CORE_063:probe'
+# Item 63: `set` output in POSIX mode should not include function definitions.
+f63() { :; }
+if set | grep -Eq '^f63[[:space:]]*\(\)'; then
+  echo JM:063:function-listed
+else
+  echo JM:063:function-hidden
+fi

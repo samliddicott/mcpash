@@ -2,8 +2,10 @@
 # DIFF_BASELINE: bash
 set -euo pipefail
 
-# Bash POSIX 6.11.2 core row probe
-# Requirement: BPOSIX.CORE.023
-# Feature: The message printed by the job control code and builtins when a job is stopped is 'Stopped(SIGNAME)', where SIGNAME is, for example, ‘SIGTSTP’.
-
-echo 'JM:BPOSIX_CORE_023:probe'
+# Item 23: stopped job status message format.
+if command -v script >/dev/null 2>&1; then
+  out="$(script -qec "bash --posix -i -c 'set -m; sleep 5 & p=\$!; kill -TSTP \$p; jobs -l; kill -TERM \$p 2>/dev/null'" /dev/null 2>/dev/null | tr -d '\r')"
+  printf '%s\n' "$out" | grep -E 'Stopped|SIGTSTP|SIGSTOP' | sed -n '1,3p'
+else
+  echo JM:023:noscript
+fi

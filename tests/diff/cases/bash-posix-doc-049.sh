@@ -2,8 +2,16 @@
 # DIFF_BASELINE: bash
 set -euo pipefail
 
-# Bash POSIX 6.11.2 core row probe
-# Requirement: BPOSIX.CORE.049
-# Feature: When the ‘cd’ builtin is invoked in logical mode, and the pathname constructed from ‘$PWD’ and the directory name supplied as an argument does not refer to an existing directory, ‘cd’ will fail instead of falling back to physical mode.
+ROOT_DIR="$(cd "$(dirname "$0")/../../.." && pwd)"
+# Item 49: logical cd should fail rather than fallback physical
+TMP49="$(mktemp -d)"; trap 'rm -rf "$TMP49"' EXIT
+mkdir -p "$TMP49/a" "$TMP49/b"
+ln -s "$TMP49/a" "$TMP49/link"
+cd "$TMP49/link"
+rm -rf "$TMP49/a"
+set +e
+cd .. >/dev/null 2>&1
+st=$?
+set -e
+echo JM:049:${st}
 
-echo 'JM:BPOSIX_CORE_049:probe'

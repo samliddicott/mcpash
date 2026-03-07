@@ -2,8 +2,8 @@
 # DIFF_BASELINE: bash
 set -euo pipefail
 
-# Bash POSIX 6.11.2 extra row probe
-# Requirement: BPOSIX.EXTRA.003
-# Feature: As noted above, Bash requires the ‘xpg_echo’ option to be enabled for the ‘echo’ builtin to be fully conformant.
-
-echo 'JM:BPOSIX_EXTRA_003:probe'
+# Extra 3: xpg_echo controls POSIX echo conformance behavior.
+shopt -u xpg_echo || true
+echo "JM:EXTRA003:off:$(echo '\\141')"
+shopt -s xpg_echo || true
+echo "JM:EXTRA003:on:$(echo '\\141')"

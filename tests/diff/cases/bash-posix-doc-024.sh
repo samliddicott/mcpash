@@ -2,8 +2,10 @@
 # DIFF_BASELINE: bash
 set -euo pipefail
 
-# Bash POSIX 6.11.2 core row probe
-# Requirement: BPOSIX.CORE.024
-# Feature: If the shell is interactive, Bash does not perform job notifications between executing commands in lists separated by ‘;’ or newline.  Non-interactive shells print status messages after a foreground job in a list completes.
-
-echo 'JM:BPOSIX_CORE_024:probe'
+# Item 24: interactive notification timing around list separators.
+if command -v script >/dev/null 2>&1; then
+  out="$(script -qec "bash --posix -i -c 'set -m; sh -c \"exit 3\" & :; echo after-semicolon; jobs'" /dev/null 2>/dev/null | tr -d '\r')"
+  printf '%s\n' "$out" | sed -n '1,8p'
+else
+  echo JM:024:noscript
+fi

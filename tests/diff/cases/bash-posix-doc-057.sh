@@ -2,8 +2,10 @@
 # DIFF_BASELINE: bash
 set -euo pipefail
 
-# Bash POSIX 6.11.2 core row probe
-# Requirement: BPOSIX.CORE.057
-# Feature: The output of ‘kill -l’ prints all the signal names on a single line, separated by spaces, without the ‘SIG’ prefix.
+ROOT_DIR="$(cd "$(dirname "$0")/../../.." && pwd)"
+# Item 57: kill -l one-line names without SIG prefix
+out57="$(kill -l 2>/dev/null || true)"
+if printf '%s' "$out57" | grep -q SIG; then echo JM:057:hasSIG; else echo JM:057:noSIG; fi
+if printf '%s' "$out57" | grep -q $'
+'; then echo JM:057:multiline; else echo JM:057:oneline; fi
 
-echo 'JM:BPOSIX_CORE_057:probe'

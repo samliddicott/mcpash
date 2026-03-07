@@ -2,8 +2,10 @@
 # DIFF_BASELINE: bash
 set -euo pipefail
 
-# Bash COMPAT delta row probe
-# Requirement: BCOMPAT.44.003
-# Feature: variable assignments preceding builtins like export and readonly that set attributes continue to affect variables with the same name in the calling environment even if the shell is not in posix mode
-
-echo 'JM:BCOMPAT_44_003:probe'
+# BCOMPAT.44.003: assignment before export/readonly persists to caller env.
+v44='old'
+v44='new' export v44
+echo "JM:BCOMPAT_44_003:export:$v44"
+r44='old'
+r44='new' readonly r44
+echo "JM:BCOMPAT_44_003:readonly:$r44"

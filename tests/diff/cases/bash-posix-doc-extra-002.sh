@@ -2,8 +2,8 @@
 # DIFF_BASELINE: bash
 set -euo pipefail
 
-# Bash POSIX 6.11.2 extra row probe
-# Requirement: BPOSIX.EXTRA.002
-# Feature: The ‘fc’ builtin checks ‘$EDITOR’ as a program to edit history entries if ‘FCEDIT’ is unset, rather than defaulting directly to ‘ed’.  ‘fc’ uses ‘ed’ if ‘EDITOR’ is unset.
-
-echo 'JM:BPOSIX_EXTRA_002:probe'
+# Extra 2: fc editor selection via FCEDIT/EDITOR.
+set +e
+fc_out="$(FCEDIT= EDITOR=false fc -l 1 1 2>&1)"; rc=$?
+set -e
+printf 'JM:EXTRA002:rc=%s out=%s\n' "$rc" "$fc_out"

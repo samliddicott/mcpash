@@ -2,8 +2,9 @@
 # DIFF_BASELINE: bash
 set -euo pipefail
 
-# Bash COMPAT delta row probe
-# Requirement: BCOMPAT.32.001
-# Feature: the < and > operators to the [[ command do not consider the current locale when comparing strings; they use ASCII ordering
-
-echo 'JM:BCOMPAT_32_001:probe'
+# BCOMPAT.32.001: [[ < > ]] collation behavior probe (same axis).
+set +e
+LC_ALL=C [[ b < c ]]; rc1=$?
+LC_ALL=C [[ c > b ]]; rc2=$?
+set -e
+printf 'JM:BCOMPAT_32_001:C:%s:%s\n' "$rc1" "$rc2"

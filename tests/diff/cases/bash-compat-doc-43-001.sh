@@ -2,8 +2,12 @@
 # DIFF_BASELINE: bash
 set -euo pipefail
 
-# Bash COMPAT delta row probe
-# Requirement: BCOMPAT.43.001
-# Feature: word expansion errors are considered non-fatal errors that cause the current command to fail, even in posix mode (the default behavior is to make them fatal errors that cause the shell to exit)
-
-echo 'JM:BCOMPAT_43_001:probe'
+# BCOMPAT.43.001: word expansion error fatality.
+set +e
+: "${NO_SUCH_VAR_43?boom43}" 2>/tmp/bcompat43.err
+rc=$?
+err="$(cat /tmp/bcompat43.err 2>/dev/null || true)"
+rm -f /tmp/bcompat43.err
+set -e
+printf 'JM:BCOMPAT_43_001:rc=%s err=%s\n' "$rc" "$err"
+echo 'JM:BCOMPAT_43_001:after'

@@ -2,8 +2,11 @@
 # DIFF_BASELINE: bash
 set -euo pipefail
 
-# Bash POSIX 6.11.2 core row probe
-# Requirement: BPOSIX.CORE.058
-# Feature: The ‘kill’ builtin does not accept signal names with a ‘SIG’ prefix.
+ROOT_DIR="$(cd "$(dirname "$0")/../../.." && pwd)"
+# Item 58: kill should reject SIG-prefixed names in POSIX mode
+set +e
+kill -SIGTERM $$ >/dev/null 2>&1
+st=$?
+set -e
+echo JM:058:${st}
 
-echo 'JM:BPOSIX_CORE_058:probe'

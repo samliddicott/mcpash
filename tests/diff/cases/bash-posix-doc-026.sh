@@ -2,8 +2,11 @@
 # DIFF_BASELINE: bash
 set -euo pipefail
 
-# Bash POSIX 6.11.2 core row probe
-# Requirement: BPOSIX.CORE.026
-# Feature: Bash permanently removes jobs from the jobs table after notifying the user of their termination via the ‘wait’ or ‘jobs’ builtins. It removes the job from the jobs list after notifying the user of its termination, but the status is still available via ‘wait’, as long as ‘wait’ is supplied a PID argument.
-
-echo 'JM:BPOSIX_CORE_026:probe'
+# Item 26: wait retains status semantics after job notifications.
+sleep 0.03 & p=$!
+set +e
+wait "$p"; rc1=$?
+jobs_out="$(jobs 2>&1)"
+wait2_err="$(wait "$p" 2>&1)"; rc2=$?
+set -e
+printf 'JM:026:first=%s jobs=%s second=%s err=%s\n' "$rc1" "$jobs_out" "$rc2" "$wait2_err"

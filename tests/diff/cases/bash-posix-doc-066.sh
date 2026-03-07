@@ -2,8 +2,12 @@
 # DIFF_BASELINE: bash
 set -euo pipefail
 
-# Bash POSIX 6.11.2 core row probe
-# Requirement: BPOSIX.CORE.066
-# Feature: The ‘test’ builtin's ‘-t’ unary primary requires an argument. Historical versions of ‘test’ made the argument optional in certain cases, and Bash attempts to accommodate those for backwards compatibility.
-
-echo 'JM:BPOSIX_CORE_066:probe'
+# Item 66: `test -t` argument handling.
+set +e
+err_noarg="$(test -t 2>&1)"
+rc_noarg=$?
+test -t 1
+rc_fd1=$?
+set -e
+printf 'JM:066:noarg-rc=%s noarg-err=%s\n' "$rc_noarg" "$err_noarg"
+printf 'JM:066:fd1-rc=%s\n' "$rc_fd1"

@@ -2,8 +2,8 @@
 # DIFF_BASELINE: bash
 set -euo pipefail
 
-# Bash POSIX 6.11.2 core row probe
-# Requirement: BPOSIX.CORE.061
-# Feature: The ‘pwd’ builtin verifies that the value it prints is the same as the current directory, even if it is not asked to check the file system with the ‘-P’ option.
+ROOT_DIR="$(cd "$(dirname "$0")/../../.." && pwd)"
+# Item 61: pwd verifies printed value matches cwd
+pwdout="$(pwd)"
+if [[ -d "$pwdout" ]]; then echo JM:061:dir; else echo JM:061:nodir; fi
 
-echo 'JM:BPOSIX_CORE_061:probe'

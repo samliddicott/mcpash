@@ -2,8 +2,10 @@
 # DIFF_BASELINE: bash
 set -euo pipefail
 
-# Bash POSIX 6.11.2 core row probe
-# Requirement: BPOSIX.CORE.022
-# Feature: The message printed by the job control code and builtins when a job exits with a non-zero status is 'Done(status)'.
-
-echo 'JM:BPOSIX_CORE_022:probe'
+# Item 22: job status message format for non-zero exit.
+if command -v script >/dev/null 2>&1; then
+  out="$(script -qec "bash --posix -i -c 'set -m; sh -c \"exit 7\" & wait %1 2>/dev/null; jobs -l'" /dev/null 2>/dev/null | tr -d '\r')"
+  printf '%s\n' "$out" | grep -E 'Done\(|Exit|done' | sed -n '1,3p'
+else
+  echo JM:022:noscript
+fi

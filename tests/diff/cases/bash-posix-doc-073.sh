@@ -2,8 +2,11 @@
 # DIFF_BASELINE: bash
 set -euo pipefail
 
-# Bash POSIX 6.11.2 core row probe
-# Requirement: BPOSIX.CORE.073
-# Feature: When asked to unset a variable that appears in an assignment statement preceding the command, the ‘unset’ builtin attempts to unset a variable of the same name in the current or previous scope as well.  This implements the required "if an assigned variable is further modified by the utility, the modifications made by the utility shall persist" behavior.
-
-echo 'JM:BPOSIX_CORE_073:probe'
+# Item 73: unsetting an assignment-preceded variable should persist effect.
+x073=outer
+x073=temp unset x073
+if [ "${x073+set}" = set ]; then
+  echo "JM:073:set:$x073"
+else
+  echo 'JM:073:unset'
+fi
