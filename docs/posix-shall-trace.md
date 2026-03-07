@@ -15,6 +15,7 @@ References:
 - POSIX Shell Command Language (Issue 8): `https://pubs.opengroup.org/onlinepubs/9799919799.2024edition/utilities/V3_chap02.html`
 - POSIX rationale (XCU C.2): `https://pubs.opengroup.org/onlinepubs/9699919799/xrat/V4_xcu_chap02.html`
 - Bash Reference Manual, "6.11 Bash and POSIX": `https://tiswww.case.edu/php/chet/bash/POSIX`
+- Bash COMPAT notes: `https://tiswww.case.edu/php/chet/bash/COMPAT`
 - BusyBox ash tests: `tests/busybox/ash_test`
 - Oil subset tests: `tests/oil/oils-master/spec`
 - 2.9/2.10 strict map: `docs/posix-2.9-2.10-trace.md`

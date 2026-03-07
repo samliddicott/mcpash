@@ -8,6 +8,8 @@
   - https://pubs.opengroup.org/onlinepubs/9699919799/xrat/V4_xcu_chap02.html
 - Bash Reference Manual, "6.11 Bash and POSIX":
   - https://tiswww.case.edu/php/chet/bash/POSIX
+- Bash COMPAT notes:
+  - https://tiswww.case.edu/php/chet/bash/COMPAT
 - `man ash` (local: dash/ash manual)
 - BusyBox `ash_test` corpus (executed via `src/tests/run_busybox_ash.sh`)
 
