@@ -105,6 +105,11 @@ class ArithExpansionFailure(Exception):
         self.code = code
 
 
+JOB_RUNNING = "running"
+JOB_STOPPED = "stopped"
+JOB_DONE = "done"
+
+
 class _SharedVarStore:
     def __init__(self, path: str) -> None:
         self.path = path
@@ -751,6 +756,9 @@ class Runtime:
         self._bg_started_at: Dict[int, float] = {}
         self._bg_cmdline: Dict[int, str] = {}
         self._bg_stopped: set[int] = set()
+        self._job_state: Dict[int, str] = {}
+        self._job_events: list[tuple[int, str, int | None]] = []
+        self._job_event_lock = threading.Lock()
         self._last_job_lookup_error: str | None = None
         self._bg_notifications: list[int] = []
         self._bg_notify_emitted: set[int] = set()
@@ -1133,10 +1141,39 @@ class Runtime:
         cmd = self._bg_cmdline.get(job_id, "")
         return f"[{job_id}] {state}{(' ' + cmd) if cmd else ''}"
 
+    def _push_job_event(self, job_id: int, event: str, value: int | None = None) -> None:
+        with self._job_event_lock:
+            self._job_events.append((job_id, event, value))
+
+    def _set_job_state(self, job_id: int, state: str) -> None:
+        prev = self._job_state.get(job_id)
+        self._job_state[job_id] = state
+        if prev != state:
+            self._push_job_event(job_id, state, None)
+
+    def _register_job_spawn(self, job_id: int) -> None:
+        self._set_job_state(job_id, JOB_RUNNING)
+
+    def _mark_job_stopped(self, job_id: int, sig_num: int | None = None) -> None:
+        self._bg_stopped.add(job_id)
+        self._set_job_state(job_id, JOB_STOPPED)
+        if sig_num is not None:
+            self._push_job_event(job_id, "stopped", sig_num)
+
+    def _mark_job_continued(self, job_id: int) -> None:
+        self._bg_stopped.discard(job_id)
+        self._set_job_state(job_id, JOB_RUNNING)
+        self._push_job_event(job_id, "continued", None)
+
+    def _mark_job_done(self, job_id: int, status: int) -> None:
+        self._bg_stopped.discard(job_id)
+        self._set_job_state(job_id, JOB_DONE)
+        self._push_job_event(job_id, "done", status)
+
     def _record_bg_job_completion(self, job_id: int, status: int) -> None:
         with self._bg_lock:
             self._bg_status[job_id] = status
-            self._bg_stopped.discard(job_id)
+            self._mark_job_done(job_id, status)
             if job_id not in self._bg_notifications:
                 self._bg_notifications.append(job_id)
             emit_now = bool(self.options.get("i", False) and self.options.get("b", False))
@@ -1340,6 +1377,7 @@ class Runtime:
                         self._bg_pid_to_job[proc.pid] = job_id
                         self._bg_started_at[job_id] = time.monotonic()
                         self._bg_cmdline[job_id] = " ".join(argv)
+                        self._register_job_spawn(job_id)
                         self._last_bg_job = job_id
                         self._last_bg_pid = proc.pid
                         th.start()
@@ -1408,6 +1446,7 @@ class Runtime:
             self._bg_jobs[job_id] = thread
             self._bg_started_at[job_id] = time.monotonic()
             self._bg_cmdline[job_id] = "<background>"
+            self._register_job_spawn(job_id)
             self._last_bg_job = job_id
             thread.start()
             # Best-effort: wait briefly for background job leader PID so $! is
@@ -1841,6 +1880,7 @@ class Runtime:
             self._bg_pid_to_job[proc.pid] = job_id
             self._bg_started_at[job_id] = time.time()
             self._bg_cmdline[job_id] = f"coproc {name}"
+            self._register_job_spawn(job_id)
             self._coproc_procs[job_id] = proc
 
             def _wait_coproc() -> None:
@@ -2268,6 +2308,7 @@ class Runtime:
                     self._bg_pid_to_job[proc.pid] = job_id
                     self._bg_started_at[job_id] = time.monotonic()
                     self._bg_cmdline[job_id] = " ".join(argv)
+                    self._register_job_spawn(job_id)
                     self._last_bg_job = job_id
                     self._last_bg_pid = proc.pid
                     th.start()
@@ -2330,6 +2371,7 @@ class Runtime:
         self._bg_jobs[job_id] = thread
         self._bg_started_at[job_id] = time.monotonic()
         self._bg_cmdline[job_id] = self._asdl_command_to_sh_source(child)
+        self._register_job_spawn(job_id)
         self._last_bg_job = job_id
         thread.start()
         deadline = time.monotonic() + 0.1
@@ -6054,8 +6096,11 @@ class Runtime:
             pid = self._bg_pids.get(job_id)
             th = self._bg_jobs.get(job_id)
             done = (th is None) or (not th.is_alive())
-            if job_id in self._bg_stopped:
+            state_model = self._job_state.get(job_id)
+            if state_model == JOB_STOPPED or job_id in self._bg_stopped:
                 state = "Stopped(SIGSTOP)"
+            elif state_model == JOB_DONE:
+                state = "Done"
             else:
                 state = "Done" if done else "Running"
             if pid_only:
@@ -6253,9 +6298,9 @@ class Runtime:
                         getattr(signal, "SIGTTIN", -1),
                         getattr(signal, "SIGTTOU", -1),
                     }:
-                        self._bg_stopped.add(job_id_for_target)
+                        self._mark_job_stopped(job_id_for_target, sig_num)
                     elif sig_num in {getattr(signal, "SIGCONT", -1)}:
-                        self._bg_stopped.discard(job_id_for_target)
+                        self._mark_job_continued(job_id_for_target)
                     elif sig_num in {
                         getattr(signal, "SIGTERM", -1),
                         getattr(signal, "SIGKILL", -1),
@@ -6263,7 +6308,7 @@ class Runtime:
                         getattr(signal, "SIGINT", -1),
                         getattr(signal, "SIGQUIT", -1),
                     }:
-                        self._bg_stopped.discard(job_id_for_target)
+                        self._mark_job_done(job_id_for_target, -sig_num)
             except Exception:
                 status = 1
         return status
@@ -11347,6 +11392,7 @@ class Runtime:
             self._bg_started_at.pop(jid, None)
             self._bg_cmdline.pop(jid, None)
             self._bg_stopped.discard(jid)
+            self._job_state.pop(jid, None)
             self._bg_notify_emitted.discard(jid)
             try:
                 self._bg_notifications.remove(jid)
