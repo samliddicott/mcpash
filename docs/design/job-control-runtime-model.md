@@ -61,7 +61,7 @@ This note maps `JOB CONTROL` requirement rows `C8.JOB.14` through `C8.JOB.29` to
 ## Remaining Open Rows (Post-Tranche)
 - `C8.JOB.17`: still partial (foreground process-group signal routing).
 - `C8.JOB.18-19`: covered (PTY comparator lanes verify tty read/write background stop semantics).
-- `C8.JOB.20-21`: still partial (signal-equivalent foreground-stop path is covered; literal control-char lanes `^Z/^Y` remain open).
+- `C8.JOB.20-21`: still partial (signal-equivalent foreground-stop path is covered; literal control-char lane tracking now exists and confirms `^Z` mismatch; `^Y` delayed-suspend lane remains open).
 - `C8.JOB.26`: covered (CHLD trap delivery and wait-status interruption behavior now parity-backed against bash comparator).
 - `C8.JOB.27`: covered (checkjobs warning-once + second-exit stopped-job termination path is implemented and matrix-verified).
 - `C8.JOB.28-29`: covered (`wait` now uses explicit state model for stop-transition return; `wait -f` remains termination-only).
