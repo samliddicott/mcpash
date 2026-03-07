@@ -2,8 +2,11 @@
 # DIFF_BASELINE: bash
 set -euo pipefail
 
-# Bash COMPAT delta row probe
-# Requirement: BCOMPAT.51.003
-# Feature: expressions used as arguments to arithmetic operators in the [[ conditional command can be expanded more than once
-
-echo 'JM:BCOMPAT_51_003:probe'
+# BCOMPAT.51.003: arithmetic args in [[ ]] operators expansion count.
+i=0
+declare -a arr=(z)
+set +e
+[[ -v arr[i++] ]]
+rc=$?
+set -e
+echo "JM:BCOMPAT_51_003:i=$i rc=$rc"

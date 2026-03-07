@@ -2,8 +2,18 @@
 # DIFF_BASELINE: bash
 set -euo pipefail
 
-# Bash COMPAT delta row probe
-# Requirement: BCOMPAT.52.003
-# Feature: interactive shells will notify the user of completed jobs while sourcing a script. Newer versions defer notification until script execution completes.
-
-echo 'JM:BCOMPAT_52_003:probe'
+# BCOMPAT.52.003: interactive shell job notification while sourcing.
+if command -v script >/dev/null 2>&1; then
+  tmp="$(mktemp)"
+  trap 'rm -f "$tmp"' EXIT
+  cat >"$tmp" <<'SH'
+set -m
+sleep 0.1 &
+echo sourced
+sleep 0.2
+SH
+  out="$(script -qec "bash -i '$tmp'" /dev/null 2>/dev/null | tr -d '\r')"
+  printf '%s\n' "$out" | sed -n '1,12p'
+else
+  echo JM:BCOMPAT_52_003:noscript
+fi

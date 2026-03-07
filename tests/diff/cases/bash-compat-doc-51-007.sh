@@ -2,8 +2,8 @@
 # DIFF_BASELINE: bash
 set -euo pipefail
 
-# Bash COMPAT delta row probe
-# Requirement: BCOMPAT.51.007
-# Feature: arithmetic expressions used as indexed array subscripts can be expanded more than once;
-
-echo 'JM:BCOMPAT_51_007:probe'
+# BCOMPAT.51.007: indexed array subscript arithmetic expansion count.
+i=0
+declare -a a=(x y)
+out="${a[i++]}"
+echo "JM:BCOMPAT_51_007:out=$out i=$i"

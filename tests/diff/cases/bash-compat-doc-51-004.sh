@@ -2,8 +2,11 @@
 # DIFF_BASELINE: bash
 set -euo pipefail
 
-# Bash COMPAT delta row probe
-# Requirement: BCOMPAT.51.004
-# Feature: indexed and associative array subscripts used as arguments to the operators in the [[ conditional command (e.g., `[[ -v') can be expanded more than once. Bash-5.2 behaves as if the `assoc_expand_once' option were enabled.
-
-echo 'JM:BCOMPAT_51_004:probe'
+# BCOMPAT.51.004: [[ -v A[subscript] ]] subscript expansion count.
+i=0
+declare -A aa=([0]=x)
+set +e
+[[ -v aa[i++] ]]
+rc=$?
+set -e
+echo "JM:BCOMPAT_51_004:i=$i rc=$rc"

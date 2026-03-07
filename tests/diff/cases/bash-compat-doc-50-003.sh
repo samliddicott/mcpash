@@ -2,8 +2,12 @@
 # DIFF_BASELINE: bash
 set -euo pipefail
 
-# Bash COMPAT delta row probe
-# Requirement: BCOMPAT.50.003
-# Feature: Bash-5.1 and later use pipes for here-documents and here-strings if they are smaller than the pipe capacity. If the shell compatibility level is set to 50 or lower, it reverts to using temporary files.
-
-echo 'JM:BCOMPAT_50_003:probe'
+# BCOMPAT.50.003: here-string/here-doc fd backing probe (pipe vs temp file path).
+set +e
+hs="$(readlink /proc/$$/fd/0 <<<"x" 2>/dev/null)"; rc_hs=$?
+hd="$(readlink /proc/$$/fd/0 <<'HD' 2>/dev/null
+x
+HD
+)"; rc_hd=$?
+set -e
+printf 'JM:BCOMPAT_50_003:hs=%s(%s) hd=%s(%s)\n' "$hs" "$rc_hs" "$hd" "$rc_hd"

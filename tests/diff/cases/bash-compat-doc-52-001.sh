@@ -2,8 +2,11 @@
 # DIFF_BASELINE: bash
 set -euo pipefail
 
-# Bash COMPAT delta row probe
-# Requirement: BCOMPAT.52.001
-# Feature: the test builtin uses its historical algorithm for parsing expressions composed of five or more primaries.
-
-echo 'JM:BCOMPAT_52_001:probe'
+# BCOMPAT.52.001: `test` parsing algorithm for complex expressions.
+set +e
+test 1 -eq 1 -a 2 -eq 2 -o 3 -eq 4
+rc1=$?
+test \( 1 -eq 1 -a 2 -eq 2 \) -o 3 -eq 4
+rc2=$?
+set -e
+echo "JM:BCOMPAT_52_001:rc1=$rc1 rc2=$rc2"
