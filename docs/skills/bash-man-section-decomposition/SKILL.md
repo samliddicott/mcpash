@@ -49,11 +49,24 @@ This skill is for **spec decomposition first**. Runtime implementation is separa
    - after each non-trivial test result or regression, compare observed behavior to the design note
    - if implementation pressure reveals missing state/event modeling, update the design note first, then code
    - keep a short "design deltas from evidence" log in the design note so test-driven changes remain explicit
+11. Separate semantic requirements from transport/mechanism details:
+   - define a strict lane for core behavior semantics (the user-visible contract)
+   - keep mechanism-sensitive probes (e.g., PTY control-character translation) as informational until deterministic
+   - do not let mechanism flakiness block semantic closure
+12. Convert fuzzy behavior into explicit invariants before coding:
+   - state ownership invariants (who owns tty/fg pgid and when)
+   - ordering invariants (handoff -> wait -> restore)
+   - failure invariants (shell survives, prompt returns, next command executes)
+13. Add observability hooks for difficult interactive paths:
+   - minimal debug markers or harness observability to validate invariants
+   - prefer deterministic signal-equivalent tests for strict gating
+   - retain literal keypath probes as non-gating diagnostics where environment variance is known
 
 ## Evidence Rules
 - `covered` only if comparator-backed behavior case exists and passes.
 - `partial` if behavior is not fully asserted, ambiguous, or only surface-tested.
 - Planned tests may be listed in `tests` column as future case IDs, but status stays `partial`.
+- A row can be `covered` when strict semantic evidence is green, even if an informational mechanism probe is still variant-dependent.
 
 ## Recommended Commands
 ```bash
@@ -82,6 +95,9 @@ PY
 - [ ] Notes mention comparator basis and remaining uncertainty.
 - [ ] Design note has been re-reviewed after initial implementation/test runs.
 - [ ] Any architecture-level behavior changes discovered during testing are reflected in the design note before further coding.
+- [ ] Strict tests gate semantics, not harness artifacts.
+- [ ] Informational probes are explicitly labeled and justified.
+- [ ] Runtime invariants for interactive/signal/tty flows are documented and testable.
 
 ## Implementation Hand-off Template
 After decomposition, produce an implementation plan in this order:
