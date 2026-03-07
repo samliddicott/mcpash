@@ -45,6 +45,10 @@ This skill is for **spec decomposition first**. Runtime implementation is separa
      - invariants/preconditions
      - comparator test case(s)
    - explicitly call out rows blocked on architecture changes
+10. Re-review the design model during implementation:
+   - after each non-trivial test result or regression, compare observed behavior to the design note
+   - if implementation pressure reveals missing state/event modeling, update the design note first, then code
+   - keep a short "design deltas from evidence" log in the design note so test-driven changes remain explicit
 
 ## Evidence Rules
 - `covered` only if comparator-backed behavior case exists and passes.
@@ -76,13 +80,15 @@ PY
 - [ ] Matrix `tests` column contains concrete case IDs.
 - [ ] Status values are conservative and evidence-based.
 - [ ] Notes mention comparator basis and remaining uncertainty.
+- [ ] Design note has been re-reviewed after initial implementation/test runs.
+- [ ] Any architecture-level behavior changes discovered during testing are reflected in the design note before further coding.
 
 ## Implementation Hand-off Template
 After decomposition, produce an implementation plan in this order:
 1. Add/update design model mapping each row to runtime semantics.
 2. Add missing comparator tests for the new rows.
-3. Reclassify row statuses from evidence.
-4. Implement runtime semantics row-by-row (by subsystem slices).
+3. Implement runtime semantics row-by-row (by subsystem slices), re-checking the design after each slice.
+4. Reclassify row statuses from evidence.
 5. Re-run matrix gates and close rows.
 
 ## Notes
