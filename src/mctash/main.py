@@ -57,8 +57,11 @@ def _apply_invocation_mode(mode: str, startup_changes: Dict[str, bool]) -> None:
     # Keep active mode explicit for runtime diagnostics/policy routing.
     os.environ["MCTASH_MODE"] = mode
     if mode == "posix":
+        # bash --posix exports POSIXLY_CORRECT=y.
+        os.environ["POSIXLY_CORRECT"] = "y"
         startup_changes["posix"] = True
         return
+    os.environ.pop("POSIXLY_CORRECT", None)
     startup_changes["posix"] = False
     if not os.environ.get("BASH_COMPAT"):
         os.environ["BASH_COMPAT"] = DEFAULT_BASH_COMPAT
