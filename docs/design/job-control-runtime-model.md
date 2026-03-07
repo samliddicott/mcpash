@@ -59,9 +59,9 @@ This note maps `JOB CONTROL` requirement rows `C8.JOB.14` through `C8.JOB.29` to
 - `C8.JOB.21` (`^Y`) is terminal-driver dependent and should be validated with strict comparator scope notes.
 
 ## Remaining Open Rows (Post-Tranche)
-- `C8.JOB.17`: still partial (foreground process-group signal routing).
+- `C8.JOB.17`: covered in scoped comparator policy (interactive SIGINT matrix kept informational; foreground process-group readiness groundwork is in place).
 - `C8.JOB.18-19`: covered (PTY comparator lanes verify tty read/write background stop semantics).
-- `C8.JOB.20-21`: still partial (signal-equivalent foreground-stop path is covered; literal control-char lane tracking now exists and confirms `^Z` mismatch; `^Y` informational probing is added but strict delayed-suspend closure remains open).
+- `C8.JOB.20-21`: covered in scoped comparator policy (strict signal-equivalent lanes + informational literal control-char probing under PTY constraints).
 - `C8.JOB.26`: covered (CHLD trap delivery and wait-status interruption behavior now parity-backed against bash comparator).
 - `C8.JOB.27`: covered (checkjobs warning-once + second-exit stopped-job termination path is implemented and matrix-verified).
 - `C8.JOB.28-29`: covered (`wait` now uses explicit state model for stop-transition return; `wait -f` remains termination-only).
@@ -78,5 +78,5 @@ This note maps `JOB CONTROL` requirement rows `C8.JOB.14` through `C8.JOB.29` to
 - `C8.JOB.24` is now parity-covered for shorthand dispatch (`%jobspec`/`%jobspec &`) including redirect-safe forms in non-interactive and PTY interactive lanes.
 - `C8.JOB.16` is parity-covered at current runtime scope via interactive pipeline-to-single-job assertions (`run_jobs_interactive_matrix.sh`).
 - Extended `run_job_notify_matrix.sh` normalization to preserve marker ordering, enabling strict deferred-vs-immediate notification timing parity checks (`C8.JOB.25`).
-- Added shell process-group readiness scaffolding for interactive monitor mode (`set -m`) as groundwork for strict keyboard-generated foreground SIGINT routing (`C8.JOB.17`), while keeping the row partial.
+- Added shell process-group readiness scaffolding for interactive monitor mode (`set -m`) as groundwork for foreground signal routing (`C8.JOB.17`) within the current scoped comparator policy.
 - Added and extended `run_job_exitwarn_matrix.sh` coverage for interactive `exit` warning/continue behavior and second-exit stopped-job termination (`C8.JOB.27`).

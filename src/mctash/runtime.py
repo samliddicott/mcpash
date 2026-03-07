@@ -5887,12 +5887,11 @@ class Runtime:
                         pass
                 try:
                     job_id = getattr(self._thread_ctx, "job_id", None)
-                    if self.options.get("m", False):
+                    if self.options.get("i", False):
                         self._ensure_job_control_ready()
                     interactive_fg = bool(
                         not isinstance(job_id, int)
                         and self.options.get("i", False)
-                        and self.options.get("m", False)
                         and self._job_control_ready
                         and os.isatty(0)
                         and hasattr(os, "tcsetpgrp")

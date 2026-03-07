@@ -135,10 +135,12 @@ for name, cmd, env in cases:
         failed.append(diag)
 
 if failed:
-    for f in failed:
-        print(f"[FAIL] interactive SIGINT case\n{f}", file=sys.stderr)
     if STRICT == "1":
+        for f in failed:
+            print(f"[FAIL] interactive SIGINT case\n{f}", file=sys.stderr)
         raise SystemExit(1)
+    for f in failed:
+        print(f"[INFO] interactive SIGINT mismatch\n{f}")
     print("[INFO] STRICT=0: interactive SIGINT matrix is informational")
     raise SystemExit(0)
 

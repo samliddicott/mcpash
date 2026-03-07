@@ -633,6 +633,7 @@ def _expand_history_bang(rt: Runtime, line: str) -> tuple[str | None, str | None
 
 
 def _run_interactive(rt: Runtime) -> int:
+    rt._ensure_job_control_ready()
     _configure_line_editor(rt)
     buffer: List[str] = []
     status = 0
