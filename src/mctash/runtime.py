@@ -2756,14 +2756,23 @@ class Runtime:
             is_special = name in self.SPECIAL_BUILTINS
             if is_special:
                 if self.options.get("posix", False):
+                    saved_env = dict(self.env)
                     self.env = local_env
                     try:
                         with self._redirected_fds(redirects):
-                            return self._run_builtin(name, argv)
+                            status = self._run_builtin(name, argv)
                     except RuntimeError as e:
                         msg = str(e)
                         self._print_stderr(msg)
                         return self._runtime_error_status(msg)
+                    if name == "unset" and assign_names:
+                        for var_name in assign_names:
+                            if var_name not in self.env:
+                                if var_name in saved_env:
+                                    self.env[var_name] = saved_env[var_name]
+                            elif var_name in saved_env and self.env.get(var_name, "") == "":
+                                self.env[var_name] = saved_env[var_name]
+                    return status
                 persist_assigns = self._declaration_assigns_should_persist(argv)
                 saved_env = dict(self.env)
                 try:
@@ -4913,13 +4922,22 @@ class Runtime:
                 is_special = name in self.SPECIAL_BUILTINS
                 if is_special:
                     if self.options.get("posix", False):
+                        saved_env = dict(self.env)
                         self.env = local_env
                         try:
                             with self._redirected_fds(node.redirects):
-                                return self._run_builtin(name, argv)
+                                status = self._run_builtin(name, argv)
                         except RuntimeError as e:
                             print(str(e), file=sys.stderr)
                             return 1
+                        if name == "unset" and assign_names:
+                            for var_name in assign_names:
+                                if var_name not in self.env:
+                                    if var_name in saved_env:
+                                        self.env[var_name] = saved_env[var_name]
+                                elif var_name in saved_env and self.env.get(var_name, "") == "":
+                                    self.env[var_name] = saved_env[var_name]
+                        return status
                     persist_assigns = self._declaration_assigns_should_persist(argv)
                     saved_env = dict(self.env)
                     try:
@@ -9743,7 +9761,7 @@ class Runtime:
                 self._report_error(msg, line=self.current_line, context="unset")
                 # ash-style lane keeps historical special-builtin fatal behavior;
                 # bash-style lane reports status and continues script execution.
-                if self._diag.style != "bash" and not self.options.get("i", False):
+                if self._diag.style != "bash" and not self.options.get("i", False) and not self.options.get("posix", False):
                     raise SystemExit(2)
                 status = 1 if self._diag.style == "bash" else 2
                 continue
@@ -9757,11 +9775,24 @@ class Runtime:
                 typed = self._typed_vars.get(base)
                 attrs = self._var_attrs.get(base, set())
                 if isinstance(typed, dict) and "assoc" in attrs:
+                    if key in {"@", "*"}:
+                        # bash COMPAT <=51: unset A[@] removes the whole assoc
+                        # variable; 5.2+ may target key '@' instead.
+                        if self._bash_compat_level is not None and self._bash_compat_level <= 51:
+                            self._typed_vars.pop(base, None)
+                            self._var_attrs.pop(base, None)
+                            self.env.pop(base, None)
+                            continue
                     akey = self._eval_assoc_subscript_key(key)
                     typed.pop(akey, None)
                     self._set_subscript_projection(base, str(typed.get("0", "")) if typed else "")
                     continue
                 if isinstance(typed, list):
+                    if key in {"@", "*"}:
+                        for i in range(len(typed)):
+                            typed[i] = None
+                        self._set_subscript_projection(base, "")
+                        continue
                     i_key = self._eval_index_subscript(key, typed, strict=True, name=base)
                     if i_key is None:
                         continue

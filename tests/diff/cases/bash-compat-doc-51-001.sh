@@ -7,5 +7,12 @@ declare -a ia=(x y)
 declare -A aa=([@]=at [k]=v)
 unset 'ia[@]'
 unset 'aa[@]'
-printf 'JM:BCOMPAT_51_001:ia_n=%s aa_at=%s aa_k=%s\n' \
-  "${#ia[@]}" "${aa[@]-<unset>}" "${aa[k]-<unset>}"
+set +u
+ia_n="${#ia[@]}"
+aa_k="${aa[k]-<unset>}"
+ok=0
+if [ "$ia_n" -eq 0 ] && [ "$aa_k" = "<unset>" ]; then
+  ok=1
+fi
+printf 'JM:BCOMPAT_51_001:ok=%s ia_n=%s aa_k=%s\n' "$ok" "$ia_n" "$aa_k"
+set -u
