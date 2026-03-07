@@ -1852,6 +1852,13 @@ class Runtime:
             return self._run_subshell_asdl(node.get("child") or {})
         if t == "command.ShFunction":
             name = str(node.get("name") or "")
+            if self.options.get("posix", False) and name in self.SPECIAL_BUILTINS:
+                self._report_error(
+                    f"{name}: is a special builtin",
+                    line=self.current_line,
+                    context="function",
+                )
+                return 2
             body = node.get("body") or {"type": "command.CommandList", "children": []}
             # Canonical function storage for parsed shell code.
             self.functions_asdl[name] = body
@@ -4645,6 +4652,13 @@ class Runtime:
         if isinstance(node, SubshellCommand):
             return self._run_subshell(node.body)
         if isinstance(node, FunctionDef):
+            if self.options.get("posix", False) and node.name in self.SPECIAL_BUILTINS:
+                self._report_error(
+                    f"{node.name}: is a special builtin",
+                    line=self.current_line,
+                    context="function",
+                )
+                return 2
             self.functions[node.name] = node.body
             return 0
         if isinstance(node, ForCommand):
@@ -5904,9 +5918,12 @@ class Runtime:
                 else:
                     resolved = self._resolve_external_path(argv[0], env)
                     if resolved is None:
-                        msg = self._diag_msg(DiagnosticKey.COMMAND_NOT_FOUND, name=argv[0])
-                        self._report_error(msg, line=self.current_line, context=context)
-                        return 127
+                        fallback = self._resolve_external_nonexec_path(argv[0], env)
+                        if fallback is None:
+                            msg = self._diag_msg(DiagnosticKey.COMMAND_NOT_FOUND, name=argv[0])
+                            self._report_error(msg, line=self.current_line, context=context)
+                            return 127
+                        resolved = fallback
                     exec_argv = [resolved] + argv[1:]
                 if argv0_override is not None and exec_argv:
                     exec_argv[0] = argv0_override
@@ -6075,6 +6092,21 @@ class Runtime:
                 continue
             if os.access(candidate, os.X_OK):
                 self._cmd_hash[argv0] = candidate
+                return candidate
+        return None
+
+    def _resolve_external_nonexec_path(self, argv0: str, env: Dict[str, str]) -> str | None:
+        if "/" in argv0:
+            return None
+        path_value = env.get("PATH", os.defpath)
+        for d in path_value.split(os.pathsep):
+            base = d or "."
+            candidate = os.path.join(base, argv0)
+            if os.path.isdir(candidate):
+                continue
+            if not os.path.isfile(candidate):
+                continue
+            if not os.access(candidate, os.X_OK):
                 return candidate
         return None
 

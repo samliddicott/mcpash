@@ -4,7 +4,7 @@ set -euo pipefail
 
 # Item 70: command/type treatment of non-executable PATH entries.
 tmpdir="$(mktemp -d)"
-trap 'rm -rf "$tmpdir"' EXIT
+trap '/bin/rm -rf "$tmpdir"' EXIT
 cat >"$tmpdir/t70" <<'SH'
 echo hi-from-t70
 SH
@@ -15,6 +15,17 @@ cv="$(command -v t70 2>&1)"; rc_cv=$?
 ty="$(type t70 2>&1)"; rc_ty=$?
 out_exec="$(t70 2>&1)"; rc_exec=$?
 set -e
-printf 'JM:070:cv:%s rc=%s\n' "$cv" "$rc_cv"
-printf 'JM:070:type:%s rc=%s\n' "$ty" "$rc_ty"
-printf 'JM:070:exec:%s rc=%s\n' "$out_exec" "$rc_exec"
+cv_found=0
+[ -n "$cv" ] && cv_found=1
+ty_found=0
+case "$ty" in
+  *not\ found*) ty_found=0 ;;
+  *) ty_found=1 ;;
+esac
+perm=0
+case "$out_exec" in
+  *[Pp]ermission\ denied*) perm=1 ;;
+esac
+printf 'JM:070:cv_rc=%s cv_found=%s\n' "$rc_cv" "$cv_found"
+printf 'JM:070:type_rc=%s type_found=%s\n' "$rc_ty" "$ty_found"
+printf 'JM:070:exec_rc=%s perm=%s\n' "$rc_exec" "$perm"
