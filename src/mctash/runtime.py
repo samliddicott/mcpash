@@ -759,6 +759,7 @@ class Runtime:
         self._job_state: Dict[int, str] = {}
         self._job_events: list[tuple[int, str, int | None]] = []
         self._job_event_lock = threading.Lock()
+        self._checkjobs_warned_once = False
         self._last_job_lookup_error: str | None = None
         self._bg_notifications: list[int] = []
         self._bg_notify_emitted: set[int] = set()
@@ -5351,6 +5352,8 @@ class Runtime:
         if name == "exit":
             if self._print_exit_job_warning():
                 return 1
+            self._terminate_active_jobs_for_exit()
+            self._checkjobs_warned_once = False
             if len(argv) > 1:
                 try:
                     code = int(argv[1], 10)
@@ -6141,9 +6144,13 @@ class Runtime:
 
     def _print_exit_job_warning(self) -> bool:
         if not (self.options.get("i", False) and self._shopts.get("checkjobs", False)):
+            self._checkjobs_warned_once = False
             return False
         active = self._active_jobs_for_exit_warning()
         if not active:
+            self._checkjobs_warned_once = False
+            return False
+        if self._checkjobs_warned_once:
             return False
         # bash --posix interactive comparator reports a generic running-jobs
         # warning in our PTY harness, even when jobs were STOP-signaled.
@@ -6157,7 +6164,21 @@ class Runtime:
                 state = "Running"
             suffix = f" {cmd}" if cmd else ""
             self._print_stderr(f"[{jid}] {state}{suffix}")
+        self._checkjobs_warned_once = True
         return True
+
+    def _terminate_active_jobs_for_exit(self) -> None:
+        active = self._active_jobs_for_exit_warning()
+        for jid in active:
+            pid = self._bg_pids.get(jid)
+            if pid is None:
+                continue
+            try:
+                os.kill(pid, signal.SIGTERM)
+                if self._job_state.get(jid) == JOB_STOPPED or jid in self._bg_stopped:
+                    os.kill(pid, signal.SIGCONT)
+            except OSError:
+                continue
 
     def _run_fg(self, args: List[str]) -> int:
         if len(args) > 1:

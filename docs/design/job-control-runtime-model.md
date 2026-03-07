@@ -63,7 +63,7 @@ This note maps `JOB CONTROL` requirement rows `C8.JOB.14` through `C8.JOB.29` to
 - `C8.JOB.18-19`: still partial (TTY stop semantics `SIGTTIN`/`SIGTTOU`).
 - `C8.JOB.20-21`: still partial (suspend control chars and delayed suspend behavior).
 - `C8.JOB.26`: still partial (`trap CHLD` per-child semantics are not yet modeled in threaded runtime).
-- `C8.JOB.27`: still partial (exit warning/second-exit termination flow for stopped jobs).
+- `C8.JOB.27`: covered (checkjobs warning-once + second-exit stopped-job termination path is implemented and matrix-verified).
 - `C8.JOB.28-29`: covered (`wait` now uses explicit state model for stop-transition return; `wait -f` remains termination-only).
 
 ## Progress Notes
@@ -78,4 +78,4 @@ This note maps `JOB CONTROL` requirement rows `C8.JOB.14` through `C8.JOB.29` to
 - `C8.JOB.24` is now parity-covered for shorthand dispatch (`%jobspec`/`%jobspec &`) including redirect-safe forms in non-interactive and PTY interactive lanes.
 - `C8.JOB.16` is parity-covered at current runtime scope via interactive pipeline-to-single-job assertions (`run_jobs_interactive_matrix.sh`).
 - Added `run_job_notify_matrix.sh` coverage for notification emission behavior (`C8.JOB.25`), while keeping precise deferred-vs-immediate timing semantics partial.
-- Added `run_job_exitwarn_matrix.sh` coverage for interactive `exit` warning/continue behavior with active jobs (`C8.JOB.27`), while keeping second-exit termination semantics partial.
+- Added and extended `run_job_exitwarn_matrix.sh` coverage for interactive `exit` warning/continue behavior and second-exit stopped-job termination (`C8.JOB.27`).
