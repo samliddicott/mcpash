@@ -2,8 +2,8 @@
 # DIFF_BASELINE: bash
 set -euo pipefail
 
-# Bash POSIX 6.11.2 core row probe
-# Requirement: BPOSIX.CORE.039
-# Feature: Non-interactive shells exit if there is a syntax error in a script read with the ‘.’ or ‘source’ builtins, or in a string processed by the ‘eval’ builtin.
+# Item 39: syntax error in eval/source fatal in non-interactive shell
+echo JM:039:pre
+eval 'if then'
+echo JM:039:post
 
-echo 'JM:BPOSIX_CORE_039:probe'

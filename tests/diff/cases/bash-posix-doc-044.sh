@@ -2,8 +2,16 @@
 # DIFF_BASELINE: bash
 set -euo pipefail
 
-# Bash POSIX 6.11.2 core row probe
-# Requirement: BPOSIX.CORE.044
-# Feature: Enabling POSIX mode has the effect of setting the ‘shift_verbose’ option, so numeric arguments to ‘shift’ that exceed the number of positional parameters will result in an error message.
+# Item 44: shift_verbose enabled in POSIX mode
+set -- a
+set +e
+shift 2 >/tmp/bp44.err 2>&1
+st=$?
+set -e
+if [[ $st -ne 0 ]] && [[ -s /tmp/bp44.err ]]; then
+  echo JM:044:err
+else
+  echo JM:044:noerr
+fi
+rm -f /tmp/bp44.err
 
-echo 'JM:BPOSIX_CORE_044:probe'

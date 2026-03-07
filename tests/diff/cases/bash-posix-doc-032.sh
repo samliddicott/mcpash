@@ -2,8 +2,8 @@
 # DIFF_BASELINE: bash
 set -euo pipefail
 
-# Bash POSIX 6.11.2 core row probe
-# Requirement: BPOSIX.CORE.032
-# Feature: Non-interactive shells exit if a syntax error in an arithmetic expansion results in an invalid expression.
+# Item 32: arithmetic syntax error in non-interactive shell is fatal
+echo JM:032:pre
+: $((1+))
+echo JM:032:post
 
-echo 'JM:BPOSIX_CORE_032:probe'

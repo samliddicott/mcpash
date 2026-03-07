@@ -2,8 +2,9 @@
 # DIFF_BASELINE: bash
 set -euo pipefail
 
-# Bash POSIX 6.11.2 core row probe
-# Requirement: BPOSIX.CORE.045
-# Feature: Enabling POSIX mode has the effect of setting the ‘interactive_comments’ option (*note Comments::).
+# Item 45: interactive_comments in POSIX mode
+# If interactive_comments enabled, comment ignored and line parses.
+echo JM:045:pre
+# comment here
+echo JM:045:post
 
-echo 'JM:BPOSIX_CORE_045:probe'

@@ -2,8 +2,17 @@
 # DIFF_BASELINE: bash
 set -euo pipefail
 
-# Bash POSIX 6.11.2 core row probe
-# Requirement: BPOSIX.CORE.047
-# Feature: When the ‘alias’ builtin displays alias definitions, it does not display them with a leading ‘alias ’ unless the ‘-p’ option is supplied.
+# Item 47: alias display formatting without -p
+unalias zz47 2>/dev/null || true
+alias zz47='echo z'
+a=$(alias zz47)
+b=$(alias -p zz47)
+case "$a" in
+  alias\ *) echo JM:047:a_alias ;; 
+  *) echo JM:047:a_plain ;;
+esac
+case "$b" in
+  alias\ *) echo JM:047:b_alias ;;
+  *) echo JM:047:b_plain ;;
+esac
 
-echo 'JM:BPOSIX_CORE_047:probe'

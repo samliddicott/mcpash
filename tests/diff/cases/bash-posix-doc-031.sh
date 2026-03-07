@@ -2,8 +2,11 @@
 # DIFF_BASELINE: bash
 set -euo pipefail
 
-# Bash POSIX 6.11.2 core row probe
-# Requirement: BPOSIX.CORE.031
-# Feature: When printing shell function definitions (e.g., by ‘type’), Bash does not print the ‘function’ reserved word unless necessary.
+# Item 31: type function formatting in POSIX mode
+f31(){ :; }
+if type f31 | grep -Eq '^function[[:space:]]+f31'; then
+  echo JM:031:function_kw
+else
+  echo JM:031:no_function_kw
+fi
 
-echo 'JM:BPOSIX_CORE_031:probe'

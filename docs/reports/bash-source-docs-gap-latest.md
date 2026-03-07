@@ -1,6 +1,6 @@
 # Bash Source-Docs Gap Report
 
-Generated: 2026-03-07 17:37:52Z
+Generated: 2026-03-07 20:33:33Z
 
 Sources:
 - https://tiswww.case.edu/php/chet/bash/POSIX
@@ -48,22 +48,22 @@ Sources:
 - `BPOSIX.CORE.029` (bash/POSIX): matrix partial; mapped case execution present
 - `BPOSIX.CORE.030` (bash/POSIX): matrix partial; mapped case execution present
 - `BPOSIX.CORE.031` (bash/POSIX): matrix partial; mapped case execution present
-- `BPOSIX.CORE.032` (bash/POSIX): matrix partial; mapped case execution present
-- `BPOSIX.CORE.033` (bash/POSIX): matrix partial; mapped case execution present
-- `BPOSIX.CORE.034` (bash/POSIX): matrix partial; mapped case execution present
-- `BPOSIX.CORE.035` (bash/POSIX): matrix partial; mapped case execution present
-- `BPOSIX.CORE.036` (bash/POSIX): matrix partial; mapped case execution present
-- `BPOSIX.CORE.037` (bash/POSIX): matrix partial; mapped case execution present
-- `BPOSIX.CORE.038` (bash/POSIX): matrix partial; mapped case execution present
-- `BPOSIX.CORE.039` (bash/POSIX): matrix partial; mapped case execution present
-- `BPOSIX.CORE.040` (bash/POSIX): matrix partial; mapped case execution present
+- `BPOSIX.CORE.032` (bash/POSIX): matrix partial; case mismatch present: bash-posix-doc-032.sh
+- `BPOSIX.CORE.033` (bash/POSIX): matrix partial; case mismatch present: bash-posix-doc-033.sh
+- `BPOSIX.CORE.034` (bash/POSIX): matrix partial; case mismatch present: bash-posix-doc-034.sh
+- `BPOSIX.CORE.035` (bash/POSIX): matrix partial; case mismatch present: bash-posix-doc-035.sh
+- `BPOSIX.CORE.036` (bash/POSIX): matrix partial; case mismatch present: bash-posix-doc-036.sh
+- `BPOSIX.CORE.037` (bash/POSIX): matrix partial; case mismatch present: bash-posix-doc-037.sh
+- `BPOSIX.CORE.038` (bash/POSIX): matrix partial; case mismatch present: bash-posix-doc-038.sh
+- `BPOSIX.CORE.039` (bash/POSIX): matrix partial; case mismatch present: bash-posix-doc-039.sh
+- `BPOSIX.CORE.040` (bash/POSIX): matrix partial; case mismatch present: bash-posix-doc-040.sh
 - `BPOSIX.CORE.041` (bash/POSIX): matrix partial; mapped case execution present
-- `BPOSIX.CORE.042` (bash/POSIX): matrix partial; mapped case execution present
+- `BPOSIX.CORE.042` (bash/POSIX): matrix partial; case mismatch present: bash-posix-doc-042.sh
 - `BPOSIX.CORE.043` (bash/POSIX): matrix partial; mapped case execution present
-- `BPOSIX.CORE.044` (bash/POSIX): matrix partial; mapped case execution present
+- `BPOSIX.CORE.044` (bash/POSIX): matrix partial; case mismatch present: bash-posix-doc-044.sh
 - `BPOSIX.CORE.045` (bash/POSIX): matrix partial; mapped case execution present
-- `BPOSIX.CORE.046` (bash/POSIX): matrix partial; mapped case execution present
-- `BPOSIX.CORE.047` (bash/POSIX): matrix partial; mapped case execution present
+- `BPOSIX.CORE.046` (bash/POSIX): matrix partial; case mismatch present: bash-posix-doc-046.sh
+- `BPOSIX.CORE.047` (bash/POSIX): matrix partial; case mismatch present: bash-posix-doc-047.sh
 - `BPOSIX.CORE.048` (bash/POSIX): matrix partial; mapped case execution present
 - `BPOSIX.CORE.049` (bash/POSIX): matrix partial; mapped case execution present
 - `BPOSIX.CORE.050` (bash/POSIX): matrix partial; mapped case execution present
