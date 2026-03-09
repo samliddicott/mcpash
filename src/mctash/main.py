@@ -441,6 +441,62 @@ def _asdl_simple_command_static_argv(node: object) -> List[str] | None:
     return out if out else None
 
 
+def _asdl_rhs_static_literal(rhs: object) -> str | None:
+    if not isinstance(rhs, dict):
+        return None
+    if rhs.get("type") != "rhs_word.Compound":
+        return None
+    w = rhs.get("word")
+    if not isinstance(w, dict) or w.get("type") != "word.Compound":
+        return None
+    out: List[str] = []
+    for p in (w.get("parts") or []):
+        if not isinstance(p, dict):
+            return None
+        t = str(p.get("type", ""))
+        if t == "word_part.Literal":
+            out.append(str(p.get("tval", "")))
+            continue
+        if t == "word_part.SingleQuoted":
+            out.append(str(p.get("sval", "")))
+            continue
+        if t == "word_part.DoubleQuoted":
+            inner = p.get("parts") or []
+            buf: List[str] = []
+            for q in inner:
+                if not isinstance(q, dict):
+                    return None
+                qt = str(q.get("type", ""))
+                if qt == "word_part.Literal":
+                    buf.append(str(q.get("tval", "")))
+                    continue
+                return None
+            out.append("".join(buf))
+            continue
+        return None
+    return "".join(out)
+
+
+def _asdl_assignment_static_pair(node: object) -> tuple[str, str] | None:
+    if not isinstance(node, dict) or node.get("type") != "command.ShAssignment":
+        return None
+    pairs = node.get("pairs") or []
+    if len(pairs) != 1:
+        return None
+    p = pairs[0]
+    if not isinstance(p, dict):
+        return None
+    if str(p.get("op", "")) != "=":
+        return None
+    name = str(p.get("name", ""))
+    if not name:
+        return None
+    val = _asdl_rhs_static_literal(p.get("rhs"))
+    if val is None:
+        return None
+    return name, val
+
+
 def _collect_static_source_operands(node: object, out: List[str]) -> None:
     if isinstance(node, dict):
         argv = _asdl_simple_command_static_argv(node)
@@ -481,46 +537,73 @@ def _emit_python_module_runtime(module_path: str, source_name: str, mode: str, a
         f.write("\n".join(lines))
 
 
-def _emit_python_module_idiomatic(module_path: str, source_name: str, mode: str, asdl_items: List[dict]) -> None:
-    fallback: dict[str, dict] = {}
+def _emit_python_module_idiomatic(
+    module_path: str,
+    source_name: str,
+    mode: str,
+    asdl_items: List[dict],
+    item_sources: List[str],
+) -> None:
     run_lines: List[str] = [
         "def run(rt):",
         "    import subprocess",
         "    status = 0",
     ]
     for i, item in enumerate(asdl_items):
+        src = item_sources[i] if i < len(item_sources) else ""
+        src_line = " ".join(part.strip() for part in src.splitlines() if part.strip())
+        if src_line:
+            run_lines.append(f"    # shell: {src_line}")
         argv: List[str] | None = None
+        assignment: tuple[str, str] | None = None
+        leaf = item
+        if isinstance(item, dict) and item.get("type") == "command.Sentence":
+            child = item.get("child")
+            if isinstance(child, dict):
+                leaf = child
         if (
-            isinstance(item, dict)
-            and item.get("type") == "command.AndOr"
-            and not (item.get("ops") or [])
-            and len(item.get("children") or []) == 1
+            isinstance(leaf, dict)
+            and leaf.get("type") == "command.AndOr"
+            and not (leaf.get("ops") or [])
+            and len(leaf.get("children") or []) == 1
         ):
-            pl = (item.get("children") or [None])[0]
+            pl = (leaf.get("children") or [None])[0]
+            if isinstance(pl, dict) and pl.get("type") == "command.Pipeline" and not pl.get("negated"):
+                children = pl.get("children") or []
+                if len(children) == 1:
+                    assignment = _asdl_assignment_static_pair(children[0])
+        if (
+            isinstance(leaf, dict)
+            and leaf.get("type") == "command.AndOr"
+            and not (leaf.get("ops") or [])
+            and len(leaf.get("children") or []) == 1
+        ):
+            pl = (leaf.get("children") or [None])[0]
             if isinstance(pl, dict) and pl.get("type") == "command.Pipeline" and not pl.get("negated"):
                 children = pl.get("children") or []
                 if len(children) == 1:
                     argv = _asdl_simple_command_static_argv(children[0])
+        if assignment is not None:
+            name, value = assignment
+            run_lines.append(f"    rt._assign_shell_var({json.dumps(name)}, {json.dumps(value)})")
+            run_lines.append("    status = 0")
+            continue
         if argv:
             run_lines.append(f"    # item {i}: {' '.join(shlex.quote(a) for a in argv)}")
             run_lines.append(f"    argv_{i} = {json.dumps(argv)}")
             run_lines.append(f"    if rt._is_builtin_enabled(argv_{i}[0]) or rt._has_function(argv_{i}[0]):")
-            fallback[str(i)] = item
-            run_lines.append(f"        status = rt._exec_asdl_list_item(FALLBACK_ITEMS[{json.dumps(str(i))}])")
+            run_lines.append(f"        status = rt._eval_source({json.dumps(src)}, parse_context='emit-idiomatic-builtin')")
             run_lines.append("    else:")
             run_lines.append(f"        status = subprocess.run(argv_{i}, env=dict(rt.env), check=False).returncode")
             continue
-        fallback[str(i)] = item
-        run_lines.append(f"    # item {i}: fallback to runtime execution")
-        run_lines.append(f"    status = rt._exec_asdl_list_item(FALLBACK_ITEMS[{json.dumps(str(i))}])")
+        run_lines.append(f"    # item {i}: fallback to shell-eval snippet")
+        run_lines.append(f"    status = rt._eval_source({json.dumps(src)}, parse_context='emit-idiomatic-fallback')")
     run_lines.append("    return status")
     lines: List[str] = [
         "#!/usr/bin/env python3",
         f"# emitted from: {source_name}",
         f"# mode: {mode}",
         "# style: idiomatic",
-        "",
-        "FALLBACK_ITEMS = " + json.dumps(fallback, indent=2, sort_keys=True),
         "",
         *run_lines,
         "",
@@ -567,6 +650,7 @@ def _emit_python_bundle(
         visited.add(vkey)
         parser_impl = Parser(body)
         asdl_items: List[dict] = []
+        item_sources: List[str] = []
         source_literals: List[str] = []
         while True:
             item = parser_impl.parse_next()
@@ -577,6 +661,7 @@ def _emit_python_bundle(
                 return 2
             asdl_item = lst_list_item_to_asdl(parser_impl.last_lst_item, strict=True)
             asdl_items.append(asdl_item)
+            item_sources.append((parser_impl.last_source_text() or "").rstrip("\n"))
             _collect_static_source_operands(asdl_item, source_literals)
 
         index += 1
@@ -586,7 +671,7 @@ def _emit_python_bundle(
         if style == "runtime":
             _emit_python_module_runtime(module_path, display_name, mode, asdl_items)
         else:
-            _emit_python_module_idiomatic(module_path, display_name, mode, asdl_items)
+            _emit_python_module_idiomatic(module_path, display_name, mode, asdl_items, item_sources)
         entry = {
             "source": display_name,
             "module": module_name,
