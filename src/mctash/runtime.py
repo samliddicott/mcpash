@@ -5849,7 +5849,7 @@ class Runtime:
                 return self._fc_fail(DiagnosticKey.FC_NO_HISTORY)
             return 0
         current_is_fc = bool(self._history) and self._history[-1].lstrip().startswith("fc")
-        default_ref = "-2" if current_is_fc else "-1"
+        default_ref = "-2" if current_is_fc and len(self._history) >= 2 else "-1"
 
         def _resolve_ref(tok: str | None) -> int | None:
             idx = self._history_resolve(tok if tok is not None else default_ref)
