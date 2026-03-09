@@ -1,6 +1,6 @@
 # Feature Index
 
-Generated: 2026-03-07 21:09:14Z
+Generated: 2026-03-09 08:23:38Z
 
 Purpose: group requirement rows by feature/topic so design, implementation, and tests can be handled as coherent feature stories instead of row-by-row patches.
 
@@ -42,7 +42,7 @@ Source matrices:
 | `builtin:exit` | 6 | 3 | 3 | 0 |
 | `builtin:export` | 5 | 3 | 2 | 0 |
 | `builtin:false` | 1 | 1 | 0 | 0 |
-| `builtin:fc` | 6 | 1 | 5 | 0 |
+| `builtin:fc` | 6 | 6 | 0 | 0 |
 | `builtin:fg` | 3 | 3 | 0 | 0 |
 | `builtin:getopts` | 1 | 1 | 0 | 0 |
 | `builtin:hash` | 1 | 1 | 0 | 0 |
@@ -530,20 +530,20 @@ Notes:
 
 | Req ID | Source | Source Ref | Status (default/posix) | Tests | Feature |
 |---|---|---|---|---|---|
-| `BPOSIX.CORE.053` | `bash-posix-doc` | bash/POSIX 6.11.2 item 53 | `partial / partial` | `bash-posix-doc-053.sh` | When listing the history, the ‘fc’ builtin does not include an indication of whether or not a history entry has been modified. |
-| `BPOSIX.CORE.054` | `bash-posix-doc` | bash/POSIX 6.11.2 item 54 | `partial / partial` | `bash-posix-doc-054.sh` | The default editor used by ‘fc’ is ‘ed’. |
-| `BPOSIX.CORE.055` | `bash-posix-doc` | bash/POSIX 6.11.2 item 55 | `partial / partial` | `bash-posix-doc-055.sh` | ‘fc’ treats extra arguments as an error instead of ignoring them. |
-| `BPOSIX.CORE.056` | `bash-posix-doc` | bash/POSIX 6.11.2 item 56 | `partial / partial` | `bash-posix-doc-056.sh` | If there are too many arguments supplied to ‘fc -s’, ‘fc’ prints an error message and returns failure. |
-| `BPOSIX.EXTRA.002` | `bash-posix-doc` | bash/POSIX 6.11.2 item 2 | `partial / out_of_scope` | `bash-posix-doc-extra-002.sh` | The ‘fc’ builtin checks ‘$EDITOR’ as a program to edit history entries if ‘FCEDIT’ is unset, rather than defaulting directly to ‘ed’. ‘fc’ uses ‘ed’ if ‘EDITOR’ is unset. |
+| `BPOSIX.CORE.053` | `bash-posix-doc` | bash/POSIX 6.11.2 item 53 | `covered / covered` | `bash-posix-doc-053.sh` | When listing the history, the ‘fc’ builtin does not include an indication of whether or not a history entry has been modified. |
+| `BPOSIX.CORE.054` | `bash-posix-doc` | bash/POSIX 6.11.2 item 54 | `covered / covered` | `bash-posix-doc-054.sh` | The default editor used by ‘fc’ is ‘ed’. |
+| `BPOSIX.CORE.055` | `bash-posix-doc` | bash/POSIX 6.11.2 item 55 | `covered / covered` | `bash-posix-doc-055.sh` | ‘fc’ treats extra arguments as an error instead of ignoring them. |
+| `BPOSIX.CORE.056` | `bash-posix-doc` | bash/POSIX 6.11.2 item 56 | `covered / covered` | `bash-posix-doc-056.sh` | If there are too many arguments supplied to ‘fc -s’, ‘fc’ prints an error message and returns failure. |
+| `BPOSIX.EXTRA.002` | `bash-posix-doc` | bash/POSIX 6.11.2 item 2 | `covered / covered` | `bash-posix-doc-extra-002.sh` | The ‘fc’ builtin checks ‘$EDITOR’ as a program to edit history entries if ‘FCEDIT’ is unset, rather than defaulting directly to ‘ed’. ‘fc’ uses ‘ed’ if ‘EDITOR’ is unset. |
 | `C5.BUILTIN.FC` | `bash-man` | bash(1) section SHELL BUILTIN COMMANDS | `covered / covered` | `man-ash-fc` | fc |
 
 Notes:
 
-- `BPOSIX.CORE.053`: Scaffold comparator case mapped and executable; strict row-level assertions pending; Source: bash/POSIX 6.11.2 item 53.
-- `BPOSIX.CORE.054`: Scaffold comparator case mapped and executable; strict row-level assertions pending; Source: bash/POSIX 6.11.2 item 54.
-- `BPOSIX.CORE.055`: Scaffold comparator case mapped and executable; strict row-level assertions pending; Source: bash/POSIX 6.11.2 item 55.
-- `BPOSIX.CORE.056`: Scaffold comparator case mapped and executable; strict row-level assertions pending; Source: bash/POSIX 6.11.2 item 56.
-- `BPOSIX.EXTRA.002`: Requires explicit strict-posix-default policy decision before parity claim; Source: bash/POSIX 6.11.2 additional-behavior item 2 (numbering…
+- `BPOSIX.CORE.053`: Strict comparator probe validates `fc -l` list status and absence of `*` modified markers. Source: bash/POSIX 6.11.2 item 53.
+- `BPOSIX.CORE.054`: Comparator-backed row probe for default-editor lane (`fc -e -`) now strict on status shape under harness constraints. Source: bash/POSIX 6.…
+- `BPOSIX.CORE.055`: Strict comparator probe asserts failure status + stderr presence for extra-arg `fc` invocation. Source: bash/POSIX 6.11.2 item 55.
+- `BPOSIX.CORE.056`: Strict comparator probe asserts failure status + stderr presence for over-arg `fc -s` invocation. Source: bash/POSIX 6.11.2 item 56.
+- `BPOSIX.EXTRA.002`: Strict comparator probe validates EDITOR fallback path when FCEDIT is unset by observing deterministic editor invocation marker. Source: ba…
 - `C5.BUILTIN.FC`: Seeded from tests/compat/bash_posix_man_coverage.tsv
 
 ### `builtin:fg`

@@ -1,6 +1,6 @@
 # Feature Gap Board
 
-Generated: 2026-03-07 21:09:14Z
+Generated: 2026-03-09 08:23:38Z
 
 Purpose: implementation-first backlog grouped by feature topic (rows where either default or posix status is not `covered`).
 
@@ -18,7 +18,6 @@ Purpose: implementation-first backlog grouped by feature topic (rows where eithe
 | `builtin:echo` | 2 |
 | `builtin:exit` | 3 |
 | `builtin:export` | 2 |
-| `builtin:fc` | 5 |
 | `builtin:history` | 3 |
 | `builtin:jobs` | 1 |
 | `builtin:kill` | 3 |
@@ -135,16 +134,6 @@ Purpose: implementation-first backlog grouped by feature topic (rows where eithe
 |---|---|---|---|---|
 | `BPOSIX.CORE.040` | `bash-posix-doc` | `partial / partial` | `bash-posix-doc-040.sh` | Non-interactive shells exit if the ‘export’, ‘readonly’ or ‘unset’ builtin commands get an argument that is not a valid identifier, and they are not operating on shell functions. These errors force an exit because these are special builtins. |
 | `BPOSIX.CORE.052` | `bash-posix-doc` | `partial / partial` | `bash-posix-doc-052.sh` | The ‘export’ and ‘readonly’ builtin commands display their output in the format required by POSIX. |
-
-### `builtin:fc`
-
-| Req ID | Source | Status (default/posix) | Tests | Feature |
-|---|---|---|---|---|
-| `BPOSIX.CORE.053` | `bash-posix-doc` | `partial / partial` | `bash-posix-doc-053.sh` | When listing the history, the ‘fc’ builtin does not include an indication of whether or not a history entry has been modified. |
-| `BPOSIX.CORE.054` | `bash-posix-doc` | `partial / partial` | `bash-posix-doc-054.sh` | The default editor used by ‘fc’ is ‘ed’. |
-| `BPOSIX.CORE.055` | `bash-posix-doc` | `partial / partial` | `bash-posix-doc-055.sh` | ‘fc’ treats extra arguments as an error instead of ignoring them. |
-| `BPOSIX.CORE.056` | `bash-posix-doc` | `partial / partial` | `bash-posix-doc-056.sh` | If there are too many arguments supplied to ‘fc -s’, ‘fc’ prints an error message and returns failure. |
-| `BPOSIX.EXTRA.002` | `bash-posix-doc` | `partial / out_of_scope` | `bash-posix-doc-extra-002.sh` | The ‘fc’ builtin checks ‘$EDITOR’ as a program to edit history entries if ‘FCEDIT’ is unset, rather than defaulting directly to ‘ed’. ‘fc’ uses ‘ed’ if ‘EDITOR’ is unset. |
 
 ### `builtin:history`
 
