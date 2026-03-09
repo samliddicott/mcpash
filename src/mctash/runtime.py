@@ -872,10 +872,7 @@ class Runtime:
 
     def _bash_feature_enabled(self, feature: str) -> bool:
         # Policy: Bash-compat features are enabled only when BASH_COMPAT is set.
-        level = self._bash_compat_level
-        if level is None:
-            level = self._parse_bash_compat_level(self.env.get("BASH_COMPAT", ""))
-            self._bash_compat_level = level
+        level = self._compat_level()
         if level is None:
             return False
         if feature == "declare_array":
@@ -885,6 +882,33 @@ class Runtime:
         if feature == "bridge_collections":
             return True
         return False
+
+    def _compat_level(self) -> int | None:
+        level = self._bash_compat_level
+        if level is None:
+            level = self._parse_bash_compat_level(self.env.get("BASH_COMPAT", ""))
+            self._bash_compat_level = level
+        return level
+
+    def _compat_enabled(self) -> bool:
+        return self._compat_level() is not None
+
+    def _compat_at_most(self, level: int) -> bool:
+        cur = self._compat_level()
+        return cur is not None and cur <= level
+
+    def _is_noninteractive(self) -> bool:
+        return not bool(self.options.get("i", False))
+
+    def _special_builtin_fatal_status(self, cmd_name: str, status: int) -> int:
+        # Centralized policy helper for special builtins in non-interactive
+        # shells; this currently reflects existing behavior and can be extended
+        # as POSIX 2.8/2.9 closure work proceeds.
+        if status == 0:
+            return status
+        if cmd_name in self.SPECIAL_BUILTINS and self._is_noninteractive():
+            return status
+        return status
 
     def _get_subshell_depth(self) -> int:
         return int(getattr(self._thread_ctx, "subshell_depth", 0))
@@ -1288,7 +1312,11 @@ class Runtime:
         if not action:
             return status
         try:
-            self._run_trap_action(action, status)
+            # Preserve pre-trap shell status by default; EXIT trap commands
+            # should not turn into fatal `set -e` exits unless they explicitly
+            # execute `exit`.
+            with self._suppress_errexit():
+                self._run_trap_action(action, status)
             return status
         except SystemExit as e:
             return int(e.code) if e.code is not None else 0
@@ -6148,33 +6176,75 @@ class Runtime:
         cached = self._cmd_hash.get(argv0)
         if cached and os.path.isfile(cached) and os.access(cached, os.X_OK):
             return cached
-        path_value = env.get("PATH", os.defpath)
-        for d in path_value.split(os.pathsep):
-            base = d or "."
-            candidate = os.path.join(base, argv0)
-            if os.path.isdir(candidate):
-                continue
-            if not os.path.isfile(candidate):
-                continue
-            if os.access(candidate, os.X_OK):
-                self._cmd_hash[argv0] = candidate
-                return candidate
+        file_hit = self._classify_command_name(
+            argv0,
+            env=env,
+            include_alias=False,
+            include_function=False,
+            include_builtin=False,
+            include_nonexec=False,
+        )
+        if file_hit and file_hit[0][0] == "file":
+            path = file_hit[0][1]
+            self._cmd_hash[argv0] = path
+            return path
         return None
 
     def _resolve_external_nonexec_path(self, argv0: str, env: Dict[str, str]) -> str | None:
         if "/" in argv0:
             return None
-        path_value = env.get("PATH", os.defpath)
+        hits = self._classify_command_name(
+            argv0,
+            env=env,
+            include_alias=False,
+            include_function=False,
+            include_builtin=False,
+            include_nonexec=True,
+        )
+        for kind, path in hits:
+            if kind == "file_nonexec":
+                return path
+        return None
+
+    def _iter_path_candidates(self, name: str, path_value: str) -> Iterator[str]:
         for d in path_value.split(os.pathsep):
             base = d or "."
-            candidate = os.path.join(base, argv0)
+            candidate = os.path.join(base, name)
             if os.path.isdir(candidate):
                 continue
             if not os.path.isfile(candidate):
                 continue
-            if not os.access(candidate, os.X_OK):
-                return candidate
-        return None
+            yield candidate
+
+    def _classify_command_name(
+        self,
+        name: str,
+        *,
+        env: Dict[str, str] | None = None,
+        path_override: str | None = None,
+        include_alias: bool = True,
+        include_function: bool = True,
+        include_builtin: bool = True,
+        include_nonexec: bool = False,
+    ) -> list[tuple[str, str]]:
+        hits: list[tuple[str, str]] = []
+        if include_alias and name in self.aliases:
+            hits.append(("alias", self.aliases[name]))
+        if include_function and self._has_function(name):
+            hits.append(("function", ""))
+        if include_builtin and self._is_builtin_enabled(name):
+            hits.append(("builtin", ""))
+
+        lookup_env = env if env is not None else self.env
+        path_value = path_override if path_override is not None else lookup_env.get("PATH", os.defpath)
+        for candidate in self._iter_path_candidates(name, path_value):
+            if os.access(candidate, os.X_OK):
+                hits.append(("file", candidate))
+                break
+            if include_nonexec:
+                hits.append(("file_nonexec", candidate))
+                break
+        return hits
 
     def _run_hash(self, args: List[str]) -> int:
         verbose = False
@@ -6203,11 +6273,18 @@ class Runtime:
             return 0
         status = 0
         for name in names:
-            path = self._resolve_external_path(name, self.env)
-            if path is None:
+            hits = self._classify_command_name(
+                name,
+                include_alias=False,
+                include_function=False,
+                include_builtin=False,
+            )
+            if not hits or hits[0][0] != "file":
                 self._report_error(self._diag_msg(DiagnosticKey.HASH_NOT_FOUND, name=name), line=self.current_line)
                 status = 1
                 continue
+            path = hits[0][1]
+            self._cmd_hash[name] = path
             if verbose:
                 print(f"{name}={path}", flush=True)
         return status
@@ -9859,7 +9936,7 @@ class Runtime:
                 self._report_error(msg, line=self.current_line, context="unset")
                 # ash-style lane keeps historical special-builtin fatal behavior;
                 # bash-style lane reports status and continues script execution.
-                if self._diag.style != "bash" and not self.options.get("i", False) and not self.options.get("posix", False):
+                if self._diag.style != "bash" and self._is_noninteractive() and not self.options.get("posix", False):
                     raise SystemExit(2)
                 status = 1 if self._diag.style == "bash" else 2
                 continue
@@ -9876,7 +9953,7 @@ class Runtime:
                     if key in {"@", "*"}:
                         # bash COMPAT <=51: unset A[@] removes the whole assoc
                         # variable; 5.2+ may target key '@' instead.
-                        if self._bash_compat_level is not None and self._bash_compat_level <= 51:
+                        if self._compat_at_most(51):
                             self._typed_vars.pop(base, None)
                             self._var_attrs.pop(base, None)
                             self.env.pop(base, None)
@@ -11109,7 +11186,7 @@ class Runtime:
                 i += 1
                 continue
             if a == "-a" or a.startswith("-a"):
-                if self._bash_compat_level is None:
+                if not self._compat_enabled():
                     self._report_error(self._diag_msg(DiagnosticKey.READ_ILLEGAL_OPTION, opt="-a"))
                     return 2
                 if a == "-a":
@@ -11134,7 +11211,7 @@ class Runtime:
                     i += 1
                 continue
             if a == "-n" or a.startswith("-n"):
-                if self._bash_compat_level is None:
+                if not self._compat_enabled():
                     self._report_error(self._diag_msg(DiagnosticKey.READ_ILLEGAL_OPTION, opt="-n"))
                     return 2
                 val = None
@@ -11155,7 +11232,7 @@ class Runtime:
                 exact_chars = False
                 continue
             if a == "-N" or a.startswith("-N"):
-                if self._bash_compat_level is None:
+                if not self._compat_enabled():
                     self._report_error(self._diag_msg(DiagnosticKey.READ_ILLEGAL_OPTION, opt="-N"))
                     return 2
                 val = None
@@ -11176,7 +11253,7 @@ class Runtime:
                 exact_chars = True
                 continue
             if a == "-d" or a.startswith("-d"):
-                if self._bash_compat_level is None:
+                if not self._compat_enabled():
                     self._report_error(self._diag_msg(DiagnosticKey.READ_ILLEGAL_OPTION, opt="-d"))
                     return 2
                 val = None
@@ -11192,7 +11269,7 @@ class Runtime:
                 delimiter = "\0" if val == "" else val[0]
                 continue
             if a == "-t" or a.startswith("-t"):
-                if self._bash_compat_level is None:
+                if not self._compat_enabled():
                     self._report_error(self._diag_msg(DiagnosticKey.READ_ILLEGAL_OPTION, opt="-t"))
                     return 2
                 val = None
@@ -11214,7 +11291,7 @@ class Runtime:
                     timeout_sec = 0.0
                 continue
             if a == "-u" or a.startswith("-u"):
-                if self._bash_compat_level is None:
+                if not self._compat_enabled():
                     self._report_error(self._diag_msg(DiagnosticKey.READ_ILLEGAL_OPTION, opt="-u"))
                     return 2
                 val = None
@@ -11237,20 +11314,20 @@ class Runtime:
                     return 2
                 continue
             if a == "-s":
-                if self._bash_compat_level is None:
+                if not self._compat_enabled():
                     self._report_error(self._diag_msg(DiagnosticKey.READ_ILLEGAL_OPTION, opt="-s"))
                     return 2
                 i += 1
                 continue
             if a == "-e":
-                if self._bash_compat_level is None:
+                if not self._compat_enabled():
                     self._report_error(self._diag_msg(DiagnosticKey.READ_ILLEGAL_OPTION, opt="-e"))
                     return 2
                 edit_mode = True
                 i += 1
                 continue
             if a == "-i" or a.startswith("-i"):
-                if self._bash_compat_level is None:
+                if not self._compat_enabled():
                     self._report_error(self._diag_msg(DiagnosticKey.READ_ILLEGAL_OPTION, opt="-i"))
                     return 2
                 if a == "-i":
@@ -12165,30 +12242,38 @@ class Runtime:
                 if i + 1 >= len(args):
                     return 1
                 name = args[i + 1]
+                hits = self._classify_command_name(
+                    name,
+                    path_override=lookup_path,
+                    include_nonexec=not self.options.get("posix", False),
+                )
                 if args[i] == "-v":
-                    if self._has_function(name):
+                    if not hits:
+                        return 1
+                    kind, data = hits[0]
+                    if kind in {"alias", "function", "builtin"}:
                         print(name)
-                        return 0
-                    if self._is_builtin_enabled(name):
-                        print(name)
-                        return 0
-                    path = self._find_in_path(name, lookup_path)
-                    if path:
-                        print(path)
-                        return 0
+                    elif kind in {"file", "file_nonexec"}:
+                        print(data)
+                    else:
+                        return 1
+                    return 0
+                if not hits:
+                    print(self._diag_msg(DiagnosticKey.COMMAND_NOT_FOUND, name=name), file=sys.stderr)
                     return 1
-                if self._has_function(name):
+                kind, data = hits[0]
+                if kind == "alias":
+                    print(f"{name} is an alias for {data}")
+                elif kind == "function":
                     print(f"{name} is a function")
-                    return 0
-                if self._is_builtin_enabled(name):
+                elif kind == "builtin":
                     print(f"{name} is a shell builtin")
-                    return 0
-                path = self._find_in_path(name, lookup_path)
-                if path:
-                    print(f"{name} is {path}")
-                    return 0
-                print(self._diag_msg(DiagnosticKey.COMMAND_NOT_FOUND, name=name), file=sys.stderr)
-                return 1
+                elif kind in {"file", "file_nonexec"}:
+                    print(f"{name} is {data}")
+                else:
+                    print(self._diag_msg(DiagnosticKey.COMMAND_NOT_FOUND, name=name), file=sys.stderr)
+                    return 1
+                return 0
             break
         cmd = args[i:]
         if not cmd:
@@ -12298,22 +12383,26 @@ class Runtime:
                 return 127
             status = 0
             for name in args:
-                if name in self.aliases:
-                    print(f"{name} is an alias for {self.aliases[name]}", flush=True)
-                elif self._has_function(name):
+                hits = self._classify_command_name(name, include_nonexec=False)
+                if not hits:
+                    self._report_error(self._diag_msg(DiagnosticKey.TYPE_NOT_FOUND, name=name), line=self.current_line)
+                    status = 1
+                    continue
+                kind, data = hits[0]
+                if kind == "alias":
+                    print(f"{name} is an alias for {data}", flush=True)
+                elif kind == "function":
                     print(f"{name} is a function", flush=True)
                     body = self.functions_asdl.get(name)
                     if isinstance(body, dict):
                         print(self._format_asdl_function(name, body), flush=True)
-                elif self._is_builtin_enabled(name):
+                elif kind == "builtin":
                     print(f"{name} is a shell builtin", flush=True)
+                elif kind == "file":
+                    print(f"{name} is {data}", flush=True)
                 else:
-                    path = self._find_in_path(name)
-                    if path:
-                        print(f"{name} is {path}", flush=True)
-                    else:
-                        self._report_error(self._diag_msg(DiagnosticKey.TYPE_NOT_FOUND, name=name), line=self.current_line)
-                        status = 1
+                    self._report_error(self._diag_msg(DiagnosticKey.TYPE_NOT_FOUND, name=name), line=self.current_line)
+                    status = 1
             return status
         mode_t = False
         mode_a = False
@@ -12339,16 +12428,7 @@ class Runtime:
             return 1
         status = 0
         for name in args:
-            hits: list[tuple[str, str]] = []
-            if name in self.aliases:
-                hits.append(("alias", self.aliases[name]))
-            if self._has_function(name):
-                hits.append(("function", ""))
-            if self._is_builtin_enabled(name):
-                hits.append(("builtin", ""))
-            path = self._find_in_path(name)
-            if path:
-                hits.append(("file", path))
+            hits = self._classify_command_name(name, include_nonexec=False)
             if not hits:
                 self._report_error(self._diag_msg(DiagnosticKey.TYPE_NOT_FOUND, name=name), line=self.current_line)
                 status = 1
@@ -12637,11 +12717,16 @@ class Runtime:
             return 1
 
     def _find_in_path(self, name: str, path_override: str | None = None) -> str:
-        path = path_override if path_override is not None else self.env.get("PATH", os.defpath)
-        for d in path.split(os.pathsep):
-            candidate = os.path.join(d, name)
-            if os.path.isfile(candidate) and os.access(candidate, os.X_OK):
-                return candidate
+        hits = self._classify_command_name(
+            name,
+            path_override=path_override,
+            include_alias=False,
+            include_function=False,
+            include_builtin=False,
+            include_nonexec=False,
+        )
+        if hits and hits[0][0] == "file":
+            return hits[0][1]
         return ""
 
     def _run_test(self, name: str, args: List[str]) -> int:

@@ -83,3 +83,10 @@ When clusters 1-5 have model review + implementation pass complete:
 1. Re-run matrix gates.
 2. Convert remaining scaffold rows to strict row assertions.
 3. Continue gap closure in test/matrix mode.
+
+## Status
+
+Model/design phase complete on 2026-03-09:
+
+- Pass 1: `docs/design/posix-compat-model-review-pass-1.md`
+- Pass 2: `docs/design/posix-compat-model-review-pass-2.md`
