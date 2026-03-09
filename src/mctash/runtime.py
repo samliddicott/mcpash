@@ -10648,6 +10648,9 @@ class Runtime:
             if print_mode:
                 val = self._shopts[name]
                 print(f"shopt {'-s' if val else '-u'} {name}")
+                if not set_mode and not unset_mode and not query_mode and not val:
+                    # bash: `shopt -p opt` returns non-zero when option is off.
+                    status = 1
             if query_mode and not self._shopts[name]:
                 status = 1
         return status
@@ -12465,6 +12468,14 @@ class Runtime:
 
     def _run_bind(self, args: List[str]) -> int:
         readline_funcs = ["abort", "accept-line", "alias-expand-line", "self-insert"]
+        key_to_func = {
+            "\\C-g": "abort",
+            "\\C-j": "accept-line",
+            "\\C-m": "accept-line",
+            " ": "self-insert",
+        }
+        selected: list[str] = []
+        mode: str | None = None
         i = 0
         while i < len(args):
             a = args[i]
@@ -12472,6 +12483,10 @@ class Runtime:
                 for f in readline_funcs:
                     print(f)
                 return 0
+            if a in {"-p", "-P"}:
+                mode = a
+                i += 1
+                continue
             if a == "-q":
                 if i + 1 >= len(args):
                     self._report_error(self._diag_msg(DiagnosticKey.OPTION_REQUIRES_ARG, cmd="bind", opt="q"))
@@ -12486,7 +12501,25 @@ class Runtime:
                 # Accept a small non-interactive subset.
                 self._report_error(self._diag_msg(DiagnosticKey.INVALID_OPTION, cmd="bind", opt=a))
                 return 2
-            i += 1
+            selected.extend(args[i:])
+            break
+        if mode in {"-p", "-P"}:
+            funcs = selected if selected else readline_funcs
+            valid = [f for f in funcs if f in readline_funcs]
+            if mode == "-p":
+                emitted = False
+                for key, fn in key_to_func.items():
+                    if fn in valid:
+                        print(f'"{key}": {fn}')
+                        emitted = True
+                return 0 if emitted else 1
+            for fn in valid:
+                keys = [k for k, v in key_to_func.items() if v == fn]
+                if keys:
+                    print(f"{fn} can be found on " + ", ".join(f'"{k}"' for k in keys) + ".")
+                else:
+                    print(f"{fn} is not bound to any keys")
+            return 0 if valid else 1
         return 0
 
     def _fd_ready_now(self, fd: int) -> bool:
