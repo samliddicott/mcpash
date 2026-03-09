@@ -1,6 +1,6 @@
 # Feature Gap Board
 
-Generated: 2026-03-09 12:04:16Z
+Generated: 2026-03-09 12:33:38Z
 
 Purpose: implementation-first backlog grouped by feature topic (rows where either default or posix status is not `covered`).
 
@@ -21,7 +21,6 @@ Purpose: implementation-first backlog grouped by feature topic (rows where eithe
 | `runtime:job-control` | 2 |
 | `subcategory:compat-delta` | 3 |
 | `subcategory:expansion-redir` | 1 |
-| `subcategory:misc-posix-mode` | 1 |
 | `syntax:arithmetic` | 2 |
 | `syntax:command-substitution` | 1 |
 | `syntax:parameter-expansion` | 2 |
@@ -121,12 +120,6 @@ Purpose: implementation-first backlog grouped by feature topic (rows where eithe
 | Req ID | Source | Status (default/posix) | Tests | Feature |
 |---|---|---|---|---|
 | `BPOSIX.EXTRA.001` | `bash-posix-doc` | `partial / out_of_scope` | `bash-posix-doc-extra-001.sh` | POSIX requires that word splitting be byte-oriented. That is, each _byte_ in the value of ‘IFS’ potentially splits a word, even if that byte is part of a multibyte character in ‘IFS’ or part of multibyte character in the word. Bash allows multibyte characters in the value of ‘IFS’, treating a valid multibyte character as a single delimiter, and will not split a valid multibyte character even if one of the bytes composing that character appears in ‘IFS’. This is POSIX interpretation 1560, further modified by issue 1924. |
-
-### `subcategory:misc-posix-mode`
-
-| Req ID | Source | Status (default/posix) | Tests | Feature |
-|---|---|---|---|---|
-| `BPOSIX.CORE.019` | `bash-posix-doc` | `partial / partial` | `bash-posix-doc-019.sh` | Even if a shell function whose name contains a slash was defined before entering POSIX mode, the shell will not execute a function whose name contains one or more slashes. |
 
 ### `syntax:arithmetic`
 

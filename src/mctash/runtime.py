@@ -9538,6 +9538,13 @@ class Runtime:
 
     def _run_eval(self, args: List[str]) -> int:
         source = " ".join(args)
+        if self.options.get("posix", False):
+            bad_name = self._find_invalid_posix_function_name(source)
+            if bad_name is not None:
+                self._report_error("syntax error: invalid function name", line=self.current_line, context="eval")
+                if self._is_noninteractive():
+                    raise SystemExit(2)
+                return 2
         line_offset = ((self.current_line or 1) - 1) if self.current_line is not None else 1
         status = self._eval_source(
             source,
@@ -9549,6 +9556,14 @@ class Runtime:
         if self._last_eval_hard_error and not self.options.get("i", False):
             raise SystemExit(status if status != 0 else 2)
         return status
+
+    def _find_invalid_posix_function_name(self, source: str) -> str | None:
+        # POSIX lane: reject invalid function names in `name() { ... }` forms.
+        for m in re.finditer(r"(^|[;\n])\s*([^\s(){};]+)\s*\(\s*\)\s*\{", source):
+            name = m.group(2)
+            if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", name):
+                return name
+        return None
 
     def _run_declare(self, args: List[str], cmd_name: str = "declare", local_scope: bool = False) -> int:
         if local_scope and not self.local_stack:

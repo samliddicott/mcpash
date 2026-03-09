@@ -1,6 +1,6 @@
 # Feature Index
 
-Generated: 2026-03-09 12:04:16Z
+Generated: 2026-03-09 12:33:38Z
 
 Purpose: group requirement rows by feature/topic so design, implementation, and tests can be handled as coherent feature stories instead of row-by-row patches.
 
@@ -94,7 +94,7 @@ Source matrices:
 | `subcategory:invocation.set-short-option` | 19 | 19 | 0 | 0 |
 | `subcategory:invocation.short-option` | 12 | 12 | 0 | 0 |
 | `subcategory:invocation.startup-files` | 2 | 2 | 0 | 0 |
-| `subcategory:misc-posix-mode` | 1 | 0 | 1 | 0 |
+| `subcategory:misc-posix-mode` | 1 | 1 | 0 | 0 |
 | `subcategory:mode-framework` | 3 | 3 | 0 | 0 |
 | `subcategory:parse-grammar` | 2 | 2 | 0 | 0 |
 | `subcategory:redirection` | 9 | 9 | 0 | 0 |
@@ -1396,11 +1396,11 @@ Notes:
 
 | Req ID | Source | Source Ref | Status (default/posix) | Tests | Feature |
 |---|---|---|---|---|---|
-| `BPOSIX.CORE.019` | `bash-posix-doc` | bash/POSIX 6.11.2 item 19 | `partial / partial` | `bash-posix-doc-019.sh` | Even if a shell function whose name contains a slash was defined before entering POSIX mode, the shell will not execute a function whose name contains one or more slashes. |
+| `BPOSIX.CORE.019` | `bash-posix-doc` | bash/POSIX 6.11.2 item 19 | `covered / covered` | `bash-posix-doc-019.sh` | Even if a shell function whose name contains a slash was defined before entering POSIX mode, the shell will not execute a function whose name contains one or more slashes. |
 
 Notes:
 
-- `BPOSIX.CORE.019`: Scaffold comparator case mapped and executable; strict row-level assertions pending; Source: bash/POSIX 6.11.2 item 19.
+- `BPOSIX.CORE.019`: Comparator case now closes row 19 with POSIX eval/function-name behavior parity in non-interactive lane.
 
 ### `subcategory:mode-framework`
 
