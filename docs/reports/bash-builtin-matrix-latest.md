@@ -1,12 +1,12 @@
 # Bash Builtin Matrix
 
-Generated: 2026-03-09 08:44:18Z
+Generated: 2026-03-09 09:00:14Z
 
 ## Summary
 
 - core lane rc: 0
 - bash-compat lane rc: 0
-- interactive lane rc: 0 (STRICT=0)
+- interactive lane rc: 0 (STRICT=1)
 - overall rc: 0
 - memory cap (KB): 786432
 - row timeout (s): 120
@@ -23,6 +23,7 @@ Generated: 2026-03-09 08:44:18Z
 - man-ash-fc-editor-env.sh
 - man-ash-fc-empty-history.sh
 - man-ash-fc-e-override.sh
+- man-ash-fc-ref-precedence.sh
 
 ## Bash-Compat Cases
 

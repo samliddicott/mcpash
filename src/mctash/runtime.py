@@ -5858,11 +5858,23 @@ class Runtime:
             return idx
 
         if mode == "list":
-            first_idx = _resolve_ref(rest[0]) if len(rest) >= 1 else max(0, len(self._history) - 15)
-            last_idx = _resolve_ref(rest[1]) if len(rest) >= 2 else _resolve_ref(default_ref)
-            if first_idx is None or last_idx is None:
-                bad_ref = rest[0] if first_idx is None and len(rest) >= 1 else (rest[1] if len(rest) >= 2 else default_ref)
-                return self._fc_fail(DiagnosticKey.FC_EVENT_NOT_FOUND, ref=str(bad_ref))
+            if len(rest) >= 1:
+                first_idx = _resolve_ref(rest[0])
+                # Bash keeps list mode permissive for unresolved refs.
+                if first_idx is None:
+                    return 0
+                if len(rest) >= 2:
+                    last_idx = _resolve_ref(rest[1])
+                    if last_idx is None:
+                        return 0
+                else:
+                    # With one explicit ref, list only that entry.
+                    last_idx = first_idx
+            else:
+                first_idx = max(0, len(self._history) - 15)
+                last_idx = _resolve_ref(default_ref)
+                if last_idx is None:
+                    return 0
             seq = list(range(first_idx, last_idx + 1)) if first_idx <= last_idx else list(range(first_idx, last_idx - 1, -1))
             if reverse:
                 seq = list(reversed(seq))

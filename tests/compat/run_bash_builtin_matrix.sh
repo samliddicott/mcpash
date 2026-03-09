@@ -38,6 +38,7 @@ core_cases=(
   man-ash-fc-editor-env
   man-ash-fc-empty-history
   man-ash-fc-e-override
+  man-ash-fc-ref-precedence
 )
 
 run_lane core "${core_cases[@]}"
@@ -58,8 +59,10 @@ if [[ "$STRICT" == "1" ]]; then
   ic_rc=$?
   timeout -k 5 "$ROW_TIMEOUT" "$ROOT/tests/compat/run_interactive_ux_matrix.sh" >"$LOGDIR/interactive-ux.out" 2>&1
   iu_rc=$?
+  timeout -k 5 "$ROW_TIMEOUT" "$ROOT/tests/compat/run_fc_interactive_matrix.sh" >"$LOGDIR/interactive-fc.out" 2>&1
+  ifc_rc=$?
   interactive_rc=0
-  [[ "$ic_rc" -eq 0 && "$iu_rc" -eq 0 ]] || interactive_rc=1
+  [[ "$ic_rc" -eq 0 && "$iu_rc" -eq 0 && "$ifc_rc" -eq 0 ]] || interactive_rc=1
   set -e
 fi
 echo "$interactive_rc" > "$LOGDIR/interactive.rc"

@@ -186,6 +186,7 @@ C5.BUILTIN.FC	5	builtin.command	builtin	fc	extension	SHELL BUILTIN COMMANDS	Buil
 C5.BUILTIN.FC.ENV	5	builtin.command	builtin	fc editor env propagation	extension	SHELL BUILTIN COMMANDS	Editor subprocess for fc should observe shell runtime env (FCEDIT/EDITOR and exported vars).
 C5.BUILTIN.FC.EMPTY	5	builtin.command	builtin	fc empty-history behavior	extension	SHELL BUILTIN COMMANDS	fc empty-history surfaces should match comparator behavior across list/edit/reexec/substitute forms.
 C5.BUILTIN.FC.EOVERRIDE	5	builtin.command	builtin	fc -e override precedence	extension	SHELL BUILTIN COMMANDS	Explicit `-e editor` takes precedence over FCEDIT and EDITOR fallback.
+C5.BUILTIN.FC.REF	5	builtin.command	builtin	fc reference precedence	extension	SHELL BUILTIN COMMANDS	All-digit refs are event numbers; non-digit refs are prefix lookups.
 C5.BUILTIN.FG	5	builtin.command	builtin	fg	extension	SHELL BUILTIN COMMANDS	Builtin command documented in SHELL BUILTIN COMMANDS.
 C5.BUILTIN.GETOPTS	5	builtin.command	builtin	getopts	present	SHELL BUILTIN COMMANDS	Builtin command documented in SHELL BUILTIN COMMANDS.
 C5.BUILTIN.HASH	5	builtin.command	builtin	hash	present	SHELL BUILTIN COMMANDS	Builtin command documented in SHELL BUILTIN COMMANDS.
@@ -308,6 +309,7 @@ C7.INT.04	7	interactive	interactive	bind builtin keymap/query/assignment	n/a	PRO
 C7.INT.05	7	interactive	interactive	history list/edit/delete/write/read	n/a	PROMPTING + READLINE + HISTORY	Interactive subsystem requirement (PTY/interactive lane).
 C7.INT.06	7	interactive	interactive	history expansion ! forms	n/a	PROMPTING + READLINE + HISTORY	Interactive subsystem requirement (PTY/interactive lane).
 C7.INT.07	7	interactive	interactive	fc editor/list/re-exec flows	n/a	PROMPTING + READLINE + HISTORY	Interactive subsystem requirement (PTY/interactive lane).
+C7.INT.07.FC	7	interactive	interactive	fc interactive editor execution flow	n/a	PROMPTING + READLINE + HISTORY	Interactive fc edit->reexec flow under PTY with deterministic editor transformation.
 C7.INT.08	7	interactive	interactive	programmable completion complete/compgen/compopt	n/a	PROMPTING + READLINE + HISTORY	Interactive subsystem requirement (PTY/interactive lane).
 C7.INT.09	7	interactive	interactive	completion variables COMP_* and COMPREPLY	n/a	PROMPTING + READLINE + HISTORY	Interactive subsystem requirement (PTY/interactive lane).
 C7.INT.10	7	interactive	interactive	interactive comments behavior (interactive_comments)	n/a	PROMPTING + READLINE + HISTORY	Interactive subsystem requirement (PTY/interactive lane).

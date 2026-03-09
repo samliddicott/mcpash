@@ -1,6 +1,6 @@
 # Feature Index
 
-Generated: 2026-03-09 08:44:23Z
+Generated: 2026-03-09 09:00:46Z
 
 Purpose: group requirement rows by feature/topic so design, implementation, and tests can be handled as coherent feature stories instead of row-by-row patches.
 
@@ -42,7 +42,7 @@ Source matrices:
 | `builtin:exit` | 6 | 3 | 3 | 0 |
 | `builtin:export` | 5 | 3 | 2 | 0 |
 | `builtin:false` | 1 | 1 | 0 | 0 |
-| `builtin:fc` | 9 | 9 | 0 | 0 |
+| `builtin:fc` | 11 | 11 | 0 | 0 |
 | `builtin:fg` | 3 | 3 | 0 | 0 |
 | `builtin:getopts` | 1 | 1 | 0 | 0 |
 | `builtin:hash` | 1 | 1 | 0 | 0 |
@@ -539,6 +539,8 @@ Notes:
 | `C5.BUILTIN.FC.EMPTY` | `bash-man` | bash(1) section SHELL BUILTIN COMMANDS | `covered / covered` | `man-ash-fc-empty-history` | fc empty-history behavior |
 | `C5.BUILTIN.FC.ENV` | `bash-man` | bash(1) section SHELL BUILTIN COMMANDS | `covered / covered` | `man-ash-fc-editor-env` | fc editor env propagation |
 | `C5.BUILTIN.FC.EOVERRIDE` | `bash-man` | bash(1) section SHELL BUILTIN COMMANDS | `covered / covered` | `man-ash-fc-e-override` | fc -e override precedence |
+| `C5.BUILTIN.FC.REF` | `bash-man` | bash(1) section SHELL BUILTIN COMMANDS | `covered / covered` | `man-ash-fc-ref-precedence` | fc reference precedence |
+| `C7.INT.07.FC` | `bash-man` | bash(1) section PROMPTING + READLINE + HISTORY | `covered / covered` | `run_fc_interactive_matrix.sh` | fc interactive editor execution flow |
 
 Notes:
 
@@ -550,7 +552,7 @@ Notes:
 - `C5.BUILTIN.FC`: Seeded from tests/compat/bash_posix_man_coverage.tsv
 - `C5.BUILTIN.FC.EMPTY`: Strict comparator case covers empty-history behavior for list/edit/reexec/substitute forms.
 - `C5.BUILTIN.FC.ENV`: Strict comparator case verifies fc editor subprocess observes shell runtime env snapshot.
-- (Plus 1 additional row notes; see `docs/specs/feature-index.tsv`.)
+- (Plus 3 additional row notes; see `docs/specs/feature-index.tsv`.)
 
 ### `builtin:fg`
 

@@ -27,6 +27,7 @@ fc	covered	man-ash-fc	temporary bash comparator policy accepted for fc
 fc	covered	man-ash-fc-editor-env	fc editor subprocess environment parity
 fc	covered	man-ash-fc-empty-history	fc empty-history behavior matrix
 fc	covered	man-ash-fc-e-override	fc explicit -e editor precedence over FCEDIT/EDITOR
+fc	covered	man-ash-fc-ref-precedence	fc numeric-vs-prefix reference precedence
 fg	covered	man-bash-posix-10-jobs-fg-bg-interactive	non-interactive baseline statuses + jobs list probe
 getopts	covered	man-bash-posix-01-core-state	basic option parse loop
 hash	covered	man-bash-posix-02-path-command	reset, insert, miss
