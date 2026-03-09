@@ -2761,7 +2761,7 @@ class Runtime:
                         merged.pop(k, None)
                 self.env = merged
             return status
-        if self._is_builtin_enabled(name):
+        if self._should_dispatch_builtin(argv):
             is_special = name in self.SPECIAL_BUILTINS
             if is_special:
                 if self.options.get("posix", False):
@@ -4934,7 +4934,7 @@ class Runtime:
                             merged.pop(k, None)
                     self.env = merged
                 return status
-            if self._is_builtin_enabled(name):
+            if self._should_dispatch_builtin(argv):
                 is_special = name in self.SPECIAL_BUILTINS
                 if is_special:
                     if self.options.get("posix", False):
@@ -5726,6 +5726,19 @@ class Runtime:
 
     def _is_builtin_enabled(self, name: str) -> bool:
         return name in self.BUILTINS and name not in self.disabled_builtins
+
+    def _should_dispatch_builtin(self, argv: list[str]) -> bool:
+        if not argv:
+            return False
+        name = argv[0]
+        if not self._is_builtin_enabled(name):
+            return False
+        # POSIX item 7: in POSIX mode, `time` is not a reserved word when the
+        # following token begins with '-', so dispatch should prefer utility
+        # command lookup over shell builtin timing behavior.
+        if name == "time" and self.options.get("posix", False) and len(argv) > 1 and argv[1].startswith("-"):
+            return False
+        return True
 
     def _function_names(self) -> list[str]:
         return sorted(set(self.functions.keys()) | set(self.functions_asdl.keys()))

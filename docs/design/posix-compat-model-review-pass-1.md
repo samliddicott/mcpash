@@ -80,6 +80,11 @@ Model requirement:
 - Explicitly define when `time` is a reserved word vs plain command in POSIX mode.
 - Ensure status/diagnostic behavior is mode-consistent.
 
+Applied in this pass:
+
+- Added POSIX-mode dispatch gate so `time` with next token beginning `-` is not dispatched as shell builtin timing and instead follows utility-command lookup path.
+- Focused comparator run for `bash-posix-doc-007` is now green.
+
 ## Cluster D: Fatal Error + Special Builtin Exit Policy
 
 Relevant source rows:
