@@ -133,14 +133,15 @@ for case in "${CASE_FILES[@]}"; do
   fi
 
   if [[ ${ASH_ONLY} -eq 0 ]]; then
-    ash_status=0
+    set +e
     if [[ "${compare_name}" == "bash" && -n "${PARITY_BASH_COMPAT}" ]]; then
-      if ! env BASH_COMPAT="${PARITY_BASH_COMPAT}" "${compare_cmd[@]}" "${CASES_DIR}/${case}" >"${ash_stdout}" 2>"${ash_stderr}"; then
-        ash_status=$?
-      fi
-    elif ! "${compare_cmd[@]}" "${CASES_DIR}/${case}" >"${ash_stdout}" 2>"${ash_stderr}"; then
+      env BASH_COMPAT="${PARITY_BASH_COMPAT}" "${compare_cmd[@]}" "${CASES_DIR}/${case}" >"${ash_stdout}" 2>"${ash_stderr}"
+      ash_status=$?
+    else
+      "${compare_cmd[@]}" "${CASES_DIR}/${case}" >"${ash_stdout}" 2>"${ash_stderr}"
       ash_status=$?
     fi
+    set -e
   fi
 
   if [[ ${MCTASH_ONLY} -eq 0 ]]; then

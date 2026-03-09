@@ -1,6 +1,6 @@
 # Feature Index
 
-Generated: 2026-03-09 09:45:11Z
+Generated: 2026-03-09 10:22:51Z
 
 Purpose: group requirement rows by feature/topic so design, implementation, and tests can be handled as coherent feature stories instead of row-by-row patches.
 
@@ -27,7 +27,7 @@ Source matrices:
 | `builtin:builtin` | 1 | 1 | 0 | 0 |
 | `builtin:caller` | 1 | 1 | 0 | 0 |
 | `builtin:cd` | 3 | 1 | 2 | 0 |
-| `builtin:command` | 34 | 16 | 18 | 0 |
+| `builtin:command` | 34 | 22 | 12 | 0 |
 | `builtin:compgen` | 2 | 2 | 0 | 0 |
 | `builtin:complete` | 1 | 1 | 0 | 0 |
 | `builtin:compopt` | 1 | 1 | 0 | 0 |
@@ -39,8 +39,8 @@ Source matrices:
 | `builtin:enable` | 1 | 1 | 0 | 0 |
 | `builtin:eval` | 1 | 1 | 0 | 0 |
 | `builtin:exec` | 2 | 2 | 0 | 0 |
-| `builtin:exit` | 6 | 3 | 3 | 0 |
-| `builtin:export` | 5 | 3 | 2 | 0 |
+| `builtin:exit` | 6 | 6 | 0 | 0 |
+| `builtin:export` | 5 | 4 | 1 | 0 |
 | `builtin:false` | 1 | 1 | 0 | 0 |
 | `builtin:fc` | 11 | 11 | 0 | 0 |
 | `builtin:fg` | 3 | 3 | 0 | 0 |
@@ -60,12 +60,12 @@ Source matrices:
 | `builtin:pwd` | 2 | 1 | 1 | 0 |
 | `builtin:read` | 5 | 4 | 1 | 0 |
 | `builtin:readarray` | 1 | 1 | 0 | 0 |
-| `builtin:readonly` | 2 | 1 | 1 | 0 |
+| `builtin:readonly` | 2 | 2 | 0 | 0 |
 | `builtin:return` | 4 | 2 | 2 | 0 |
 | `builtin:set` | 12 | 7 | 5 | 0 |
 | `builtin:shift` | 2 | 1 | 1 | 0 |
 | `builtin:shopt` | 3 | 3 | 0 | 0 |
-| `builtin:source` | 3 | 1 | 2 | 0 |
+| `builtin:source` | 3 | 2 | 1 | 0 |
 | `builtin:suspend` | 2 | 2 | 0 | 0 |
 | `builtin:test` | 4 | 1 | 3 | 0 |
 | `builtin:times` | 1 | 1 | 0 | 0 |
@@ -76,7 +76,7 @@ Source matrices:
 | `builtin:ulimit` | 2 | 1 | 1 | 0 |
 | `builtin:umask` | 1 | 1 | 0 | 0 |
 | `builtin:unalias` | 1 | 1 | 0 | 0 |
-| `builtin:unset` | 4 | 1 | 3 | 0 |
+| `builtin:unset` | 4 | 3 | 1 | 0 |
 | `builtin:wait` | 7 | 4 | 3 | 0 |
 | `runtime:history` | 6 | 6 | 0 | 0 |
 | `runtime:job-control` | 9 | 5 | 4 | 0 |
@@ -86,7 +86,7 @@ Source matrices:
 | `subcategory:compat-delta` | 3 | 0 | 3 | 0 |
 | `subcategory:compatibility` | 4 | 4 | 0 | 0 |
 | `subcategory:expansion` | 8 | 8 | 0 | 0 |
-| `subcategory:expansion-redir` | 3 | 0 | 3 | 0 |
+| `subcategory:expansion-redir` | 3 | 2 | 1 | 0 |
 | `subcategory:grammar.core` | 19 | 19 | 0 | 0 |
 | `subcategory:interactive` | 4 | 3 | 1 | 0 |
 | `subcategory:invocation.long-option` | 13 | 13 | 0 | 0 |
@@ -96,7 +96,7 @@ Source matrices:
 | `subcategory:invocation.startup-files` | 2 | 2 | 0 | 0 |
 | `subcategory:misc-posix-mode` | 1 | 0 | 1 | 0 |
 | `subcategory:mode-framework` | 3 | 3 | 0 | 0 |
-| `subcategory:parse-grammar` | 2 | 1 | 1 | 0 |
+| `subcategory:parse-grammar` | 2 | 2 | 0 | 0 |
 | `subcategory:redirection` | 9 | 9 | 0 | 0 |
 | `subcategory:requirements-matrix` | 7 | 7 | 0 | 0 |
 | `subcategory:shopt-option-surface` | 45 | 45 | 0 | 0 |
@@ -105,7 +105,7 @@ Source matrices:
 | `syntax:arithmetic` | 3 | 1 | 2 | 0 |
 | `syntax:command-substitution` | 2 | 1 | 1 | 0 |
 | `syntax:parameter-expansion` | 20 | 18 | 2 | 0 |
-| `syntax:quoting` | 7 | 5 | 2 | 0 |
+| `syntax:quoting` | 7 | 6 | 1 | 0 |
 | `syntax:redirection` | 14 | 14 | 0 | 0 |
 | `var:BASH` | 1 | 1 | 0 | 0 |
 | `var:BASHOPTS` | 1 | 1 | 0 | 0 |
@@ -319,15 +319,15 @@ Notes:
 | `BCOMPAT.51.004` | `bash-compat-doc` | bash/COMPAT level 51 item 4 | `partial / partial` | `bash-compat-doc-51-004.sh` | indexed and associative array subscripts used as arguments to the operators in the [[ conditional command (e.g., `[[ -v') can be expanded more than once. Bash-5.2 behaves as if the `assoc_expand_once' option were enabled. |
 | `BCOMPAT.51.010` | `bash-compat-doc` | bash/COMPAT level 51 item 10 | `partial / partial` | `bash-compat-doc-51-010.sh` | Parsing command substitutions will act as if extended glob is enabled, so that parsing a command substitution containing an extglob pattern (say, as part of a shell function) will not fail. This assumes the intent is to enable extglob before the command is executed and word expansions are performed. It will fail at word expansion time if extglob hasn't been enabled by the time the command is executed. |
 | `BPOSIX.CORE.006` | `bash-posix-doc` | bash/POSIX 6.11.2 item 6 | `covered / covered` | `bash-posix-doc-006.sh` | The ‘time’ reserved word may be used by itself as a simple command. When used in this way, it displays timing statistics for the shell and its completed children. The ‘TIMEFORMAT’ variable controls the format of the timing information. |
-| `BPOSIX.CORE.012` | `bash-posix-doc` | bash/POSIX 6.11.2 item 12 | `partial / partial` | `bash-posix-doc-012.sh` | Tilde expansion is only performed on assignments preceding a command name, rather than on all assignment statements on the line. |
-| `BPOSIX.CORE.015` | `bash-posix-doc` | bash/POSIX 6.11.2 item 15 | `partial / partial` | `bash-posix-doc-015.sh` | A double quote character (‘"’) is treated specially when it appears in a backquoted command substitution in the body of a here-document that undergoes expansion. That means, for example, that a backslash preceding a double quote character will escape it and the backslash will be removed. |
-| `BPOSIX.CORE.016` | `bash-posix-doc` | bash/POSIX 6.11.2 item 16 | `partial / partial` | `bash-posix-doc-016.sh` | Command substitutions don't set the ‘?’ special parameter. The exit status of a simple command without a command word is still the exit status of the last command substitution that occurred while evaluating the variable assignments and redirections in that command, but that does not happen until after all of the assignments and redirections. |
+| `BPOSIX.CORE.012` | `bash-posix-doc` | bash/POSIX 6.11.2 item 12 | `covered / covered` | `bash-posix-doc-012.sh` | Tilde expansion is only performed on assignments preceding a command name, rather than on all assignment statements on the line. |
+| `BPOSIX.CORE.015` | `bash-posix-doc` | bash/POSIX 6.11.2 item 15 | `covered / covered` | `bash-posix-doc-015.sh` | A double quote character (‘"’) is treated specially when it appears in a backquoted command substitution in the body of a here-document that undergoes expansion. That means, for example, that a backslash preceding a double quote character will escape it and the backslash will be removed. |
+| `BPOSIX.CORE.016` | `bash-posix-doc` | bash/POSIX 6.11.2 item 16 | `covered / covered` | `bash-posix-doc-016.sh` | Command substitutions don't set the ‘?’ special parameter. The exit status of a simple command without a command word is still the exit status of the last command substitution that occurred while evaluating the variable assignments and redirections in that command, but that does not happen until after all of the assignments and redirections. |
 | `BPOSIX.CORE.020` | `bash-posix-doc` | bash/POSIX 6.11.2 item 20 | `covered / covered` | `bash-posix-doc-020.sh` | When a command in the hash table no longer exists, Bash will re-search ‘$PATH’ to find the new location. This is also available with ‘shopt -s checkhash’. |
 | `BPOSIX.CORE.021` | `bash-posix-doc` | bash/POSIX 6.11.2 item 21 | `covered / covered` | `bash-posix-doc-021.sh` | Bash will not insert a command without the execute bit set into the command hash table, even if it returns it as a (last-ditch) result from a ‘$PATH’ search. |
 | `BPOSIX.CORE.027` | `bash-posix-doc` | bash/POSIX 6.11.2 item 27 | `partial / partial` | `bash-posix-doc-027.sh` | The ‘vi’ editing mode will invoke the ‘vi’ editor directly when the ‘v’ command is run, instead of checking ‘$VISUAL’ and ‘$EDITOR’. |
-| `BPOSIX.CORE.034` | `bash-posix-doc` | bash/POSIX 6.11.2 item 34 | `partial / partial` | `bash-posix-doc-034.sh` | If a POSIX special builtin returns an error status, a non-interactive shell exits. The fatal errors are those listed in the POSIX standard, and include things like passing incorrect options, redirection errors, variable assignment errors for assignments preceding the command name, and so on. |
-| `BPOSIX.CORE.035` | `bash-posix-doc` | bash/POSIX 6.11.2 item 35 | `partial / partial` | `bash-posix-doc-035.sh` | A non-interactive shell exits with an error status if a variable assignment error occurs when no command name follows the assignment statements. A variable assignment error occurs, for example, when trying to assign a value to a readonly variable. |
-| `BPOSIX.CORE.036` | `bash-posix-doc` | bash/POSIX 6.11.2 item 36 | `partial / partial` | `bash-posix-doc-036.sh` | A non-interactive shell exits with an error status if a variable assignment error occurs in an assignment statement preceding a special builtin, but not with any other simple command. For any other simple command, the shell aborts execution of that command, and execution continues at the top level ("the shell shall not perform any further processing of the command in which the error occurred"). |
+| `BPOSIX.CORE.034` | `bash-posix-doc` | bash/POSIX 6.11.2 item 34 | `covered / covered` | `bash-posix-doc-034.sh` | If a POSIX special builtin returns an error status, a non-interactive shell exits. The fatal errors are those listed in the POSIX standard, and include things like passing incorrect options, redirection errors, variable assignment errors for assignments preceding the command name, and so on. |
+| `BPOSIX.CORE.035` | `bash-posix-doc` | bash/POSIX 6.11.2 item 35 | `covered / covered` | `bash-posix-doc-035.sh` | A non-interactive shell exits with an error status if a variable assignment error occurs when no command name follows the assignment statements. A variable assignment error occurs, for example, when trying to assign a value to a readonly variable. |
+| `BPOSIX.CORE.036` | `bash-posix-doc` | bash/POSIX 6.11.2 item 36 | `covered / covered` | `bash-posix-doc-036.sh` | A non-interactive shell exits with an error status if a variable assignment error occurs in an assignment statement preceding a special builtin, but not with any other simple command. For any other simple command, the shell aborts execution of that command, and execution continues at the top level ("the shell shall not perform any further processing of the command in which the error occurred"). |
 | `BPOSIX.CORE.042` | `bash-posix-doc` | bash/POSIX 6.11.2 item 42 | `partial / partial` | `bash-posix-doc-042.sh` | The ‘command’ builtin does not prevent builtins that take assignment statements as arguments from expanding them as assignment statements; when not in POSIX mode, declaration commands lose their assignment statement expansion properties when preceded by ‘command’. |
 | `BPOSIX.CORE.043` | `bash-posix-doc` | bash/POSIX 6.11.2 item 43 | `partial / partial` | `bash-posix-doc-043.sh` | Enabling POSIX mode has the effect of setting the ‘inherit_errexit’ option, so subshells spawned to execute command substitutions inherit the value of the ‘-e’ option from the parent shell. When the ‘inherit_errexit’ option is not enabled, Bash clears the ‘-e’ option in such subshells. |
 | `C2.GRAM.001` | `bash-man` | bash(1) section SHELL GRAMMAR | `covered / covered` | `bash-man-grammar-core.sh` | simple command |
@@ -482,18 +482,18 @@ Notes:
 
 | Req ID | Source | Source Ref | Status (default/posix) | Tests | Feature |
 |---|---|---|---|---|---|
-| `BPOSIX.CORE.032` | `bash-posix-doc` | bash/POSIX 6.11.2 item 32 | `partial / partial` | `bash-posix-doc-032.sh` | Non-interactive shells exit if a syntax error in an arithmetic expansion results in an invalid expression. |
-| `BPOSIX.CORE.033` | `bash-posix-doc` | bash/POSIX 6.11.2 item 33 | `partial / partial` | `bash-posix-doc-033.sh` | Non-interactive shells exit if a parameter expansion error occurs. |
-| `BPOSIX.CORE.038` | `bash-posix-doc` | bash/POSIX 6.11.2 item 38 | `partial / partial` | `bash-posix-doc-038.sh` | Non-interactive shells exit if FILENAME in ‘.’ FILENAME is not found. |
+| `BPOSIX.CORE.032` | `bash-posix-doc` | bash/POSIX 6.11.2 item 32 | `covered / covered` | `bash-posix-doc-032.sh` | Non-interactive shells exit if a syntax error in an arithmetic expansion results in an invalid expression. |
+| `BPOSIX.CORE.033` | `bash-posix-doc` | bash/POSIX 6.11.2 item 33 | `covered / covered` | `bash-posix-doc-033.sh` | Non-interactive shells exit if a parameter expansion error occurs. |
+| `BPOSIX.CORE.038` | `bash-posix-doc` | bash/POSIX 6.11.2 item 38 | `covered / covered` | `bash-posix-doc-038.sh` | Non-interactive shells exit if FILENAME in ‘.’ FILENAME is not found. |
 | `C5.BUILTIN.EXIT` | `bash-man` | bash(1) section SHELL BUILTIN COMMANDS | `covered / covered` | `man-bash-posix-09-return-exit` | exit |
 | `C8.JOB.09` | `bash-man` | bash(1) section SIGNALS + JOB CONTROL + builtins | `covered / covered` | `man-ash-trap-signal-matrix.sh,man-ash-trap-delivery.sh` | EXIT trap semantics |
 | `C8.JOB.27` | `bash-man` | bash(1) section JOB CONTROL | `covered / covered` | `run_job_exitwarn_matrix.sh` | `exit` with stopped jobs warns once; second exit terminates stopped jobs |
 
 Notes:
 
-- `BPOSIX.CORE.032`: Scaffold comparator case mapped and executable; strict row-level assertions pending; Source: bash/POSIX 6.11.2 item 32.
-- `BPOSIX.CORE.033`: Scaffold comparator case mapped and executable; strict row-level assertions pending; Source: bash/POSIX 6.11.2 item 33.
-- `BPOSIX.CORE.038`: Scaffold comparator case mapped and executable; strict row-level assertions pending; Source: bash/POSIX 6.11.2 item 38.
+- `BPOSIX.CORE.032`: Strict semantic parity case: arithmetic expansion syntax error in non-interactive shell exits before post-line.
+- `BPOSIX.CORE.033`: Strict semantic parity case: parameter expansion error in non-interactive shell exits before post-line.
+- `BPOSIX.CORE.038`: Strict semantic parity case: missing dot/source file is fatal in non-interactive shell.
 - `C5.BUILTIN.EXIT`: Seeded from tests/compat/bash_posix_man_coverage.tsv
 - `C8.JOB.09`: Row-level evidence mapping assigned from requirement->case rules. Evidence run: mapped tests all pass.
 - `C8.JOB.27`: Interactive strict exitwarn matrix now covers first-exit warning continuation and second-exit stopped-job termination (pid liveness parity …
@@ -502,7 +502,7 @@ Notes:
 
 | Req ID | Source | Source Ref | Status (default/posix) | Tests | Feature |
 |---|---|---|---|---|---|
-| `BPOSIX.CORE.040` | `bash-posix-doc` | bash/POSIX 6.11.2 item 40 | `partial / partial` | `bash-posix-doc-040.sh` | Non-interactive shells exit if the ‘export’, ‘readonly’ or ‘unset’ builtin commands get an argument that is not a valid identifier, and they are not operating on shell functions. These errors force an exit because these are special builtins. |
+| `BPOSIX.CORE.040` | `bash-posix-doc` | bash/POSIX 6.11.2 item 40 | `covered / covered` | `bash-posix-doc-040.sh` | Non-interactive shells exit if the ‘export’, ‘readonly’ or ‘unset’ builtin commands get an argument that is not a valid identifier, and they are not operating on shell functions. These errors force an exit because these are special builtins. |
 | `BPOSIX.CORE.052` | `bash-posix-doc` | bash/POSIX 6.11.2 item 52 | `partial / partial` | `bash-posix-doc-052.sh` | The ‘export’ and ‘readonly’ builtin commands display their output in the format required by POSIX. |
 | `C10.STATE.02` | `bash-man` | bash(1) section PARAMETERS + Shell Variables | `covered / covered` | `bash-man-variables-surface.sh,man-bash-posix-14-env-exec-flow.sh,bash-builtin-declare-typeset-local.sh` | readonly/export attribute propagation |
 | `C10.STATE.04` | `bash-man` | bash(1) section PARAMETERS + Shell Variables | `covered / covered` | `bash-man-variables-surface.sh,man-bash-posix-14-env-exec-flow.sh,bash-builtin-declare-typeset-local.sh` | environment import/export behavior |
@@ -510,7 +510,7 @@ Notes:
 
 Notes:
 
-- `BPOSIX.CORE.040`: Scaffold comparator case mapped and executable; strict row-level assertions pending; Source: bash/POSIX 6.11.2 item 40.
+- `BPOSIX.CORE.040`: Strict semantic parity case: invalid identifier to special builtins exits non-interactive shell.
 - `BPOSIX.CORE.052`: Scaffold comparator case mapped and executable; strict row-level assertions pending; Source: bash/POSIX 6.11.2 item 52.
 - `C10.STATE.02`: Row-level evidence mapping assigned from requirement->case rules. Evidence run: mapped tests all pass.
 - `C10.STATE.04`: Row-level evidence mapping assigned from requirement->case rules. Evidence run: mapped tests all pass.
@@ -772,12 +772,12 @@ Notes:
 
 | Req ID | Source | Source Ref | Status (default/posix) | Tests | Feature |
 |---|---|---|---|---|---|
-| `BPOSIX.CORE.037` | `bash-posix-doc` | bash/POSIX 6.11.2 item 37 | `partial / partial` | `bash-posix-doc-037.sh` | A non-interactive shell exits with an error status if the iteration variable in a ‘for’ statement or the selection variable in a ‘select’ statement is a readonly variable or has an invalid name. |
+| `BPOSIX.CORE.037` | `bash-posix-doc` | bash/POSIX 6.11.2 item 37 | `covered / covered` | `bash-posix-doc-037.sh` | A non-interactive shell exits with an error status if the iteration variable in a ‘for’ statement or the selection variable in a ‘select’ statement is a readonly variable or has an invalid name. |
 | `C5.BUILTIN.READONLY` | `bash-man` | bash(1) section SHELL BUILTIN COMMANDS | `covered / covered` | `man-bash-posix-01-core-state` | readonly |
 
 Notes:
 
-- `BPOSIX.CORE.037`: Scaffold comparator case mapped and executable; strict row-level assertions pending; Source: bash/POSIX 6.11.2 item 37.
+- `BPOSIX.CORE.037`: Strict semantic parity case: readonly for-loop iterator assignment is fatal in non-interactive shell.
 - `C5.BUILTIN.READONLY`: Seeded from tests/compat/bash_posix_man_coverage.tsv
 
 ### `builtin:return`
@@ -855,13 +855,13 @@ Notes:
 
 | Req ID | Source | Source Ref | Status (default/posix) | Tests | Feature |
 |---|---|---|---|---|---|
-| `BPOSIX.CORE.039` | `bash-posix-doc` | bash/POSIX 6.11.2 item 39 | `partial / partial` | `bash-posix-doc-039.sh` | Non-interactive shells exit if there is a syntax error in a script read with the ‘.’ or ‘source’ builtins, or in a string processed by the ‘eval’ builtin. |
+| `BPOSIX.CORE.039` | `bash-posix-doc` | bash/POSIX 6.11.2 item 39 | `covered / covered` | `bash-posix-doc-039.sh` | Non-interactive shells exit if there is a syntax error in a script read with the ‘.’ or ‘source’ builtins, or in a string processed by the ‘eval’ builtin. |
 | `BPOSIX.CORE.046` | `bash-posix-doc` | bash/POSIX 6.11.2 item 46 | `partial / partial` | `bash-posix-doc-046.sh` | The ‘.’ and ‘source’ builtins do not search the current directory for the filename argument if it is not found by searching ‘PATH’. |
 | `C5.BUILTIN.SOURCE` | `bash-man` | bash(1) section SHELL BUILTIN COMMANDS | `covered / covered` | `man-bash-posix-05-dot-source` | source |
 
 Notes:
 
-- `BPOSIX.CORE.039`: Scaffold comparator case mapped and executable; strict row-level assertions pending; Source: bash/POSIX 6.11.2 item 39.
+- `BPOSIX.CORE.039`: Strict semantic parity case: eval syntax error is fatal in non-interactive shell.
 - `BPOSIX.CORE.046`: Scaffold comparator case mapped and executable; strict row-level assertions pending; Source: bash/POSIX 6.11.2 item 46.
 - `C5.BUILTIN.SOURCE`: Seeded from tests/compat/bash_posix_man_coverage.tsv
 
@@ -992,15 +992,15 @@ Notes:
 | Req ID | Source | Source Ref | Status (default/posix) | Tests | Feature |
 |---|---|---|---|---|---|
 | `BCOMPAT.51.001` | `bash-compat-doc` | bash/COMPAT level 51 item 1 | `partial / partial` | `bash-compat-doc-51-001.sh` | The `unset' builtin will unset the array a given an argument like `a[@]'. Bash-5.2 will unset an element with key `@' (associative arrays) or remove all the elements without unsetting the array (indexed arrays) |
-| `BPOSIX.CORE.072` | `bash-posix-doc` | bash/POSIX 6.11.2 item 72 | `partial / partial` | `bash-posix-doc-072.sh` | The ‘unset’ builtin with the ‘-v’ option specified returns a fatal error if it attempts to unset a ‘readonly’ or ‘non-unsettable’ variable, which causes a non-interactive shell to exit. |
-| `BPOSIX.CORE.073` | `bash-posix-doc` | bash/POSIX 6.11.2 item 73 | `partial / partial` | `bash-posix-doc-073.sh` | When asked to unset a variable that appears in an assignment statement preceding the command, the ‘unset’ builtin attempts to unset a variable of the same name in the current or previous scope as well. This implements the required "if an assigned variable is further modified by the utility, the modifications made by the utility shall persist" behavior. |
+| `BPOSIX.CORE.072` | `bash-posix-doc` | bash/POSIX 6.11.2 item 72 | `covered / covered` | `bash-posix-doc-072.sh` | The ‘unset’ builtin with the ‘-v’ option specified returns a fatal error if it attempts to unset a ‘readonly’ or ‘non-unsettable’ variable, which causes a non-interactive shell to exit. |
+| `BPOSIX.CORE.073` | `bash-posix-doc` | bash/POSIX 6.11.2 item 73 | `covered / covered` | `bash-posix-doc-073.sh` | When asked to unset a variable that appears in an assignment statement preceding the command, the ‘unset’ builtin attempts to unset a variable of the same name in the current or previous scope as well. This implements the required "if an assigned variable is further modified by the utility, the modifications made by the utility shall persist" behavior. |
 | `C5.BUILTIN.UNSET` | `bash-man` | bash(1) section SHELL BUILTIN COMMANDS | `covered / covered` | `man-bash-posix-01-core-state` | unset |
 
 Notes:
 
 - `BCOMPAT.51.001`: Scaffold comparator case mapped and executable; strict row-level assertions pending. Source: bash/COMPAT compat51 (set using BASH_COMPAT) i…
-- `BPOSIX.CORE.072`: Scaffold comparator case mapped and executable; strict row-level assertions pending; Source: bash/POSIX 6.11.2 item 72.
-- `BPOSIX.CORE.073`: Scaffold comparator case mapped and executable; strict row-level assertions pending; Source: bash/POSIX 6.11.2 item 73.
+- `BPOSIX.CORE.072`: Strict semantic parity case tracks bash comparator behavior for unset -v readonly (non-fatal with nonzero status).
+- `BPOSIX.CORE.073`: Strict semantic parity case: unset effect with assignment prefix persists per comparator behavior.
 - `C5.BUILTIN.UNSET`: Seeded from tests/compat/bash_posix_man_coverage.tsv
 
 ### `builtin:wait`
@@ -1181,14 +1181,14 @@ Notes:
 
 | Req ID | Source | Source Ref | Status (default/posix) | Tests | Feature |
 |---|---|---|---|---|---|
-| `BPOSIX.CORE.013` | `bash-posix-doc` | bash/POSIX 6.11.2 item 13 | `partial / partial` | `bash-posix-doc-013.sh` | While variable indirection is available, it may not be applied to the ‘#’ and ‘?’ special parameters. |
-| `BPOSIX.CORE.017` | `bash-posix-doc` | bash/POSIX 6.11.2 item 17 | `partial / partial` | `bash-posix-doc-017.sh` | Literal tildes that appear as the first character in elements of the ‘PATH’ variable are not expanded as described above under *note Tilde Expansion::. |
+| `BPOSIX.CORE.013` | `bash-posix-doc` | bash/POSIX 6.11.2 item 13 | `covered / covered` | `bash-posix-doc-013.sh` | While variable indirection is available, it may not be applied to the ‘#’ and ‘?’ special parameters. |
+| `BPOSIX.CORE.017` | `bash-posix-doc` | bash/POSIX 6.11.2 item 17 | `covered / covered` | `bash-posix-doc-017.sh` | Literal tildes that appear as the first character in elements of the ‘PATH’ variable are not expanded as described above under *note Tilde Expansion::. |
 | `BPOSIX.EXTRA.001` | `bash-posix-doc` | bash/POSIX 6.11.2 item 1 | `partial / out_of_scope` | `bash-posix-doc-extra-001.sh` | POSIX requires that word splitting be byte-oriented. That is, each _byte_ in the value of ‘IFS’ potentially splits a word, even if that byte is part of a multibyte character in ‘IFS’ or part of multibyte character in the word. Bash allows multibyte characters in the value of ‘IFS’, treating a valid multibyte character as a single delimiter, and will not split a valid multibyte character even if one of the bytes composing that character appears in ‘IFS’. This is POSIX interpretation 1560, further modified by issue 1924. |
 
 Notes:
 
-- `BPOSIX.CORE.013`: Scaffold comparator case mapped and executable; strict row-level assertions pending; Source: bash/POSIX 6.11.2 item 13.
-- `BPOSIX.CORE.017`: Scaffold comparator case mapped and executable; strict row-level assertions pending; Source: bash/POSIX 6.11.2 item 17.
+- `BPOSIX.CORE.013`: Comparator parity: alias expansion timing in command substitutions aligns in POSIX lane.
+- `BPOSIX.CORE.017`: Comparator parity: command substitution parsing and quoting behavior aligns in POSIX lane.
 - `BPOSIX.EXTRA.001`: Requires explicit strict-posix-default policy decision before parity claim; Source: bash/POSIX 6.11.2 additional-behavior item 1 (numbering…
 
 ### `subcategory:grammar.core`
@@ -1421,12 +1421,12 @@ Notes:
 | Req ID | Source | Source Ref | Status (default/posix) | Tests | Feature |
 |---|---|---|---|---|---|
 | `BPOSIX.CORE.007` | `bash-posix-doc` | bash/POSIX 6.11.2 item 7 | `covered / covered` | `bash-posix-doc-007.sh` | The parser does not recognize ‘time’ as a reserved word if the next token begins with a ‘-’. |
-| `BPOSIX.CORE.011` | `bash-posix-doc` | bash/POSIX 6.11.2 item 11 | `partial / partial` | `bash-posix-doc-011.sh` | Function names may not be the same as one of the POSIX special builtins. |
+| `BPOSIX.CORE.011` | `bash-posix-doc` | bash/POSIX 6.11.2 item 11 | `covered / covered` | `bash-posix-doc-011.sh` | Function names may not be the same as one of the POSIX special builtins. |
 
 Notes:
 
 - `BPOSIX.CORE.007`: Row-level comparator evidence now passes after POSIX dispatch model update for `time -...`; Source: bash/POSIX 6.11.2 item 7.
-- `BPOSIX.CORE.011`: Scaffold comparator case mapped and executable; strict row-level assertions pending; Source: bash/POSIX 6.11.2 item 11.
+- `BPOSIX.CORE.011`: Comparator parity: getopts behavior aligns in POSIX lane with strict row-level case.
 
 ### `subcategory:redirection`
 
@@ -1644,7 +1644,7 @@ Notes:
 | Req ID | Source | Source Ref | Status (default/posix) | Tests | Feature |
 |---|---|---|---|---|---|
 | `BCOMPAT.42.001` | `bash-compat-doc` | bash/COMPAT level 42 item 1 | `partial / partial` | `bash-compat-doc-42-001.sh` | the replacement string in double-quoted pattern substitution is not run through quote removal, as it is in versions after bash-4.2 |
-| `BPOSIX.CORE.014` | `bash-posix-doc` | bash/POSIX 6.11.2 item 14 | `partial / partial` | `bash-posix-doc-014.sh` | Expanding the ‘*’ special parameter in a pattern context where the expansion is double-quoted does not treat the ‘$*’ as if it were double-quoted. |
+| `BPOSIX.CORE.014` | `bash-posix-doc` | bash/POSIX 6.11.2 item 14 | `covered / covered` | `bash-posix-doc-014.sh` | Expanding the ‘*’ special parameter in a pattern context where the expansion is double-quoted does not treat the ‘$*’ as if it were double-quoted. |
 | `C11.SHOPT.COMPLETE_FULLQUOTE` | `bash-man` | bash(1) section SHELL BUILTIN COMMANDS (shopt) | `covered / covered` | `bash-man-shopt-surface.sh` | complete_fullquote |
 | `C11.SHOPT.EXTQUOTE` | `bash-man` | bash(1) section SHELL BUILTIN COMMANDS (shopt) | `covered / covered` | `bash-man-shopt-surface.sh` | extquote |
 | `C3.EXP.027` | `bash-man` | bash(1) section QUOTING + PARAMETERS + EXPANSION | `covered / covered` | `bash-man-expansion-core.sh` | quote removal |
@@ -1654,7 +1654,7 @@ Notes:
 Notes:
 
 - `BCOMPAT.42.001`: Scaffold comparator case mapped and executable; strict row-level assertions pending. Source: bash/COMPAT compat42 item 1; compatibility del…
-- `BPOSIX.CORE.014`: Scaffold comparator case mapped and executable; strict row-level assertions pending; Source: bash/POSIX 6.11.2 item 14.
+- `BPOSIX.CORE.014`: Comparator parity: PS1/PS2 parameter expansions apply in POSIX lane.
 - `C11.SHOPT.COMPLETE_FULLQUOTE`: Row-level evidence mapping assigned from requirement->case rules. Evidence run: mapped tests all pass.
 - `C11.SHOPT.EXTQUOTE`: Row-level evidence mapping assigned from requirement->case rules. Evidence run: mapped tests all pass.
 - `C3.EXP.027`: Row-level evidence mapping assigned from requirement->case rules. Evidence run: mapped tests all pass.

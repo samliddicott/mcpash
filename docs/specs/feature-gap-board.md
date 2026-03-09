@@ -1,6 +1,6 @@
 # Feature Gap Board
 
-Generated: 2026-03-09 09:45:11Z
+Generated: 2026-03-09 10:22:51Z
 
 Purpose: implementation-first backlog grouped by feature topic (rows where either default or posix status is not `covered`).
 
@@ -13,39 +13,36 @@ Purpose: implementation-first backlog grouped by feature topic (rows where eithe
 | `builtin:bind` | 1 |
 | `builtin:break` | 2 |
 | `builtin:cd` | 2 |
-| `builtin:command` | 18 |
+| `builtin:command` | 12 |
 | `builtin:continue` | 1 |
 | `builtin:echo` | 2 |
-| `builtin:exit` | 3 |
-| `builtin:export` | 2 |
+| `builtin:export` | 1 |
 | `builtin:history` | 3 |
 | `builtin:jobs` | 1 |
 | `builtin:kill` | 3 |
 | `builtin:printf` | 1 |
 | `builtin:pwd` | 1 |
 | `builtin:read` | 1 |
-| `builtin:readonly` | 1 |
 | `builtin:return` | 2 |
 | `builtin:set` | 5 |
 | `builtin:shift` | 1 |
-| `builtin:source` | 2 |
+| `builtin:source` | 1 |
 | `builtin:test` | 3 |
 | `builtin:trap` | 2 |
 | `builtin:type` | 1 |
 | `builtin:ulimit` | 1 |
-| `builtin:unset` | 3 |
+| `builtin:unset` | 1 |
 | `builtin:wait` | 3 |
 | `runtime:job-control` | 4 |
 | `runtime:signals-traps` | 1 |
 | `subcategory:compat-delta` | 3 |
-| `subcategory:expansion-redir` | 3 |
+| `subcategory:expansion-redir` | 1 |
 | `subcategory:interactive` | 1 |
 | `subcategory:misc-posix-mode` | 1 |
-| `subcategory:parse-grammar` | 1 |
 | `syntax:arithmetic` | 2 |
 | `syntax:command-substitution` | 1 |
 | `syntax:parameter-expansion` | 2 |
-| `syntax:quoting` | 2 |
+| `syntax:quoting` | 1 |
 
 ## Gap Topics
 
@@ -94,13 +91,7 @@ Purpose: implementation-first backlog grouped by feature topic (rows where eithe
 | `BCOMPAT.51.003` | `bash-compat-doc` | `partial / partial` | `bash-compat-doc-51-003.sh` | expressions used as arguments to arithmetic operators in the [[ conditional command can be expanded more than once |
 | `BCOMPAT.51.004` | `bash-compat-doc` | `partial / partial` | `bash-compat-doc-51-004.sh` | indexed and associative array subscripts used as arguments to the operators in the [[ conditional command (e.g., `[[ -v') can be expanded more than once. Bash-5.2 behaves as if the `assoc_expand_once' option were enabled. |
 | `BCOMPAT.51.010` | `bash-compat-doc` | `partial / partial` | `bash-compat-doc-51-010.sh` | Parsing command substitutions will act as if extended glob is enabled, so that parsing a command substitution containing an extglob pattern (say, as part of a shell function) will not fail. This assumes the intent is to enable extglob before the command is executed and word expansions are performed. It will fail at word expansion time if extglob hasn't been enabled by the time the command is executed. |
-| `BPOSIX.CORE.012` | `bash-posix-doc` | `partial / partial` | `bash-posix-doc-012.sh` | Tilde expansion is only performed on assignments preceding a command name, rather than on all assignment statements on the line. |
-| `BPOSIX.CORE.015` | `bash-posix-doc` | `partial / partial` | `bash-posix-doc-015.sh` | A double quote character (‘"’) is treated specially when it appears in a backquoted command substitution in the body of a here-document that undergoes expansion. That means, for example, that a backslash preceding a double quote character will escape it and the backslash will be removed. |
-| `BPOSIX.CORE.016` | `bash-posix-doc` | `partial / partial` | `bash-posix-doc-016.sh` | Command substitutions don't set the ‘?’ special parameter. The exit status of a simple command without a command word is still the exit status of the last command substitution that occurred while evaluating the variable assignments and redirections in that command, but that does not happen until after all of the assignments and redirections. |
 | `BPOSIX.CORE.027` | `bash-posix-doc` | `partial / partial` | `bash-posix-doc-027.sh` | The ‘vi’ editing mode will invoke the ‘vi’ editor directly when the ‘v’ command is run, instead of checking ‘$VISUAL’ and ‘$EDITOR’. |
-| `BPOSIX.CORE.034` | `bash-posix-doc` | `partial / partial` | `bash-posix-doc-034.sh` | If a POSIX special builtin returns an error status, a non-interactive shell exits. The fatal errors are those listed in the POSIX standard, and include things like passing incorrect options, redirection errors, variable assignment errors for assignments preceding the command name, and so on. |
-| `BPOSIX.CORE.035` | `bash-posix-doc` | `partial / partial` | `bash-posix-doc-035.sh` | A non-interactive shell exits with an error status if a variable assignment error occurs when no command name follows the assignment statements. A variable assignment error occurs, for example, when trying to assign a value to a readonly variable. |
-| `BPOSIX.CORE.036` | `bash-posix-doc` | `partial / partial` | `bash-posix-doc-036.sh` | A non-interactive shell exits with an error status if a variable assignment error occurs in an assignment statement preceding a special builtin, but not with any other simple command. For any other simple command, the shell aborts execution of that command, and execution continues at the top level ("the shell shall not perform any further processing of the command in which the error occurred"). |
 | `BPOSIX.CORE.042` | `bash-posix-doc` | `partial / partial` | `bash-posix-doc-042.sh` | The ‘command’ builtin does not prevent builtins that take assignment statements as arguments from expanding them as assignment statements; when not in POSIX mode, declaration commands lose their assignment statement expansion properties when preceded by ‘command’. |
 | `BPOSIX.CORE.043` | `bash-posix-doc` | `partial / partial` | `bash-posix-doc-043.sh` | Enabling POSIX mode has the effect of setting the ‘inherit_errexit’ option, so subshells spawned to execute command substitutions inherit the value of the ‘-e’ option from the parent shell. When the ‘inherit_errexit’ option is not enabled, Bash clears the ‘-e’ option in such subshells. |
 
@@ -117,19 +108,10 @@ Purpose: implementation-first backlog grouped by feature topic (rows where eithe
 | `BPOSIX.CORE.051` | `bash-posix-doc` | `partial / partial` | `bash-posix-doc-051.sh` | When the ‘xpg_echo’ option is enabled, Bash does not attempt to interpret any arguments to ‘echo’ as options. ‘echo’ displays each argument after converting escape sequences. |
 | `BPOSIX.EXTRA.003` | `bash-posix-doc` | `partial / out_of_scope` | `bash-posix-doc-extra-003.sh` | As noted above, Bash requires the ‘xpg_echo’ option to be enabled for the ‘echo’ builtin to be fully conformant. |
 
-### `builtin:exit`
-
-| Req ID | Source | Status (default/posix) | Tests | Feature |
-|---|---|---|---|---|
-| `BPOSIX.CORE.032` | `bash-posix-doc` | `partial / partial` | `bash-posix-doc-032.sh` | Non-interactive shells exit if a syntax error in an arithmetic expansion results in an invalid expression. |
-| `BPOSIX.CORE.033` | `bash-posix-doc` | `partial / partial` | `bash-posix-doc-033.sh` | Non-interactive shells exit if a parameter expansion error occurs. |
-| `BPOSIX.CORE.038` | `bash-posix-doc` | `partial / partial` | `bash-posix-doc-038.sh` | Non-interactive shells exit if FILENAME in ‘.’ FILENAME is not found. |
-
 ### `builtin:export`
 
 | Req ID | Source | Status (default/posix) | Tests | Feature |
 |---|---|---|---|---|
-| `BPOSIX.CORE.040` | `bash-posix-doc` | `partial / partial` | `bash-posix-doc-040.sh` | Non-interactive shells exit if the ‘export’, ‘readonly’ or ‘unset’ builtin commands get an argument that is not a valid identifier, and they are not operating on shell functions. These errors force an exit because these are special builtins. |
 | `BPOSIX.CORE.052` | `bash-posix-doc` | `partial / partial` | `bash-posix-doc-052.sh` | The ‘export’ and ‘readonly’ builtin commands display their output in the format required by POSIX. |
 
 ### `builtin:history`
@@ -172,12 +154,6 @@ Purpose: implementation-first backlog grouped by feature topic (rows where eithe
 |---|---|---|---|---|
 | `BPOSIX.CORE.062` | `bash-posix-doc` | `partial / partial` | `bash-posix-doc-062.sh` | The ‘read’ builtin may be interrupted by a signal for which a trap has been set. If Bash receives a trapped signal while executing ‘read’, the trap handler executes and ‘read’ returns an exit status greater than 128. |
 
-### `builtin:readonly`
-
-| Req ID | Source | Status (default/posix) | Tests | Feature |
-|---|---|---|---|---|
-| `BPOSIX.CORE.037` | `bash-posix-doc` | `partial / partial` | `bash-posix-doc-037.sh` | A non-interactive shell exits with an error status if the iteration variable in a ‘for’ statement or the selection variable in a ‘select’ statement is a readonly variable or has an invalid name. |
-
 ### `builtin:return`
 
 | Req ID | Source | Status (default/posix) | Tests | Feature |
@@ -205,7 +181,6 @@ Purpose: implementation-first backlog grouped by feature topic (rows where eithe
 
 | Req ID | Source | Status (default/posix) | Tests | Feature |
 |---|---|---|---|---|
-| `BPOSIX.CORE.039` | `bash-posix-doc` | `partial / partial` | `bash-posix-doc-039.sh` | Non-interactive shells exit if there is a syntax error in a script read with the ‘.’ or ‘source’ builtins, or in a string processed by the ‘eval’ builtin. |
 | `BPOSIX.CORE.046` | `bash-posix-doc` | `partial / partial` | `bash-posix-doc-046.sh` | The ‘.’ and ‘source’ builtins do not search the current directory for the filename argument if it is not found by searching ‘PATH’. |
 
 ### `builtin:test`
@@ -240,8 +215,6 @@ Purpose: implementation-first backlog grouped by feature topic (rows where eithe
 | Req ID | Source | Status (default/posix) | Tests | Feature |
 |---|---|---|---|---|
 | `BCOMPAT.51.001` | `bash-compat-doc` | `partial / partial` | `bash-compat-doc-51-001.sh` | The `unset' builtin will unset the array a given an argument like `a[@]'. Bash-5.2 will unset an element with key `@' (associative arrays) or remove all the elements without unsetting the array (indexed arrays) |
-| `BPOSIX.CORE.072` | `bash-posix-doc` | `partial / partial` | `bash-posix-doc-072.sh` | The ‘unset’ builtin with the ‘-v’ option specified returns a fatal error if it attempts to unset a ‘readonly’ or ‘non-unsettable’ variable, which causes a non-interactive shell to exit. |
-| `BPOSIX.CORE.073` | `bash-posix-doc` | `partial / partial` | `bash-posix-doc-073.sh` | When asked to unset a variable that appears in an assignment statement preceding the command, the ‘unset’ builtin attempts to unset a variable of the same name in the current or previous scope as well. This implements the required "if an assigned variable is further modified by the utility, the modifications made by the utility shall persist" behavior. |
 
 ### `builtin:wait`
 
@@ -278,8 +251,6 @@ Purpose: implementation-first backlog grouped by feature topic (rows where eithe
 
 | Req ID | Source | Status (default/posix) | Tests | Feature |
 |---|---|---|---|---|
-| `BPOSIX.CORE.013` | `bash-posix-doc` | `partial / partial` | `bash-posix-doc-013.sh` | While variable indirection is available, it may not be applied to the ‘#’ and ‘?’ special parameters. |
-| `BPOSIX.CORE.017` | `bash-posix-doc` | `partial / partial` | `bash-posix-doc-017.sh` | Literal tildes that appear as the first character in elements of the ‘PATH’ variable are not expanded as described above under *note Tilde Expansion::. |
 | `BPOSIX.EXTRA.001` | `bash-posix-doc` | `partial / out_of_scope` | `bash-posix-doc-extra-001.sh` | POSIX requires that word splitting be byte-oriented. That is, each _byte_ in the value of ‘IFS’ potentially splits a word, even if that byte is part of a multibyte character in ‘IFS’ or part of multibyte character in the word. Bash allows multibyte characters in the value of ‘IFS’, treating a valid multibyte character as a single delimiter, and will not split a valid multibyte character even if one of the bytes composing that character appears in ‘IFS’. This is POSIX interpretation 1560, further modified by issue 1924. |
 
 ### `subcategory:interactive`
@@ -293,12 +264,6 @@ Purpose: implementation-first backlog grouped by feature topic (rows where eithe
 | Req ID | Source | Status (default/posix) | Tests | Feature |
 |---|---|---|---|---|
 | `BPOSIX.CORE.019` | `bash-posix-doc` | `partial / partial` | `bash-posix-doc-019.sh` | Even if a shell function whose name contains a slash was defined before entering POSIX mode, the shell will not execute a function whose name contains one or more slashes. |
-
-### `subcategory:parse-grammar`
-
-| Req ID | Source | Status (default/posix) | Tests | Feature |
-|---|---|---|---|---|
-| `BPOSIX.CORE.011` | `bash-posix-doc` | `partial / partial` | `bash-posix-doc-011.sh` | Function names may not be the same as one of the POSIX special builtins. |
 
 ### `syntax:arithmetic`
 
@@ -325,4 +290,3 @@ Purpose: implementation-first backlog grouped by feature topic (rows where eithe
 | Req ID | Source | Status (default/posix) | Tests | Feature |
 |---|---|---|---|---|
 | `BCOMPAT.42.001` | `bash-compat-doc` | `partial / partial` | `bash-compat-doc-42-001.sh` | the replacement string in double-quoted pattern substitution is not run through quote removal, as it is in versions after bash-4.2 |
-| `BPOSIX.CORE.014` | `bash-posix-doc` | `partial / partial` | `bash-posix-doc-014.sh` | Expanding the ‘*’ special parameter in a pattern context where the expansion is double-quoted does not treat the ‘$*’ as if it were double-quoted. |

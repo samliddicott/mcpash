@@ -910,6 +910,16 @@ class Runtime:
             return status
         return status
 
+    def _maybe_fatal_special_builtin_error(self, cmd_name: str, status: int) -> int:
+        if (
+            status != 0
+            and cmd_name in self.SPECIAL_BUILTINS
+            and self.options.get("posix", False)
+            and self._is_noninteractive()
+        ):
+            raise SystemExit(status)
+        return status
+
     def _get_subshell_depth(self) -> int:
         return int(getattr(self._thread_ctx, "subshell_depth", 0))
 
@@ -1395,7 +1405,12 @@ class Runtime:
             return None
         if cmd.get("more_env") or []:
             return None
-        argv = self._expand_aliases(self._expand_asdl_simple_argv(cmd))
+        try:
+            argv = self._expand_aliases(self._expand_asdl_simple_argv(cmd))
+        except (RuntimeError, CommandSubstFailure, ArithExpansionFailure):
+            # Preflight jobspec detection should not surface expansion errors.
+            # Fall back to normal execution path for proper diagnostics/exit.
+            return None
         if len(argv) != 1:
             return None
         token = argv[0]
@@ -1896,6 +1911,12 @@ class Runtime:
         if t == "command.ForEach":
             names = node.get("iter_names") or [""]
             var_name = str(names[0] if names else "")
+            if var_name in self.readonly_vars:
+                msg = self._diag_msg(DiagnosticKey.READONLY_VAR, name=var_name)
+                self._report_error(msg, line=self.current_line, context="for")
+                if self.options.get("posix", False) and self._is_noninteractive():
+                    raise SystemExit(1)
+                return 1
             iterable = node.get("iterable") or {}
             explicit_in = bool(node.get("explicit_in", False))
             if explicit_in:
@@ -2656,6 +2677,7 @@ class Runtime:
         saved_env = self.env
         assigned_names: set[str] = set()
         compound_assigned: set[str] = set()
+        assignment_error_status: int | None = None
         try:
             self.env = local_env
             for assign in assign_pairs:
@@ -2670,7 +2692,8 @@ class Runtime:
                 if name in self.readonly_vars:
                     msg = self._diag_msg(DiagnosticKey.READONLY_VAR, name=name)
                     print(self._format_error(msg, line=self.current_line), file=sys.stderr)
-                    raise SystemExit(2)
+                    assignment_error_status = 1
+                    break
                 is_compound = False
                 comp_vals: list[str] | None = None
                 if self._bash_compat_level is not None:
@@ -2699,6 +2722,15 @@ class Runtime:
                 self.env = local_env
         finally:
             self.env = saved_env
+
+        if assignment_error_status is not None:
+            if not argv:
+                if self.options.get("posix", False) and self._is_noninteractive():
+                    raise SystemExit(assignment_error_status)
+                return assignment_error_status
+            if argv[0] in self.SPECIAL_BUILTINS:
+                return self._maybe_fatal_special_builtin_error(argv[0], assignment_error_status)
+            return assignment_error_status
 
         if self.options.get("x", False):
             trace_cmd = self._asdl_pipeline_simple_command(node)
@@ -3195,7 +3227,12 @@ class Runtime:
     def _expand_asdl_assignment_scalar(self, node: dict[str, Any] | None) -> str:
         fields = self._expand_asdl_assignment_fields(node)
         texts = fields_to_text_list(fields)
-        return texts[0] if texts else ""
+        if not texts:
+            return ""
+        text = texts[0]
+        if fields and all(not seg.quoted for seg in fields[0].segments):
+            text = self._tilde_expand(text)
+        return text
 
     def _expand_asdl_assignment_fields(self, node: dict[str, Any] | None) -> list[ExpansionField]:
         if not isinstance(node, dict) or node.get("type") != "word.Compound":
@@ -3203,13 +3240,14 @@ class Runtime:
         out: list[ExpansionSegment] = []
         for part in (node.get("parts") or []):
             text = self._expand_asdl_assignment_part_scalar(part, quoted_context=False)
+            part_type = str(part.get("type", "word_part.Unknown")) if isinstance(part, dict) else "word_part.Unknown"
             out.append(
                 ExpansionSegment(
                     text=text,
-                    quoted=True,
+                    quoted=part_type in {"word_part.SingleQuoted", "word_part.DoubleQuoted"},
                     glob_active=False,
                     split_active=False,
-                    source_kind=str(part.get("type", "word_part.Unknown")) if isinstance(part, dict) else "word_part.Unknown",
+                    source_kind=part_type,
                 )
             )
         return [ExpansionField(out, preserve_boundary=True)]
@@ -5187,6 +5225,12 @@ class Runtime:
                 pass
 
     def _run_for(self, node: ForCommand) -> int:
+        if node.name in self.readonly_vars:
+            msg = self._diag_msg(DiagnosticKey.READONLY_VAR, name=node.name)
+            self._report_error(msg, line=self.current_line, context="for")
+            if self.options.get("posix", False) and self._is_noninteractive():
+                raise SystemExit(1)
+            return 1
         if node.items:
             items: List[str] = []
             for w in node.items:
@@ -9840,7 +9884,7 @@ class Runtime:
                     line=self.current_line,
                     context="export",
                 )
-                return 2
+                return self._maybe_fatal_special_builtin_error("export", 2)
             break
         status = 0
         for arg in args[idx:]:
@@ -9869,7 +9913,7 @@ class Runtime:
                 else:
                     self.env[arg] = self.env.get(arg, "")
                     self._set_var_attrs(arg, exported=True)
-        return status
+        return self._maybe_fatal_special_builtin_error("export", status)
 
     def _run_readonly(self, args: List[str]) -> int:
         if not args:
@@ -9890,7 +9934,7 @@ class Runtime:
                 continue
             self.readonly_vars.add(arg)
             self.env.setdefault(arg, self._get_var(arg))
-        return status
+        return self._maybe_fatal_special_builtin_error("readonly", status)
 
     def _run_unset(self, args: List[str]) -> int:
         mode_vars = True
@@ -9908,7 +9952,7 @@ class Runtime:
                         line=self.current_line,
                         context="unset",
                     )
-                    return 2
+                    return self._maybe_fatal_special_builtin_error("unset", 2)
                 valid = True
                 for ch in arg[1:]:
                     if ch == "v":
@@ -9925,7 +9969,7 @@ class Runtime:
                         line=self.current_line,
                         context="unset",
                     )
-                    return 2
+                    return self._maybe_fatal_special_builtin_error("unset", 2)
                 idx += 1
                 continue
             break
