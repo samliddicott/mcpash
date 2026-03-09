@@ -559,6 +559,8 @@ class Runtime:
         "set",
         "declare",
         "typeset",
+        "command",
+        "builtin",
         "shift",
         "getopts",
         "alias",
@@ -5694,12 +5696,22 @@ class Runtime:
         return None
 
     def _run_source(self, path: str, args: List[str], builtin_name: str | None = None) -> int:
-        if "/" not in path and self._shopts.get("sourcepath", False):
+        orig_path = path
+        found_via_path = False
+        if "/" not in path and (self._shopts.get("sourcepath", False) or self.options.get("posix", False)):
             for d in self.env.get("PATH", os.defpath).split(os.pathsep):
                 candidate = os.path.join(d, path)
                 if os.path.isfile(candidate):
                     path = candidate
+                    found_via_path = True
                     break
+            if (
+                not found_via_path
+                and self.options.get("posix", False)
+                and builtin_name in {".", "source"}
+            ):
+                self._report_error(f"{orig_path}: No such file or directory", line=self.current_line)
+                return 1
         try:
             with open(path, "r", encoding="utf-8", errors="surrogateescape") as f:
                 source = f.read()
@@ -6335,6 +6347,26 @@ class Runtime:
 
     def _run_alias(self, args: List[str]) -> int:
         status = 0
+        show_with_prefix = False
+        idx = 0
+        while idx < len(args):
+            arg = args[idx]
+            if arg == "--":
+                idx += 1
+                break
+            if arg == "-p":
+                show_with_prefix = True
+                idx += 1
+                continue
+            if arg.startswith("-"):
+                self._report_error(
+                    self._diag_msg(DiagnosticKey.ILLEGAL_OPTION, opt=arg),
+                    line=self.current_line,
+                    context="alias",
+                )
+                return 2
+            break
+        args = args[idx:]
         if not args:
             for name in sorted(self.aliases):
                 print(f"alias {name}='{self.aliases[name]}'")
@@ -6345,7 +6377,10 @@ class Runtime:
                 self.aliases[name] = value
                 continue
             if arg in self.aliases:
-                print(f"alias {arg}='{self.aliases[arg]}'")
+                if show_with_prefix:
+                    print(f"alias {arg}='{self.aliases[arg]}'")
+                else:
+                    print(f"{arg}='{self.aliases[arg]}'")
             else:
                 print(self._diag_msg(DiagnosticKey.ALIAS_NOT_FOUND, name=arg), file=sys.stderr)
                 status = 1
@@ -9868,6 +9903,7 @@ class Runtime:
 
     def _run_export(self, args: List[str]) -> int:
         unexport = False
+        print_only = False
         idx = 0
         while idx < len(args):
             arg = args[idx]
@@ -9878,6 +9914,10 @@ class Runtime:
                 unexport = True
                 idx += 1
                 continue
+            if arg == "-p":
+                print_only = True
+                idx += 1
+                continue
             if arg.startswith("-"):
                 self._report_error(
                     self._diag_msg(DiagnosticKey.ILLEGAL_OPTION, opt=arg),
@@ -9886,6 +9926,12 @@ class Runtime:
                 )
                 return self._maybe_fatal_special_builtin_error("export", 2)
             break
+        if print_only and idx >= len(args):
+            for name in sorted(self.env.keys()):
+                if "exported" not in self._var_attrs.get(name, set()):
+                    continue
+                print(f'declare -x {name}="{self.env.get(name, "")}"')
+            return 0
         status = 0
         for arg in args[idx:]:
             if "=" in arg:
@@ -9916,6 +9962,10 @@ class Runtime:
         return self._maybe_fatal_special_builtin_error("export", status)
 
     def _run_readonly(self, args: List[str]) -> int:
+        if args == ["-p"]:
+            for name in sorted(self.readonly_vars):
+                print(f"readonly {name}='{self._get_var(name)}'")
+            return 0
         if not args:
             for name in sorted(self.readonly_vars):
                 print(f"readonly {name}='{self._get_var(name)}'")
@@ -11173,16 +11223,17 @@ class Runtime:
     def _run_echo(self, args: List[str]) -> int:
         newline = True
         i = 0
-        while i < len(args) and args[i].startswith("-") and args[i] != "-":
-            opt = args[i][1:]
-            if opt == "":
+        if not self._shopts.get("xpg_echo", False):
+            while i < len(args) and args[i].startswith("-") and args[i] != "-":
+                opt = args[i][1:]
+                if opt == "":
+                    break
+                if all(ch == "n" for ch in opt):
+                    if "n" in opt:
+                        newline = False
+                    i += 1
+                    continue
                 break
-            if all(ch == "n" for ch in opt):
-                if "n" in opt:
-                    newline = False
-                i += 1
-                continue
-            break
         args = args[i:]
         data = " ".join(args)
         if self._shopts.get("xpg_echo", False):

@@ -1,6 +1,6 @@
 # Feature Gap Board
 
-Generated: 2026-03-09 10:22:51Z
+Generated: 2026-03-09 11:24:07Z
 
 Purpose: implementation-first backlog grouped by feature topic (rows where either default or posix status is not `covered`).
 
@@ -8,15 +8,11 @@ Purpose: implementation-first backlog grouped by feature topic (rows where eithe
 
 | Topic | Gap Rows |
 |---|---:|
-| `builtin:alias` | 1 |
-| `builtin:bg` | 1 |
 | `builtin:bind` | 1 |
 | `builtin:break` | 2 |
-| `builtin:cd` | 2 |
-| `builtin:command` | 12 |
+| `builtin:command` | 10 |
 | `builtin:continue` | 1 |
-| `builtin:echo` | 2 |
-| `builtin:export` | 1 |
+| `builtin:echo` | 1 |
 | `builtin:history` | 3 |
 | `builtin:jobs` | 1 |
 | `builtin:kill` | 3 |
@@ -25,8 +21,6 @@ Purpose: implementation-first backlog grouped by feature topic (rows where eithe
 | `builtin:read` | 1 |
 | `builtin:return` | 2 |
 | `builtin:set` | 5 |
-| `builtin:shift` | 1 |
-| `builtin:source` | 1 |
 | `builtin:test` | 3 |
 | `builtin:trap` | 2 |
 | `builtin:type` | 1 |
@@ -34,10 +28,8 @@ Purpose: implementation-first backlog grouped by feature topic (rows where eithe
 | `builtin:unset` | 1 |
 | `builtin:wait` | 3 |
 | `runtime:job-control` | 4 |
-| `runtime:signals-traps` | 1 |
 | `subcategory:compat-delta` | 3 |
 | `subcategory:expansion-redir` | 1 |
-| `subcategory:interactive` | 1 |
 | `subcategory:misc-posix-mode` | 1 |
 | `syntax:arithmetic` | 2 |
 | `syntax:command-substitution` | 1 |
@@ -45,18 +37,6 @@ Purpose: implementation-first backlog grouped by feature topic (rows where eithe
 | `syntax:quoting` | 1 |
 
 ## Gap Topics
-
-### `builtin:alias`
-
-| Req ID | Source | Status (default/posix) | Tests | Feature |
-|---|---|---|---|---|
-| `BPOSIX.CORE.047` | `bash-posix-doc` | `partial / partial` | `bash-posix-doc-047.sh` | When the ‘alias’ builtin displays alias definitions, it does not display them with a leading ‘alias ’ unless the ‘-p’ option is supplied. |
-
-### `builtin:bg`
-
-| Req ID | Source | Status (default/posix) | Tests | Feature |
-|---|---|---|---|---|
-| `BPOSIX.CORE.048` | `bash-posix-doc` | `partial / partial` | `bash-posix-doc-048.sh` | The ‘bg’ builtin uses the required format to describe each job placed in the background, which does not include an indication of whether the job is the current or previous job. |
 
 ### `builtin:bind`
 
@@ -70,13 +50,6 @@ Purpose: implementation-first backlog grouped by feature topic (rows where eithe
 |---|---|---|---|---|
 | `BCOMPAT.43.002` | `bash-compat-doc` | `partial / partial` | `bash-compat-doc-43-002.sh` | when executing a shell function, the loop state (while/until/etc.) is not reset, so `break' or `continue' in that function will break or continue loops in the calling context. Bash-4.4 and later reset the loop state to prevent this |
 | `BCOMPAT.44.002` | `bash-compat-doc` | `partial / partial` | `bash-compat-doc-44-002.sh` | a subshell inherits loops from its parent context, so `break' or `continue' will cause the subshell to exit. Bash-5.0 and later reset the loop state to prevent the exit |
-
-### `builtin:cd`
-
-| Req ID | Source | Status (default/posix) | Tests | Feature |
-|---|---|---|---|---|
-| `BPOSIX.CORE.049` | `bash-posix-doc` | `partial / partial` | `bash-posix-doc-049.sh` | When the ‘cd’ builtin is invoked in logical mode, and the pathname constructed from ‘$PWD’ and the directory name supplied as an argument does not refer to an existing directory, ‘cd’ will fail instead of falling back to physical mode. |
-| `BPOSIX.CORE.050` | `bash-posix-doc` | `partial / partial` | `bash-posix-doc-050.sh` | When the ‘cd’ builtin cannot change a directory because the length of the pathname constructed from ‘$PWD’ and the directory name supplied as an argument exceeds ‘PATH_MAX’ when canonicalized, ‘cd’ will attempt to use the supplied directory name. |
 
 ### `builtin:command`
 
@@ -92,8 +65,6 @@ Purpose: implementation-first backlog grouped by feature topic (rows where eithe
 | `BCOMPAT.51.004` | `bash-compat-doc` | `partial / partial` | `bash-compat-doc-51-004.sh` | indexed and associative array subscripts used as arguments to the operators in the [[ conditional command (e.g., `[[ -v') can be expanded more than once. Bash-5.2 behaves as if the `assoc_expand_once' option were enabled. |
 | `BCOMPAT.51.010` | `bash-compat-doc` | `partial / partial` | `bash-compat-doc-51-010.sh` | Parsing command substitutions will act as if extended glob is enabled, so that parsing a command substitution containing an extglob pattern (say, as part of a shell function) will not fail. This assumes the intent is to enable extglob before the command is executed and word expansions are performed. It will fail at word expansion time if extglob hasn't been enabled by the time the command is executed. |
 | `BPOSIX.CORE.027` | `bash-posix-doc` | `partial / partial` | `bash-posix-doc-027.sh` | The ‘vi’ editing mode will invoke the ‘vi’ editor directly when the ‘v’ command is run, instead of checking ‘$VISUAL’ and ‘$EDITOR’. |
-| `BPOSIX.CORE.042` | `bash-posix-doc` | `partial / partial` | `bash-posix-doc-042.sh` | The ‘command’ builtin does not prevent builtins that take assignment statements as arguments from expanding them as assignment statements; when not in POSIX mode, declaration commands lose their assignment statement expansion properties when preceded by ‘command’. |
-| `BPOSIX.CORE.043` | `bash-posix-doc` | `partial / partial` | `bash-posix-doc-043.sh` | Enabling POSIX mode has the effect of setting the ‘inherit_errexit’ option, so subshells spawned to execute command substitutions inherit the value of the ‘-e’ option from the parent shell. When the ‘inherit_errexit’ option is not enabled, Bash clears the ‘-e’ option in such subshells. |
 
 ### `builtin:continue`
 
@@ -105,14 +76,7 @@ Purpose: implementation-first backlog grouped by feature topic (rows where eithe
 
 | Req ID | Source | Status (default/posix) | Tests | Feature |
 |---|---|---|---|---|
-| `BPOSIX.CORE.051` | `bash-posix-doc` | `partial / partial` | `bash-posix-doc-051.sh` | When the ‘xpg_echo’ option is enabled, Bash does not attempt to interpret any arguments to ‘echo’ as options. ‘echo’ displays each argument after converting escape sequences. |
 | `BPOSIX.EXTRA.003` | `bash-posix-doc` | `partial / out_of_scope` | `bash-posix-doc-extra-003.sh` | As noted above, Bash requires the ‘xpg_echo’ option to be enabled for the ‘echo’ builtin to be fully conformant. |
-
-### `builtin:export`
-
-| Req ID | Source | Status (default/posix) | Tests | Feature |
-|---|---|---|---|---|
-| `BPOSIX.CORE.052` | `bash-posix-doc` | `partial / partial` | `bash-posix-doc-052.sh` | The ‘export’ and ‘readonly’ builtin commands display their output in the format required by POSIX. |
 
 ### `builtin:history`
 
@@ -171,18 +135,6 @@ Purpose: implementation-first backlog grouped by feature topic (rows where eithe
 | `BPOSIX.CORE.064` | `bash-posix-doc` | `partial / partial` | `bash-posix-doc-064.sh` | When the ‘set’ builtin is invoked without options, it displays variable values without quotes, unless they contain shell metacharacters, even if the result contains nonprinting characters. |
 | `BPOSIX.CORE.069` | `bash-posix-doc` | `partial / partial` | `bash-posix-doc-069.sh` | ‘trap -p’ without arguments displays signals whose dispositions are set to SIG_DFL and those that were ignored when the shell started, not just trapped signals. |
 
-### `builtin:shift`
-
-| Req ID | Source | Status (default/posix) | Tests | Feature |
-|---|---|---|---|---|
-| `BPOSIX.CORE.044` | `bash-posix-doc` | `partial / partial` | `bash-posix-doc-044.sh` | Enabling POSIX mode has the effect of setting the ‘shift_verbose’ option, so numeric arguments to ‘shift’ that exceed the number of positional parameters will result in an error message. |
-
-### `builtin:source`
-
-| Req ID | Source | Status (default/posix) | Tests | Feature |
-|---|---|---|---|---|
-| `BPOSIX.CORE.046` | `bash-posix-doc` | `partial / partial` | `bash-posix-doc-046.sh` | The ‘.’ and ‘source’ builtins do not search the current directory for the filename argument if it is not found by searching ‘PATH’. |
-
 ### `builtin:test`
 
 | Req ID | Source | Status (default/posix) | Tests | Feature |
@@ -233,12 +185,6 @@ Purpose: implementation-first backlog grouped by feature topic (rows where eithe
 | `BPOSIX.CORE.024` | `bash-posix-doc` | `partial / partial` | `bash-posix-doc-024.sh` | If the shell is interactive, Bash does not perform job notifications between executing commands in lists separated by ‘;’ or newline. Non-interactive shells print status messages after a foreground job in a list completes. |
 | `BPOSIX.CORE.025` | `bash-posix-doc` | `partial / partial` | `bash-posix-doc-025.sh` | If the shell is interactive, Bash waits until the next prompt before printing the status of a background job that changes status or a foreground job that terminates due to a signal. Non-interactive shells print status messages after a foreground job completes. |
 
-### `runtime:signals-traps`
-
-| Req ID | Source | Status (default/posix) | Tests | Feature |
-|---|---|---|---|---|
-| `BPOSIX.CORE.041` | `bash-posix-doc` | `partial / partial` | `bash-posix-doc-041.sh` | Assignment statements preceding POSIX special builtins persist in the shell environment after the builtin completes. |
-
 ### `subcategory:compat-delta`
 
 | Req ID | Source | Status (default/posix) | Tests | Feature |
@@ -252,12 +198,6 @@ Purpose: implementation-first backlog grouped by feature topic (rows where eithe
 | Req ID | Source | Status (default/posix) | Tests | Feature |
 |---|---|---|---|---|
 | `BPOSIX.EXTRA.001` | `bash-posix-doc` | `partial / out_of_scope` | `bash-posix-doc-extra-001.sh` | POSIX requires that word splitting be byte-oriented. That is, each _byte_ in the value of ‘IFS’ potentially splits a word, even if that byte is part of a multibyte character in ‘IFS’ or part of multibyte character in the word. Bash allows multibyte characters in the value of ‘IFS’, treating a valid multibyte character as a single delimiter, and will not split a valid multibyte character even if one of the bytes composing that character appears in ‘IFS’. This is POSIX interpretation 1560, further modified by issue 1924. |
-
-### `subcategory:interactive`
-
-| Req ID | Source | Status (default/posix) | Tests | Feature |
-|---|---|---|---|---|
-| `BPOSIX.CORE.045` | `bash-posix-doc` | `partial / partial` | `bash-posix-doc-045.sh` | Enabling POSIX mode has the effect of setting the ‘interactive_comments’ option (*note Comments::). |
 
 ### `subcategory:misc-posix-mode`
 

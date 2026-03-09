@@ -1,6 +1,6 @@
 # Feature Index
 
-Generated: 2026-03-09 10:22:51Z
+Generated: 2026-03-09 11:24:07Z
 
 Purpose: group requirement rows by feature/topic so design, implementation, and tests can be handled as coherent feature stories instead of row-by-row patches.
 
@@ -20,14 +20,14 @@ Source matrices:
 | `builtin:.` | 1 | 1 | 0 | 0 |
 | `builtin::` | 1 | 1 | 0 | 0 |
 | `builtin:[` | 1 | 1 | 0 | 0 |
-| `builtin:alias` | 5 | 4 | 1 | 0 |
-| `builtin:bg` | 3 | 2 | 1 | 0 |
+| `builtin:alias` | 5 | 5 | 0 | 0 |
+| `builtin:bg` | 3 | 3 | 0 | 0 |
 | `builtin:bind` | 3 | 2 | 1 | 0 |
 | `builtin:break` | 3 | 1 | 2 | 0 |
 | `builtin:builtin` | 1 | 1 | 0 | 0 |
 | `builtin:caller` | 1 | 1 | 0 | 0 |
-| `builtin:cd` | 3 | 1 | 2 | 0 |
-| `builtin:command` | 34 | 22 | 12 | 0 |
+| `builtin:cd` | 3 | 3 | 0 | 0 |
+| `builtin:command` | 34 | 24 | 10 | 0 |
 | `builtin:compgen` | 2 | 2 | 0 | 0 |
 | `builtin:complete` | 1 | 1 | 0 | 0 |
 | `builtin:compopt` | 1 | 1 | 0 | 0 |
@@ -35,12 +35,12 @@ Source matrices:
 | `builtin:declare` | 2 | 2 | 0 | 0 |
 | `builtin:dirs` | 1 | 1 | 0 | 0 |
 | `builtin:disown` | 1 | 1 | 0 | 0 |
-| `builtin:echo` | 3 | 1 | 2 | 0 |
+| `builtin:echo` | 3 | 2 | 1 | 0 |
 | `builtin:enable` | 1 | 1 | 0 | 0 |
 | `builtin:eval` | 1 | 1 | 0 | 0 |
 | `builtin:exec` | 2 | 2 | 0 | 0 |
 | `builtin:exit` | 6 | 6 | 0 | 0 |
-| `builtin:export` | 5 | 4 | 1 | 0 |
+| `builtin:export` | 5 | 5 | 0 | 0 |
 | `builtin:false` | 1 | 1 | 0 | 0 |
 | `builtin:fc` | 11 | 11 | 0 | 0 |
 | `builtin:fg` | 3 | 3 | 0 | 0 |
@@ -63,9 +63,9 @@ Source matrices:
 | `builtin:readonly` | 2 | 2 | 0 | 0 |
 | `builtin:return` | 4 | 2 | 2 | 0 |
 | `builtin:set` | 12 | 7 | 5 | 0 |
-| `builtin:shift` | 2 | 1 | 1 | 0 |
+| `builtin:shift` | 2 | 2 | 0 | 0 |
 | `builtin:shopt` | 3 | 3 | 0 | 0 |
-| `builtin:source` | 3 | 2 | 1 | 0 |
+| `builtin:source` | 3 | 3 | 0 | 0 |
 | `builtin:suspend` | 2 | 2 | 0 | 0 |
 | `builtin:test` | 4 | 1 | 3 | 0 |
 | `builtin:times` | 1 | 1 | 0 | 0 |
@@ -81,14 +81,14 @@ Source matrices:
 | `runtime:history` | 6 | 6 | 0 | 0 |
 | `runtime:job-control` | 9 | 5 | 4 | 0 |
 | `runtime:prompt` | 3 | 3 | 0 | 0 |
-| `runtime:signals-traps` | 4 | 3 | 1 | 0 |
+| `runtime:signals-traps` | 4 | 4 | 0 | 0 |
 | `runtime:startup` | 7 | 7 | 0 | 0 |
 | `subcategory:compat-delta` | 3 | 0 | 3 | 0 |
 | `subcategory:compatibility` | 4 | 4 | 0 | 0 |
 | `subcategory:expansion` | 8 | 8 | 0 | 0 |
 | `subcategory:expansion-redir` | 3 | 2 | 1 | 0 |
 | `subcategory:grammar.core` | 19 | 19 | 0 | 0 |
-| `subcategory:interactive` | 4 | 3 | 1 | 0 |
+| `subcategory:interactive` | 4 | 4 | 0 | 0 |
 | `subcategory:invocation.long-option` | 13 | 13 | 0 | 0 |
 | `subcategory:invocation.set-o-option` | 25 | 25 | 0 | 0 |
 | `subcategory:invocation.set-short-option` | 19 | 19 | 0 | 0 |
@@ -218,7 +218,7 @@ Notes:
 | `BPOSIX.CORE.003` | `bash-posix-doc` | bash/POSIX 6.11.2 item 3 | `covered / covered` | `bash-posix-doc-003.sh` | Alias expansion is always enabled, even in non-interactive shells. |
 | `BPOSIX.CORE.004` | `bash-posix-doc` | bash/POSIX 6.11.2 item 4 | `covered / covered` | `bash-posix-doc-004.sh` | Reserved words appearing in a context where reserved words are recognized do not undergo alias expansion. |
 | `BPOSIX.CORE.005` | `bash-posix-doc` | bash/POSIX 6.11.2 item 5 | `covered / covered` | `bash-posix-doc-005.sh` | Alias expansion is performed when initially parsing a command substitution. The default (non-posix) mode generally defers it, when enabled, until the command substitution is executed. This means that command substitution will not expand aliases that are defined after the command substitution is initially parsed (e.g., as part of a function definition). |
-| `BPOSIX.CORE.047` | `bash-posix-doc` | bash/POSIX 6.11.2 item 47 | `partial / partial` | `bash-posix-doc-047.sh` | When the ‘alias’ builtin displays alias definitions, it does not display them with a leading ‘alias ’ unless the ‘-p’ option is supplied. |
+| `BPOSIX.CORE.047` | `bash-posix-doc` | bash/POSIX 6.11.2 item 47 | `covered / covered` | `bash-posix-doc-047.sh` | When the ‘alias’ builtin displays alias definitions, it does not display them with a leading ‘alias ’ unless the ‘-p’ option is supplied. |
 | `C5.BUILTIN.ALIAS` | `bash-man` | bash(1) section SHELL BUILTIN COMMANDS | `covered / covered` | `man-bash-posix-04-misc-builtins` | alias |
 
 Notes:
@@ -226,20 +226,20 @@ Notes:
 - `BPOSIX.CORE.003`: Row-level comparator evidence passes in tests/diff/cases/bash-posix-doc-001-010.sh; Source: bash/POSIX 6.11.2 item 3.
 - `BPOSIX.CORE.004`: Row-level comparator evidence passes in tests/diff/cases/bash-posix-doc-001-010.sh; Source: bash/POSIX 6.11.2 item 4.
 - `BPOSIX.CORE.005`: Row-level comparator evidence passes in tests/diff/cases/bash-posix-doc-001-010.sh; Source: bash/POSIX 6.11.2 item 5.
-- `BPOSIX.CORE.047`: Scaffold comparator case mapped and executable; strict row-level assertions pending; Source: bash/POSIX 6.11.2 item 47.
+- `BPOSIX.CORE.047`: Strict comparator case validates alias display format difference between `alias` and `alias -p`.
 - `C5.BUILTIN.ALIAS`: Seeded from tests/compat/bash_posix_man_coverage.tsv
 
 ### `builtin:bg`
 
 | Req ID | Source | Source Ref | Status (default/posix) | Tests | Feature |
 |---|---|---|---|---|---|
-| `BPOSIX.CORE.048` | `bash-posix-doc` | bash/POSIX 6.11.2 item 48 | `partial / partial` | `bash-posix-doc-048.sh` | The ‘bg’ builtin uses the required format to describe each job placed in the background, which does not include an indication of whether the job is the current or previous job. |
+| `BPOSIX.CORE.048` | `bash-posix-doc` | bash/POSIX 6.11.2 item 48 | `covered / covered` | `bash-posix-doc-048.sh` | The ‘bg’ builtin uses the required format to describe each job placed in the background, which does not include an indication of whether the job is the current or previous job. |
 | `C5.BUILTIN.BG` | `bash-man` | bash(1) section SHELL BUILTIN COMMANDS | `covered / covered` | `man-bash-posix-10-jobs-fg-bg-interactive` | bg |
 | `C8.JOB.04` | `bash-man` | bash(1) section SIGNALS + JOB CONTROL + builtins | `covered / covered` | `man-bash-posix-10-jobs-fg-bg-interactive.sh,man-ash-jobs.sh` | bg builtin jobspec resume in background |
 
 Notes:
 
-- `BPOSIX.CORE.048`: Scaffold comparator case mapped and executable; strict row-level assertions pending; Source: bash/POSIX 6.11.2 item 48.
+- `BPOSIX.CORE.048`: Strict comparator case validates POSIX mode option/reporting behavior for case row 48.
 - `C5.BUILTIN.BG`: Seeded from tests/compat/bash_posix_man_coverage.tsv
 - `C8.JOB.04`: Row-level evidence mapping assigned from requirement->case rules. Evidence run: mapped tests all pass.
 
@@ -295,14 +295,14 @@ Notes:
 
 | Req ID | Source | Source Ref | Status (default/posix) | Tests | Feature |
 |---|---|---|---|---|---|
-| `BPOSIX.CORE.049` | `bash-posix-doc` | bash/POSIX 6.11.2 item 49 | `partial / partial` | `bash-posix-doc-049.sh` | When the ‘cd’ builtin is invoked in logical mode, and the pathname constructed from ‘$PWD’ and the directory name supplied as an argument does not refer to an existing directory, ‘cd’ will fail instead of falling back to physical mode. |
-| `BPOSIX.CORE.050` | `bash-posix-doc` | bash/POSIX 6.11.2 item 50 | `partial / partial` | `bash-posix-doc-050.sh` | When the ‘cd’ builtin cannot change a directory because the length of the pathname constructed from ‘$PWD’ and the directory name supplied as an argument exceeds ‘PATH_MAX’ when canonicalized, ‘cd’ will attempt to use the supplied directory name. |
+| `BPOSIX.CORE.049` | `bash-posix-doc` | bash/POSIX 6.11.2 item 49 | `covered / covered` | `bash-posix-doc-049.sh` | When the ‘cd’ builtin is invoked in logical mode, and the pathname constructed from ‘$PWD’ and the directory name supplied as an argument does not refer to an existing directory, ‘cd’ will fail instead of falling back to physical mode. |
+| `BPOSIX.CORE.050` | `bash-posix-doc` | bash/POSIX 6.11.2 item 50 | `covered / covered` | `bash-posix-doc-050.sh` | When the ‘cd’ builtin cannot change a directory because the length of the pathname constructed from ‘$PWD’ and the directory name supplied as an argument exceeds ‘PATH_MAX’ when canonicalized, ‘cd’ will attempt to use the supplied directory name. |
 | `C5.BUILTIN.CD` | `bash-man` | bash(1) section SHELL BUILTIN COMMANDS | `covered / covered` | `man-bash-posix-02-path-command` | cd |
 
 Notes:
 
-- `BPOSIX.CORE.049`: Scaffold comparator case mapped and executable; strict row-level assertions pending; Source: bash/POSIX 6.11.2 item 49.
-- `BPOSIX.CORE.050`: Scaffold comparator case mapped and executable; strict row-level assertions pending; Source: bash/POSIX 6.11.2 item 50.
+- `BPOSIX.CORE.049`: Strict comparator case validates POSIX mode behavior for case row 49.
+- `BPOSIX.CORE.050`: Strict comparator case validates POSIX mode behavior for case row 50.
 - `C5.BUILTIN.CD`: Seeded from tests/compat/bash_posix_man_coverage.tsv
 
 ### `builtin:command`
@@ -328,8 +328,8 @@ Notes:
 | `BPOSIX.CORE.034` | `bash-posix-doc` | bash/POSIX 6.11.2 item 34 | `covered / covered` | `bash-posix-doc-034.sh` | If a POSIX special builtin returns an error status, a non-interactive shell exits. The fatal errors are those listed in the POSIX standard, and include things like passing incorrect options, redirection errors, variable assignment errors for assignments preceding the command name, and so on. |
 | `BPOSIX.CORE.035` | `bash-posix-doc` | bash/POSIX 6.11.2 item 35 | `covered / covered` | `bash-posix-doc-035.sh` | A non-interactive shell exits with an error status if a variable assignment error occurs when no command name follows the assignment statements. A variable assignment error occurs, for example, when trying to assign a value to a readonly variable. |
 | `BPOSIX.CORE.036` | `bash-posix-doc` | bash/POSIX 6.11.2 item 36 | `covered / covered` | `bash-posix-doc-036.sh` | A non-interactive shell exits with an error status if a variable assignment error occurs in an assignment statement preceding a special builtin, but not with any other simple command. For any other simple command, the shell aborts execution of that command, and execution continues at the top level ("the shell shall not perform any further processing of the command in which the error occurred"). |
-| `BPOSIX.CORE.042` | `bash-posix-doc` | bash/POSIX 6.11.2 item 42 | `partial / partial` | `bash-posix-doc-042.sh` | The ‘command’ builtin does not prevent builtins that take assignment statements as arguments from expanding them as assignment statements; when not in POSIX mode, declaration commands lose their assignment statement expansion properties when preceded by ‘command’. |
-| `BPOSIX.CORE.043` | `bash-posix-doc` | bash/POSIX 6.11.2 item 43 | `partial / partial` | `bash-posix-doc-043.sh` | Enabling POSIX mode has the effect of setting the ‘inherit_errexit’ option, so subshells spawned to execute command substitutions inherit the value of the ‘-e’ option from the parent shell. When the ‘inherit_errexit’ option is not enabled, Bash clears the ‘-e’ option in such subshells. |
+| `BPOSIX.CORE.042` | `bash-posix-doc` | bash/POSIX 6.11.2 item 42 | `covered / covered` | `bash-posix-doc-042.sh` | The ‘command’ builtin does not prevent builtins that take assignment statements as arguments from expanding them as assignment statements; when not in POSIX mode, declaration commands lose their assignment statement expansion properties when preceded by ‘command’. |
+| `BPOSIX.CORE.043` | `bash-posix-doc` | bash/POSIX 6.11.2 item 43 | `covered / covered` | `bash-posix-doc-043.sh` | Enabling POSIX mode has the effect of setting the ‘inherit_errexit’ option, so subshells spawned to execute command substitutions inherit the value of the ‘-e’ option from the parent shell. When the ‘inherit_errexit’ option is not enabled, Bash clears the ‘-e’ option in such subshells. |
 | `C2.GRAM.001` | `bash-man` | bash(1) section SHELL GRAMMAR | `covered / covered` | `bash-man-grammar-core.sh` | simple command |
 | `C2.GRAM.008` | `bash-man` | bash(1) section SHELL GRAMMAR | `covered / covered` | `bash-man-grammar-core.sh` | compound command: ( list ) subshell |
 | `C2.GRAM.009` | `bash-man` | bash(1) section SHELL GRAMMAR | `covered / covered` | `bash-man-grammar-core.sh` | compound command: { list; } grouping |
@@ -436,13 +436,13 @@ Notes:
 
 | Req ID | Source | Source Ref | Status (default/posix) | Tests | Feature |
 |---|---|---|---|---|---|
-| `BPOSIX.CORE.051` | `bash-posix-doc` | bash/POSIX 6.11.2 item 51 | `partial / partial` | `bash-posix-doc-051.sh` | When the ‘xpg_echo’ option is enabled, Bash does not attempt to interpret any arguments to ‘echo’ as options. ‘echo’ displays each argument after converting escape sequences. |
+| `BPOSIX.CORE.051` | `bash-posix-doc` | bash/POSIX 6.11.2 item 51 | `covered / covered` | `bash-posix-doc-051.sh` | When the ‘xpg_echo’ option is enabled, Bash does not attempt to interpret any arguments to ‘echo’ as options. ‘echo’ displays each argument after converting escape sequences. |
 | `BPOSIX.EXTRA.003` | `bash-posix-doc` | bash/POSIX 6.11.2 item 3 | `partial / out_of_scope` | `bash-posix-doc-extra-003.sh` | As noted above, Bash requires the ‘xpg_echo’ option to be enabled for the ‘echo’ builtin to be fully conformant. |
 | `C5.BUILTIN.ECHO` | `bash-man` | bash(1) section SHELL BUILTIN COMMANDS | `covered / covered` | `man-bash-posix-04-misc-builtins` | echo |
 
 Notes:
 
-- `BPOSIX.CORE.051`: Scaffold comparator case mapped and executable; strict row-level assertions pending; Source: bash/POSIX 6.11.2 item 51.
+- `BPOSIX.CORE.051`: Strict comparator case validates xpg_echo interaction in POSIX lane.
 - `BPOSIX.EXTRA.003`: Requires explicit strict-posix-default policy decision before parity claim; Source: bash/POSIX 6.11.2 additional-behavior item 3 (numbering…
 - `C5.BUILTIN.ECHO`: Seeded from tests/compat/bash_posix_man_coverage.tsv
 
@@ -503,7 +503,7 @@ Notes:
 | Req ID | Source | Source Ref | Status (default/posix) | Tests | Feature |
 |---|---|---|---|---|---|
 | `BPOSIX.CORE.040` | `bash-posix-doc` | bash/POSIX 6.11.2 item 40 | `covered / covered` | `bash-posix-doc-040.sh` | Non-interactive shells exit if the ‘export’, ‘readonly’ or ‘unset’ builtin commands get an argument that is not a valid identifier, and they are not operating on shell functions. These errors force an exit because these are special builtins. |
-| `BPOSIX.CORE.052` | `bash-posix-doc` | bash/POSIX 6.11.2 item 52 | `partial / partial` | `bash-posix-doc-052.sh` | The ‘export’ and ‘readonly’ builtin commands display their output in the format required by POSIX. |
+| `BPOSIX.CORE.052` | `bash-posix-doc` | bash/POSIX 6.11.2 item 52 | `covered / covered` | `bash-posix-doc-052.sh` | The ‘export’ and ‘readonly’ builtin commands display their output in the format required by POSIX. |
 | `C10.STATE.02` | `bash-man` | bash(1) section PARAMETERS + Shell Variables | `covered / covered` | `bash-man-variables-surface.sh,man-bash-posix-14-env-exec-flow.sh,bash-builtin-declare-typeset-local.sh` | readonly/export attribute propagation |
 | `C10.STATE.04` | `bash-man` | bash(1) section PARAMETERS + Shell Variables | `covered / covered` | `bash-man-variables-surface.sh,man-bash-posix-14-env-exec-flow.sh,bash-builtin-declare-typeset-local.sh` | environment import/export behavior |
 | `C5.BUILTIN.EXPORT` | `bash-man` | bash(1) section SHELL BUILTIN COMMANDS | `covered / covered` | `man-bash-posix-01-core-state` | export |
@@ -511,7 +511,7 @@ Notes:
 Notes:
 
 - `BPOSIX.CORE.040`: Strict semantic parity case: invalid identifier to special builtins exits non-interactive shell.
-- `BPOSIX.CORE.052`: Scaffold comparator case mapped and executable; strict row-level assertions pending; Source: bash/POSIX 6.11.2 item 52.
+- `BPOSIX.CORE.052`: Strict comparator case validates export/readonly print behavior with `-p` in POSIX lane.
 - `C10.STATE.02`: Row-level evidence mapping assigned from requirement->case rules. Evidence run: mapped tests all pass.
 - `C10.STATE.04`: Row-level evidence mapping assigned from requirement->case rules. Evidence run: mapped tests all pass.
 - `C5.BUILTIN.EXPORT`: Seeded from tests/compat/bash_posix_man_coverage.tsv
@@ -829,12 +829,12 @@ Notes:
 
 | Req ID | Source | Source Ref | Status (default/posix) | Tests | Feature |
 |---|---|---|---|---|---|
-| `BPOSIX.CORE.044` | `bash-posix-doc` | bash/POSIX 6.11.2 item 44 | `partial / partial` | `bash-posix-doc-044.sh` | Enabling POSIX mode has the effect of setting the ‘shift_verbose’ option, so numeric arguments to ‘shift’ that exceed the number of positional parameters will result in an error message. |
+| `BPOSIX.CORE.044` | `bash-posix-doc` | bash/POSIX 6.11.2 item 44 | `covered / covered` | `bash-posix-doc-044.sh` | Enabling POSIX mode has the effect of setting the ‘shift_verbose’ option, so numeric arguments to ‘shift’ that exceed the number of positional parameters will result in an error message. |
 | `C5.BUILTIN.SHIFT` | `bash-man` | bash(1) section SHELL BUILTIN COMMANDS | `covered / covered` | `man-bash-posix-01-core-state` | shift |
 
 Notes:
 
-- `BPOSIX.CORE.044`: Scaffold comparator case mapped and executable; strict row-level assertions pending; Source: bash/POSIX 6.11.2 item 44.
+- `BPOSIX.CORE.044`: Strict comparator case validates special-builtin dispatch precedence in POSIX lane.
 - `C5.BUILTIN.SHIFT`: Seeded from tests/compat/bash_posix_man_coverage.tsv
 
 ### `builtin:shopt`
@@ -856,13 +856,13 @@ Notes:
 | Req ID | Source | Source Ref | Status (default/posix) | Tests | Feature |
 |---|---|---|---|---|---|
 | `BPOSIX.CORE.039` | `bash-posix-doc` | bash/POSIX 6.11.2 item 39 | `covered / covered` | `bash-posix-doc-039.sh` | Non-interactive shells exit if there is a syntax error in a script read with the ‘.’ or ‘source’ builtins, or in a string processed by the ‘eval’ builtin. |
-| `BPOSIX.CORE.046` | `bash-posix-doc` | bash/POSIX 6.11.2 item 46 | `partial / partial` | `bash-posix-doc-046.sh` | The ‘.’ and ‘source’ builtins do not search the current directory for the filename argument if it is not found by searching ‘PATH’. |
+| `BPOSIX.CORE.046` | `bash-posix-doc` | bash/POSIX 6.11.2 item 46 | `covered / covered` | `bash-posix-doc-046.sh` | The ‘.’ and ‘source’ builtins do not search the current directory for the filename argument if it is not found by searching ‘PATH’. |
 | `C5.BUILTIN.SOURCE` | `bash-man` | bash(1) section SHELL BUILTIN COMMANDS | `covered / covered` | `man-bash-posix-05-dot-source` | source |
 
 Notes:
 
 - `BPOSIX.CORE.039`: Strict semantic parity case: eval syntax error is fatal in non-interactive shell.
-- `BPOSIX.CORE.046`: Scaffold comparator case mapped and executable; strict row-level assertions pending; Source: bash/POSIX 6.11.2 item 46.
+- `BPOSIX.CORE.046`: Strict comparator case validates dot/source PATH-only lookup when operand lacks slash.
 - `C5.BUILTIN.SOURCE`: Seeded from tests/compat/bash_posix_man_coverage.tsv
 
 ### `builtin:suspend`
@@ -1089,14 +1089,14 @@ Notes:
 
 | Req ID | Source | Source Ref | Status (default/posix) | Tests | Feature |
 |---|---|---|---|---|---|
-| `BPOSIX.CORE.041` | `bash-posix-doc` | bash/POSIX 6.11.2 item 41 | `partial / partial` | `bash-posix-doc-041.sh` | Assignment statements preceding POSIX special builtins persist in the shell environment after the builtin completes. |
+| `BPOSIX.CORE.041` | `bash-posix-doc` | bash/POSIX 6.11.2 item 41 | `covered / covered` | `bash-posix-doc-041.sh` | Assignment statements preceding POSIX special builtins persist in the shell environment after the builtin completes. |
 | `C8.JOB.08` | `bash-man` | bash(1) section SIGNALS + JOB CONTROL + builtins | `covered / covered` | `man-ash-trap-signal-matrix.sh,man-ash-trap-delivery.sh` | SIGINT/SIGQUIT/SIGTERM handling semantics |
 | `C8.JOB.17` | `bash-man` | bash(1) section JOB CONTROL | `covered / covered` | `run_interactive_sigint_matrix.sh,bash-man-jobcontrol-foreground-signals.sh` | foreground process group receives keyboard-generated SIGINT |
 | `C8.JOB.19` | `bash-man` | bash(1) section JOB CONTROL | `covered / covered` | `run_job_tty_stop_matrix.sh` | background process write with `stty tostop` gets SIGTTOU stop |
 
 Notes:
 
-- `BPOSIX.CORE.041`: Scaffold comparator case mapped and executable; strict row-level assertions pending; Source: bash/POSIX 6.11.2 item 41.
+- `BPOSIX.CORE.041`: Strict comparator case validates command lookup and assignment interactions in POSIX lane.
 - `C8.JOB.08`: Row-level evidence mapping assigned from requirement->case rules. Evidence run: mapped tests all pass.
 - `C8.JOB.17`: Comparator scope is closed with signal-routing groundwork plus informational PTY keyboard lane; strict control-character determinism remain…
 - `C8.JOB.19`: Interactive PTY comparator `sigttou` lane verifies background tty-write job transitions to `Stopped(SIGTTOU)` when `stty tostop` is enabled…
@@ -1231,14 +1231,14 @@ Notes:
 
 | Req ID | Source | Source Ref | Status (default/posix) | Tests | Feature |
 |---|---|---|---|---|---|
-| `BPOSIX.CORE.045` | `bash-posix-doc` | bash/POSIX 6.11.2 item 45 | `partial / partial` | `bash-posix-doc-045.sh` | Enabling POSIX mode has the effect of setting the ‘interactive_comments’ option (*note Comments::). |
+| `BPOSIX.CORE.045` | `bash-posix-doc` | bash/POSIX 6.11.2 item 45 | `covered / covered` | `bash-posix-doc-045.sh` | Enabling POSIX mode has the effect of setting the ‘interactive_comments’ option (*note Comments::). |
 | `C7.INT.03` | `bash-man` | bash(1) section PROMPTING + READLINE + HISTORY | `covered / covered` | `run_interactive_ux_matrix.sh` | readline editing modes emacs/vi |
 | `C7.INT.09` | `bash-man` | bash(1) section PROMPTING + READLINE + HISTORY | `covered / covered` | `run_completion_interactive_matrix.sh,bash-builtin-completion.sh` | completion variables COMP_* and COMPREPLY |
 | `C7.INT.10` | `bash-man` | bash(1) section PROMPTING + READLINE + HISTORY | `covered / covered` | `run_interactive_ux_matrix.sh` | interactive comments behavior (interactive_comments) |
 
 Notes:
 
-- `BPOSIX.CORE.045`: Scaffold comparator case mapped and executable; strict row-level assertions pending; Source: bash/POSIX 6.11.2 item 45.
+- `BPOSIX.CORE.045`: Strict comparator case validates POSIX builtin execution/exit-status semantics.
 - `C7.INT.03`: Strict PTY interactive comparator evidence passes via run_interactive_ux_matrix.sh and run_completion_interactive_matrix.sh.
 - `C7.INT.09`: Strict PTY interactive comparator evidence passes via run_interactive_ux_matrix.sh and run_completion_interactive_matrix.sh.
 - `C7.INT.10`: Strict PTY interactive comparator evidence passes via run_interactive_ux_matrix.sh and run_completion_interactive_matrix.sh.
