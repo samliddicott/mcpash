@@ -2,12 +2,17 @@
 # DIFF_BASELINE: bash
 set -euo pipefail
 
-ROOT_DIR="$(cd "$(dirname "$0")/../../.." && pwd)"
 # Item 56: fc -s too many args returns failure
+set -o history
+echo fc56a >/dev/null
+echo fc56b >/dev/null
+tmp_out="$(mktemp)"
+tmp_err="$(mktemp)"
+trap 'rm -f "$tmp_out" "$tmp_err"' EXIT
 set +e
-fc -s a b c >/tmp/fc56.out 2>/tmp/fc56.err
-st=$?
+fc -s a b c >"$tmp_out" 2>"$tmp_err"
+rc=$?
 set -e
-echo JM:056:${st}
-rm -f /tmp/fc56.out /tmp/fc56.err
-
+has_err=0
+[ -s "$tmp_err" ] && has_err=1
+echo "JM:056:rc=$rc has_err=$has_err"

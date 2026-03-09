@@ -2,16 +2,22 @@
 # DIFF_BASELINE: bash
 set -euo pipefail
 
-ROOT_DIR="$(cd "$(dirname "$0")/../../.." && pwd)"
-# Item 53: fc listing modified marker omitted
+# Item 53: fc list output omits modified marker (*).
+set -o history
+echo fc53a >/dev/null
+echo fc53b >/dev/null
+echo fc53c >/dev/null
+tmp_out="$(mktemp)"
+tmp_err="$(mktemp)"
+trap 'rm -f "$tmp_out" "$tmp_err"' EXIT
 set +e
-fc -l >/tmp/fc53.out 2>/tmp/fc53.err
-st=$?
+fc -l -n -3 -1 >"$tmp_out" 2>"$tmp_err"
+rc=$?
 set -e
-if [[ $st -ne 0 ]]; then
-  echo JM:053:st:${st}
-else
-  if grep -q '\*' /tmp/fc53.out; then echo JM:053:star; else echo JM:053:nostar; fi
-fi
-rm -f /tmp/fc53.out /tmp/fc53.err
-
+star=0
+while IFS= read -r line; do
+  case "$line" in
+    *'*'*) star=1 ;;
+  esac
+done <"$tmp_out"
+echo "JM:053:rc=$rc star=$star"

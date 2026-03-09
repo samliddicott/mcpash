@@ -5809,9 +5809,8 @@ class Runtime:
             elif len(rest) > 1:
                 return 1
         else:
-            # bash accepts extra trailing args in non-substitution forms.
             if len(rest) > 2:
-                rest = rest[:2]
+                return 1
 
         if not self._history:
             # Bash is permissive for list/edit surfaces when no history exists,
