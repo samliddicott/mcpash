@@ -1,6 +1,6 @@
 # Feature Gap Board
 
-Generated: 2026-03-09 11:24:07Z
+Generated: 2026-03-09 11:56:52Z
 
 Purpose: implementation-first backlog grouped by feature topic (rows where either default or posix status is not `covered`).
 
@@ -15,18 +15,12 @@ Purpose: implementation-first backlog grouped by feature topic (rows where eithe
 | `builtin:echo` | 1 |
 | `builtin:history` | 3 |
 | `builtin:jobs` | 1 |
-| `builtin:kill` | 3 |
-| `builtin:printf` | 1 |
-| `builtin:pwd` | 1 |
-| `builtin:read` | 1 |
 | `builtin:return` | 2 |
-| `builtin:set` | 5 |
-| `builtin:test` | 3 |
-| `builtin:trap` | 2 |
+| `builtin:set` | 2 |
+| `builtin:test` | 1 |
 | `builtin:type` | 1 |
-| `builtin:ulimit` | 1 |
 | `builtin:unset` | 1 |
-| `builtin:wait` | 3 |
+| `builtin:wait` | 1 |
 | `runtime:job-control` | 4 |
 | `subcategory:compat-delta` | 3 |
 | `subcategory:expansion-redir` | 1 |
@@ -92,32 +86,6 @@ Purpose: implementation-first backlog grouped by feature topic (rows where eithe
 |---|---|---|---|---|
 | `BCOMPAT.52.003` | `bash-compat-doc` | `partial / partial` | `bash-compat-doc-52-003.sh` | interactive shells will notify the user of completed jobs while sourcing a script. Newer versions defer notification until script execution completes. |
 
-### `builtin:kill`
-
-| Req ID | Source | Status (default/posix) | Tests | Feature |
-|---|---|---|---|---|
-| `BPOSIX.CORE.057` | `bash-posix-doc` | `partial / partial` | `bash-posix-doc-057.sh` | The output of ‘kill -l’ prints all the signal names on a single line, separated by spaces, without the ‘SIG’ prefix. |
-| `BPOSIX.CORE.058` | `bash-posix-doc` | `partial / partial` | `bash-posix-doc-058.sh` | The ‘kill’ builtin does not accept signal names with a ‘SIG’ prefix. |
-| `BPOSIX.CORE.059` | `bash-posix-doc` | `partial / partial` | `bash-posix-doc-059.sh` | The ‘kill’ builtin returns a failure status if any of the pid or job arguments are invalid or if sending the specified signal to any of them fails. In default mode, ‘kill’ returns success if the signal was successfully sent to any of the specified processes. |
-
-### `builtin:printf`
-
-| Req ID | Source | Status (default/posix) | Tests | Feature |
-|---|---|---|---|---|
-| `BPOSIX.CORE.060` | `bash-posix-doc` | `partial / partial` | `bash-posix-doc-060.sh` | The ‘printf’ builtin uses ‘double’ (via ‘strtod’) to convert arguments corresponding to floating point conversion specifiers, instead of ‘long double’ if it's available. The ‘L’ length modifier forces ‘printf’ to use ‘long double’ if it's available. |
-
-### `builtin:pwd`
-
-| Req ID | Source | Status (default/posix) | Tests | Feature |
-|---|---|---|---|---|
-| `BPOSIX.CORE.061` | `bash-posix-doc` | `partial / partial` | `bash-posix-doc-061.sh` | The ‘pwd’ builtin verifies that the value it prints is the same as the current directory, even if it is not asked to check the file system with the ‘-P’ option. |
-
-### `builtin:read`
-
-| Req ID | Source | Status (default/posix) | Tests | Feature |
-|---|---|---|---|---|
-| `BPOSIX.CORE.062` | `bash-posix-doc` | `partial / partial` | `bash-posix-doc-062.sh` | The ‘read’ builtin may be interrupted by a signal for which a trap has been set. If Bash receives a trapped signal while executing ‘read’, the trap handler executes and ‘read’ returns an exit status greater than 128. |
-
 ### `builtin:return`
 
 | Req ID | Source | Status (default/posix) | Tests | Feature |
@@ -131,36 +99,18 @@ Purpose: implementation-first backlog grouped by feature topic (rows where eithe
 |---|---|---|---|---|
 | `BCOMPAT.50.001` | `bash-compat-doc` | `partial / partial` | `bash-compat-doc-50-001.sh` | Bash-5.1 changed the way $RANDOM is generated to introduce slightly more randomness. If the shell compatibility level is set to 50 or lower, it reverts to the method from bash-5.0 and previous versions, so seeding the random number generator by assigning a value to RANDOM will produce the same sequence as in bash-5.0 |
 | `BCOMPAT.50.003` | `bash-compat-doc` | `partial / partial` | `bash-compat-doc-50-003.sh` | Bash-5.1 and later use pipes for here-documents and here-strings if they are smaller than the pipe capacity. If the shell compatibility level is set to 50 or lower, it reverts to using temporary files. |
-| `BPOSIX.CORE.063` | `bash-posix-doc` | `partial / partial` | `bash-posix-doc-063.sh` | When the ‘set’ builtin is invoked without options, it does not display shell function names and definitions. |
-| `BPOSIX.CORE.064` | `bash-posix-doc` | `partial / partial` | `bash-posix-doc-064.sh` | When the ‘set’ builtin is invoked without options, it displays variable values without quotes, unless they contain shell metacharacters, even if the result contains nonprinting characters. |
-| `BPOSIX.CORE.069` | `bash-posix-doc` | `partial / partial` | `bash-posix-doc-069.sh` | ‘trap -p’ without arguments displays signals whose dispositions are set to SIG_DFL and those that were ignored when the shell started, not just trapped signals. |
 
 ### `builtin:test`
 
 | Req ID | Source | Status (default/posix) | Tests | Feature |
 |---|---|---|---|---|
 | `BCOMPAT.52.001` | `bash-compat-doc` | `partial / partial` | `bash-compat-doc-52-001.sh` | the test builtin uses its historical algorithm for parsing expressions composed of five or more primaries. |
-| `BPOSIX.CORE.065` | `bash-posix-doc` | `partial / partial` | `bash-posix-doc-065.sh` | The ‘test’ builtin compares strings using the current locale when evaluating the ‘<’ and ‘>’ binary operators. |
-| `BPOSIX.CORE.066` | `bash-posix-doc` | `partial / partial` | `bash-posix-doc-066.sh` | The ‘test’ builtin's ‘-t’ unary primary requires an argument. Historical versions of ‘test’ made the argument optional in certain cases, and Bash attempts to accommodate those for backwards compatibility. |
-
-### `builtin:trap`
-
-| Req ID | Source | Status (default/posix) | Tests | Feature |
-|---|---|---|---|---|
-| `BPOSIX.CORE.067` | `bash-posix-doc` | `partial / partial` | `bash-posix-doc-067.sh` | The ‘trap’ builtin displays signal names without the leading ‘SIG’. |
-| `BPOSIX.CORE.068` | `bash-posix-doc` | `partial / partial` | `bash-posix-doc-068.sh` | The ‘trap’ builtin doesn't check the first argument for a possible signal specification and revert the signal handling to the original disposition if it is, unless that argument consists solely of digits and is a valid signal number. If users want to reset the handler for a given signal to the original disposition, they should use ‘-’ as the first argument. |
 
 ### `builtin:type`
 
 | Req ID | Source | Status (default/posix) | Tests | Feature |
 |---|---|---|---|---|
 | `BPOSIX.CORE.031` | `bash-posix-doc` | `partial / partial` | `bash-posix-doc-031.sh` | When printing shell function definitions (e.g., by ‘type’), Bash does not print the ‘function’ reserved word unless necessary. |
-
-### `builtin:ulimit`
-
-| Req ID | Source | Status (default/posix) | Tests | Feature |
-|---|---|---|---|---|
-| `BPOSIX.CORE.071` | `bash-posix-doc` | `partial / partial` | `bash-posix-doc-071.sh` | The ‘ulimit’ builtin uses a block size of 512 bytes for the ‘-c’ and ‘-f’ options. |
 
 ### `builtin:unset`
 
@@ -173,8 +123,6 @@ Purpose: implementation-first backlog grouped by feature topic (rows where eithe
 | Req ID | Source | Status (default/posix) | Tests | Feature |
 |---|---|---|---|---|
 | `BPOSIX.CORE.026` | `bash-posix-doc` | `partial / partial` | `bash-posix-doc-026.sh` | Bash permanently removes jobs from the jobs table after notifying the user of their termination via the ‘wait’ or ‘jobs’ builtins. It removes the job from the jobs list after notifying the user of its termination, but the status is still available via ‘wait’, as long as ‘wait’ is supplied a PID argument. |
-| `BPOSIX.CORE.074` | `bash-posix-doc` | `partial / partial` | `bash-posix-doc-074.sh` | The arrival of ‘SIGCHLD’ when a trap is set on ‘SIGCHLD’ does not interrupt the ‘wait’ builtin and cause it to return immediately. The trap command is run once for each child that exits. |
-| `BPOSIX.CORE.075` | `bash-posix-doc` | `partial / partial` | `bash-posix-doc-075.sh` | Bash removes an exited background process's status from the list of such statuses after the ‘wait’ builtin returns it. |
 
 ### `runtime:job-control`
 

@@ -6706,7 +6706,10 @@ class Runtime:
             if a == "-s":
                 if i + 1 >= len(args):
                     return 1
-                spec = self._normalize_signal_spec(args[i + 1])
+                raw_spec = args[i + 1]
+                if self.options.get("posix", False) and raw_spec.upper().startswith("SIG"):
+                    return 1
+                spec = self._normalize_signal_spec(raw_spec)
                 if spec is None:
                     return 1
                 n = self._signal_number(spec)
@@ -6723,7 +6726,10 @@ class Runtime:
                 i += 1
                 continue
             if a.startswith("-") and a != "-" and not a[1:].isdigit():
-                spec = self._normalize_signal_spec(a[1:])
+                raw_spec = a[1:]
+                if self.options.get("posix", False) and raw_spec.upper().startswith("SIG"):
+                    return 1
+                spec = self._normalize_signal_spec(raw_spec)
                 if spec is None:
                     return 1
                 n = self._signal_number(spec)
@@ -10552,7 +10558,7 @@ class Runtime:
                         i += 2
                         continue
                     j = i + 1
-                    while j < len(fmt) and fmt[j] not in "diouxXs":
+                    while j < len(fmt) and fmt[j] not in "diouxXseEfFgGaA":
                         j += 1
                     if j >= len(fmt):
                         out.append(fmt[i:])
@@ -10576,6 +10582,12 @@ class Runtime:
                             out.append(directive % num)
                         else:
                             out.append(directive % num)
+                    elif spec in ["e", "E", "f", "F", "g", "G", "a", "A"]:
+                        try:
+                            num = float(val)
+                        except ValueError:
+                            num = 0.0
+                        out.append(directive % num)
                     else:
                         out.append(val)
                     i = j + 1

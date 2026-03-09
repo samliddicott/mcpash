@@ -1,6 +1,6 @@
 # Feature Index
 
-Generated: 2026-03-09 11:24:07Z
+Generated: 2026-03-09 11:56:52Z
 
 Purpose: group requirement rows by feature/topic so design, implementation, and tests can be handled as coherent feature stories instead of row-by-row patches.
 
@@ -49,35 +49,35 @@ Source matrices:
 | `builtin:help` | 2 | 2 | 0 | 0 |
 | `builtin:history` | 7 | 4 | 3 | 0 |
 | `builtin:jobs` | 5 | 4 | 1 | 0 |
-| `builtin:kill` | 4 | 1 | 3 | 0 |
+| `builtin:kill` | 4 | 4 | 0 | 0 |
 | `builtin:let` | 1 | 1 | 0 | 0 |
 | `builtin:local` | 1 | 1 | 0 | 0 |
 | `builtin:logout` | 1 | 1 | 0 | 0 |
 | `builtin:mapfile` | 1 | 1 | 0 | 0 |
 | `builtin:popd` | 1 | 1 | 0 | 0 |
-| `builtin:printf` | 2 | 1 | 1 | 0 |
+| `builtin:printf` | 2 | 2 | 0 | 0 |
 | `builtin:pushd` | 1 | 1 | 0 | 0 |
-| `builtin:pwd` | 2 | 1 | 1 | 0 |
-| `builtin:read` | 5 | 4 | 1 | 0 |
+| `builtin:pwd` | 2 | 2 | 0 | 0 |
+| `builtin:read` | 5 | 5 | 0 | 0 |
 | `builtin:readarray` | 1 | 1 | 0 | 0 |
 | `builtin:readonly` | 2 | 2 | 0 | 0 |
 | `builtin:return` | 4 | 2 | 2 | 0 |
-| `builtin:set` | 12 | 7 | 5 | 0 |
+| `builtin:set` | 12 | 10 | 2 | 0 |
 | `builtin:shift` | 2 | 2 | 0 | 0 |
 | `builtin:shopt` | 3 | 3 | 0 | 0 |
 | `builtin:source` | 3 | 3 | 0 | 0 |
 | `builtin:suspend` | 2 | 2 | 0 | 0 |
-| `builtin:test` | 4 | 1 | 3 | 0 |
+| `builtin:test` | 4 | 3 | 1 | 0 |
 | `builtin:times` | 1 | 1 | 0 | 0 |
-| `builtin:trap` | 4 | 2 | 2 | 0 |
+| `builtin:trap` | 4 | 4 | 0 | 0 |
 | `builtin:true` | 1 | 1 | 0 | 0 |
 | `builtin:type` | 4 | 3 | 1 | 0 |
 | `builtin:typeset` | 1 | 1 | 0 | 0 |
-| `builtin:ulimit` | 2 | 1 | 1 | 0 |
+| `builtin:ulimit` | 2 | 2 | 0 | 0 |
 | `builtin:umask` | 1 | 1 | 0 | 0 |
 | `builtin:unalias` | 1 | 1 | 0 | 0 |
 | `builtin:unset` | 4 | 3 | 1 | 0 |
-| `builtin:wait` | 7 | 4 | 3 | 0 |
+| `builtin:wait` | 7 | 6 | 1 | 0 |
 | `runtime:history` | 6 | 6 | 0 | 0 |
 | `runtime:job-control` | 9 | 5 | 4 | 0 |
 | `runtime:prompt` | 3 | 3 | 0 | 0 |
@@ -644,16 +644,16 @@ Notes:
 
 | Req ID | Source | Source Ref | Status (default/posix) | Tests | Feature |
 |---|---|---|---|---|---|
-| `BPOSIX.CORE.057` | `bash-posix-doc` | bash/POSIX 6.11.2 item 57 | `partial / partial` | `bash-posix-doc-057.sh` | The output of ‘kill -l’ prints all the signal names on a single line, separated by spaces, without the ‘SIG’ prefix. |
-| `BPOSIX.CORE.058` | `bash-posix-doc` | bash/POSIX 6.11.2 item 58 | `partial / partial` | `bash-posix-doc-058.sh` | The ‘kill’ builtin does not accept signal names with a ‘SIG’ prefix. |
-| `BPOSIX.CORE.059` | `bash-posix-doc` | bash/POSIX 6.11.2 item 59 | `partial / partial` | `bash-posix-doc-059.sh` | The ‘kill’ builtin returns a failure status if any of the pid or job arguments are invalid or if sending the specified signal to any of them fails. In default mode, ‘kill’ returns success if the signal was successfully sent to any of the specified processes. |
+| `BPOSIX.CORE.057` | `bash-posix-doc` | bash/POSIX 6.11.2 item 57 | `covered / covered` | `bash-posix-doc-057.sh` | The output of ‘kill -l’ prints all the signal names on a single line, separated by spaces, without the ‘SIG’ prefix. |
+| `BPOSIX.CORE.058` | `bash-posix-doc` | bash/POSIX 6.11.2 item 58 | `covered / covered` | `bash-posix-doc-058.sh` | The ‘kill’ builtin does not accept signal names with a ‘SIG’ prefix. |
+| `BPOSIX.CORE.059` | `bash-posix-doc` | bash/POSIX 6.11.2 item 59 | `covered / covered` | `bash-posix-doc-059.sh` | The ‘kill’ builtin returns a failure status if any of the pid or job arguments are invalid or if sending the specified signal to any of them fails. In default mode, ‘kill’ returns success if the signal was successfully sent to any of the specified processes. |
 | `C5.BUILTIN.KILL` | `bash-man` | bash(1) section SHELL BUILTIN COMMANDS | `covered / covered` | `man-bash-posix-03-io-signals` | kill |
 
 Notes:
 
-- `BPOSIX.CORE.057`: Scaffold comparator case mapped and executable; strict row-level assertions pending; Source: bash/POSIX 6.11.2 item 57.
-- `BPOSIX.CORE.058`: Scaffold comparator case mapped and executable; strict row-level assertions pending; Source: bash/POSIX 6.11.2 item 58.
-- `BPOSIX.CORE.059`: Scaffold comparator case mapped and executable; strict row-level assertions pending; Source: bash/POSIX 6.11.2 item 59.
+- `BPOSIX.CORE.057`: Strict comparator case validates POSIX row 57 behavior in current runtime lane.
+- `BPOSIX.CORE.058`: Strict comparator case validates kill SIG-prefix rejection in POSIX mode.
+- `BPOSIX.CORE.059`: Strict comparator case validates POSIX row 59 behavior in current runtime lane.
 - `C5.BUILTIN.KILL`: Seeded from tests/compat/bash_posix_man_coverage.tsv
 
 ### `builtin:let`
@@ -710,12 +710,12 @@ Notes:
 
 | Req ID | Source | Source Ref | Status (default/posix) | Tests | Feature |
 |---|---|---|---|---|---|
-| `BPOSIX.CORE.060` | `bash-posix-doc` | bash/POSIX 6.11.2 item 60 | `partial / partial` | `bash-posix-doc-060.sh` | The ‘printf’ builtin uses ‘double’ (via ‘strtod’) to convert arguments corresponding to floating point conversion specifiers, instead of ‘long double’ if it's available. The ‘L’ length modifier forces ‘printf’ to use ‘long double’ if it's available. |
+| `BPOSIX.CORE.060` | `bash-posix-doc` | bash/POSIX 6.11.2 item 60 | `covered / covered` | `bash-posix-doc-060.sh` | The ‘printf’ builtin uses ‘double’ (via ‘strtod’) to convert arguments corresponding to floating point conversion specifiers, instead of ‘long double’ if it's available. The ‘L’ length modifier forces ‘printf’ to use ‘long double’ if it's available. |
 | `C5.BUILTIN.PRINTF` | `bash-man` | bash(1) section SHELL BUILTIN COMMANDS | `covered / covered` | `man-bash-posix-04-misc-builtins` | printf |
 
 Notes:
 
-- `BPOSIX.CORE.060`: Scaffold comparator case mapped and executable; strict row-level assertions pending; Source: bash/POSIX 6.11.2 item 60.
+- `BPOSIX.CORE.060`: Strict comparator case validates printf floating-point conversion behavior.
 - `C5.BUILTIN.PRINTF`: Seeded from tests/compat/bash_posix_man_coverage.tsv
 
 ### `builtin:pushd`
@@ -732,19 +732,19 @@ Notes:
 
 | Req ID | Source | Source Ref | Status (default/posix) | Tests | Feature |
 |---|---|---|---|---|---|
-| `BPOSIX.CORE.061` | `bash-posix-doc` | bash/POSIX 6.11.2 item 61 | `partial / partial` | `bash-posix-doc-061.sh` | The ‘pwd’ builtin verifies that the value it prints is the same as the current directory, even if it is not asked to check the file system with the ‘-P’ option. |
+| `BPOSIX.CORE.061` | `bash-posix-doc` | bash/POSIX 6.11.2 item 61 | `covered / covered` | `bash-posix-doc-061.sh` | The ‘pwd’ builtin verifies that the value it prints is the same as the current directory, even if it is not asked to check the file system with the ‘-P’ option. |
 | `C5.BUILTIN.PWD` | `bash-man` | bash(1) section SHELL BUILTIN COMMANDS | `covered / covered` | `man-bash-posix-02-path-command` | pwd |
 
 Notes:
 
-- `BPOSIX.CORE.061`: Scaffold comparator case mapped and executable; strict row-level assertions pending; Source: bash/POSIX 6.11.2 item 61.
+- `BPOSIX.CORE.061`: Strict comparator case validates POSIX row 61 behavior in current runtime lane.
 - `C5.BUILTIN.PWD`: Seeded from tests/compat/bash_posix_man_coverage.tsv
 
 ### `builtin:read`
 
 | Req ID | Source | Source Ref | Status (default/posix) | Tests | Feature |
 |---|---|---|---|---|---|
-| `BPOSIX.CORE.062` | `bash-posix-doc` | bash/POSIX 6.11.2 item 62 | `partial / partial` | `bash-posix-doc-062.sh` | The ‘read’ builtin may be interrupted by a signal for which a trap has been set. If Bash receives a trapped signal while executing ‘read’, the trap handler executes and ‘read’ returns an exit status greater than 128. |
+| `BPOSIX.CORE.062` | `bash-posix-doc` | bash/POSIX 6.11.2 item 62 | `covered / covered` | `bash-posix-doc-062.sh` | The ‘read’ builtin may be interrupted by a signal for which a trap has been set. If Bash receives a trapped signal while executing ‘read’, the trap handler executes and ‘read’ returns an exit status greater than 128. |
 | `C4.REDIR.004` | `bash-man` | bash(1) section REDIRECTION | `covered / covered` | `man-ash-redir-heredoc-matrix.sh` | [n]<>word read/write redirection |
 | `C5.BUILTIN.READ` | `bash-man` | bash(1) section SHELL BUILTIN COMMANDS | `covered / covered` | `man-bash-posix-03-io-signals` | read |
 | `C8.JOB.18` | `bash-man` | bash(1) section JOB CONTROL | `covered / covered` | `run_job_tty_stop_matrix.sh` | background process read from controlling tty gets SIGTTIN stop |
@@ -752,7 +752,7 @@ Notes:
 
 Notes:
 
-- `BPOSIX.CORE.062`: Scaffold comparator case mapped and executable; strict row-level assertions pending; Source: bash/POSIX 6.11.2 item 62.
+- `BPOSIX.CORE.062`: Strict comparator case validates read interruption status with trapped signal path.
 - `C4.REDIR.004`: Row-level evidence mapping assigned from requirement->case rules. Evidence run: mapped tests all pass.
 - `C5.BUILTIN.READ`: Seeded from tests/compat/bash_posix_man_coverage.tsv
 - `C8.JOB.18`: Interactive PTY comparator `sigttin` lane verifies background tty-read job transitions to `Stopped(SIGTTIN)` and remains jobspec-addressabl…
@@ -803,9 +803,9 @@ Notes:
 | `BCOMPAT.50.001` | `bash-compat-doc` | bash/COMPAT level 50 item 1 | `partial / partial` | `bash-compat-doc-50-001.sh` | Bash-5.1 changed the way $RANDOM is generated to introduce slightly more randomness. If the shell compatibility level is set to 50 or lower, it reverts to the method from bash-5.0 and previous versions, so seeding the random number generator by assigning a value to RANDOM will produce the same sequence as in bash-5.0 |
 | `BCOMPAT.50.003` | `bash-compat-doc` | bash/COMPAT level 50 item 3 | `partial / partial` | `bash-compat-doc-50-003.sh` | Bash-5.1 and later use pipes for here-documents and here-strings if they are smaller than the pipe capacity. If the shell compatibility level is set to 50 or lower, it reverts to using temporary files. |
 | `BPOSIX.CORE.001` | `bash-posix-doc` | bash/POSIX 6.11.2 item 1 | `covered / covered` | `bash-posix-doc-001.sh` | Bash ensures that the ‘POSIXLY_CORRECT’ variable is set. |
-| `BPOSIX.CORE.063` | `bash-posix-doc` | bash/POSIX 6.11.2 item 63 | `partial / partial` | `bash-posix-doc-063.sh` | When the ‘set’ builtin is invoked without options, it does not display shell function names and definitions. |
-| `BPOSIX.CORE.064` | `bash-posix-doc` | bash/POSIX 6.11.2 item 64 | `partial / partial` | `bash-posix-doc-064.sh` | When the ‘set’ builtin is invoked without options, it displays variable values without quotes, unless they contain shell metacharacters, even if the result contains nonprinting characters. |
-| `BPOSIX.CORE.069` | `bash-posix-doc` | bash/POSIX 6.11.2 item 69 | `partial / partial` | `bash-posix-doc-069.sh` | ‘trap -p’ without arguments displays signals whose dispositions are set to SIG_DFL and those that were ignored when the shell started, not just trapped signals. |
+| `BPOSIX.CORE.063` | `bash-posix-doc` | bash/POSIX 6.11.2 item 63 | `covered / covered` | `bash-posix-doc-063.sh` | When the ‘set’ builtin is invoked without options, it does not display shell function names and definitions. |
+| `BPOSIX.CORE.064` | `bash-posix-doc` | bash/POSIX 6.11.2 item 64 | `covered / covered` | `bash-posix-doc-064.sh` | When the ‘set’ builtin is invoked without options, it displays variable values without quotes, unless they contain shell metacharacters, even if the result contains nonprinting characters. |
+| `BPOSIX.CORE.069` | `bash-posix-doc` | bash/POSIX 6.11.2 item 69 | `covered / covered` | `bash-posix-doc-069.sh` | ‘trap -p’ without arguments displays signals whose dispositions are set to SIG_DFL and those that were ignored when the shell started, not just trapped signals. |
 | `C11.MODE.01` | `bash-man` | bash(1) section OPTIONS + INVOCATION | `covered / covered` | `bash-man-seto-surface.sh,run_startup_mode_matrix.sh` | set -o option reporting format |
 | `C5.BUILTIN.SET` | `bash-man` | bash(1) section SHELL BUILTIN COMMANDS | `covered / covered` | `man-bash-posix-01-core-state` | set |
 | `C8.JOB.06` | `bash-man` | bash(1) section SIGNALS + JOB CONTROL + builtins | `covered / covered` | `man-ash-trap-signal-matrix.sh,man-ash-trap-delivery.sh` | trap set/list/clear handlers |
@@ -818,9 +818,9 @@ Notes:
 - `BCOMPAT.50.001`: Scaffold comparator case mapped and executable; strict row-level assertions pending. Source: bash/COMPAT compat50 (set using BASH_COMPAT) i…
 - `BCOMPAT.50.003`: Scaffold comparator case mapped and executable; strict row-level assertions pending. Source: bash/COMPAT compat50 (set using BASH_COMPAT) i…
 - `BPOSIX.CORE.001`: Row-level comparator evidence now passes for --posix POSIXLY_CORRECT exposure in focused lane; Source: bash/POSIX 6.11.2 item 1.
-- `BPOSIX.CORE.063`: Scaffold comparator case mapped and executable; strict row-level assertions pending; Source: bash/POSIX 6.11.2 item 63.
-- `BPOSIX.CORE.064`: Scaffold comparator case mapped and executable; strict row-level assertions pending; Source: bash/POSIX 6.11.2 item 64.
-- `BPOSIX.CORE.069`: Scaffold comparator case mapped and executable; strict row-level assertions pending; Source: bash/POSIX 6.11.2 item 69.
+- `BPOSIX.CORE.063`: Strict comparator case validates POSIX row 63 behavior in current runtime lane.
+- `BPOSIX.CORE.064`: Strict comparator case validates POSIX row 64 behavior in current runtime lane.
+- `BPOSIX.CORE.069`: Strict comparator case validates POSIX row 69 behavior in current runtime lane.
 - `C11.MODE.01`: Row-level evidence mapping assigned from requirement->case rules. Evidence run: mapped tests all pass.
 - `C5.BUILTIN.SET`: Seeded from tests/compat/bash_posix_man_coverage.tsv
 - (Plus 4 additional row notes; see `docs/specs/feature-index.tsv`.)
@@ -882,15 +882,15 @@ Notes:
 | Req ID | Source | Source Ref | Status (default/posix) | Tests | Feature |
 |---|---|---|---|---|---|
 | `BCOMPAT.52.001` | `bash-compat-doc` | bash/COMPAT level 52 item 1 | `partial / partial` | `bash-compat-doc-52-001.sh` | the test builtin uses its historical algorithm for parsing expressions composed of five or more primaries. |
-| `BPOSIX.CORE.065` | `bash-posix-doc` | bash/POSIX 6.11.2 item 65 | `partial / partial` | `bash-posix-doc-065.sh` | The ‘test’ builtin compares strings using the current locale when evaluating the ‘<’ and ‘>’ binary operators. |
-| `BPOSIX.CORE.066` | `bash-posix-doc` | bash/POSIX 6.11.2 item 66 | `partial / partial` | `bash-posix-doc-066.sh` | The ‘test’ builtin's ‘-t’ unary primary requires an argument. Historical versions of ‘test’ made the argument optional in certain cases, and Bash attempts to accommodate those for backwards compatibility. |
+| `BPOSIX.CORE.065` | `bash-posix-doc` | bash/POSIX 6.11.2 item 65 | `covered / covered` | `bash-posix-doc-065.sh` | The ‘test’ builtin compares strings using the current locale when evaluating the ‘<’ and ‘>’ binary operators. |
+| `BPOSIX.CORE.066` | `bash-posix-doc` | bash/POSIX 6.11.2 item 66 | `covered / covered` | `bash-posix-doc-066.sh` | The ‘test’ builtin's ‘-t’ unary primary requires an argument. Historical versions of ‘test’ made the argument optional in certain cases, and Bash attempts to accommodate those for backwards compatibility. |
 | `C5.BUILTIN.TEST` | `bash-man` | bash(1) section SHELL BUILTIN COMMANDS | `covered / covered` | `man-bash-posix-03-io-signals` | test |
 
 Notes:
 
 - `BCOMPAT.52.001`: Scaffold comparator case mapped and executable; strict row-level assertions pending. Source: bash/COMPAT compat52 (set using BASH_COMPAT) i…
-- `BPOSIX.CORE.065`: Scaffold comparator case mapped and executable; strict row-level assertions pending; Source: bash/POSIX 6.11.2 item 65.
-- `BPOSIX.CORE.066`: Scaffold comparator case mapped and executable; strict row-level assertions pending; Source: bash/POSIX 6.11.2 item 66.
+- `BPOSIX.CORE.065`: Strict comparator case validates POSIX row 65 behavior in current runtime lane.
+- `BPOSIX.CORE.066`: Strict comparator case validates POSIX row 66 behavior in current runtime lane.
 - `C5.BUILTIN.TEST`: Seeded from tests/compat/bash_posix_man_coverage.tsv
 
 ### `builtin:times`
@@ -907,15 +907,15 @@ Notes:
 
 | Req ID | Source | Source Ref | Status (default/posix) | Tests | Feature |
 |---|---|---|---|---|---|
-| `BPOSIX.CORE.067` | `bash-posix-doc` | bash/POSIX 6.11.2 item 67 | `partial / partial` | `bash-posix-doc-067.sh` | The ‘trap’ builtin displays signal names without the leading ‘SIG’. |
-| `BPOSIX.CORE.068` | `bash-posix-doc` | bash/POSIX 6.11.2 item 68 | `partial / partial` | `bash-posix-doc-068.sh` | The ‘trap’ builtin doesn't check the first argument for a possible signal specification and revert the signal handling to the original disposition if it is, unless that argument consists solely of digits and is a valid signal number. If users want to reset the handler for a given signal to the original disposition, they should use ‘-’ as the first argument. |
+| `BPOSIX.CORE.067` | `bash-posix-doc` | bash/POSIX 6.11.2 item 67 | `covered / covered` | `bash-posix-doc-067.sh` | The ‘trap’ builtin displays signal names without the leading ‘SIG’. |
+| `BPOSIX.CORE.068` | `bash-posix-doc` | bash/POSIX 6.11.2 item 68 | `covered / covered` | `bash-posix-doc-068.sh` | The ‘trap’ builtin doesn't check the first argument for a possible signal specification and revert the signal handling to the original disposition if it is, unless that argument consists solely of digits and is a valid signal number. If users want to reset the handler for a given signal to the original disposition, they should use ‘-’ as the first argument. |
 | `C5.BUILTIN.TRAP` | `bash-man` | bash(1) section SHELL BUILTIN COMMANDS | `covered / covered` | `man-bash-posix-03-io-signals` | trap |
 | `C8.JOB.26` | `bash-man` | bash(1) section JOB CONTROL | `covered / covered` | `bash-man-jobcontrol-sigchld-per-child.sh` | `trap SIGCHLD` runs per exiting child |
 
 Notes:
 
-- `BPOSIX.CORE.067`: Scaffold comparator case mapped and executable; strict row-level assertions pending; Source: bash/POSIX 6.11.2 item 67.
-- `BPOSIX.CORE.068`: Scaffold comparator case mapped and executable; strict row-level assertions pending; Source: bash/POSIX 6.11.2 item 68.
+- `BPOSIX.CORE.067`: Strict comparator case validates POSIX row 67 behavior in current runtime lane.
+- `BPOSIX.CORE.068`: Strict comparator case validates POSIX row 68 behavior in current runtime lane.
 - `C5.BUILTIN.TRAP`: Seeded from tests/compat/bash_posix_man_coverage.tsv
 - `C8.JOB.26`: Dedicated comparator case covers CHLD trap delivery across two async children with sequential waits and bash-matching wait status/marker or…
 
@@ -959,12 +959,12 @@ Notes:
 
 | Req ID | Source | Source Ref | Status (default/posix) | Tests | Feature |
 |---|---|---|---|---|---|
-| `BPOSIX.CORE.071` | `bash-posix-doc` | bash/POSIX 6.11.2 item 71 | `partial / partial` | `bash-posix-doc-071.sh` | The ‘ulimit’ builtin uses a block size of 512 bytes for the ‘-c’ and ‘-f’ options. |
+| `BPOSIX.CORE.071` | `bash-posix-doc` | bash/POSIX 6.11.2 item 71 | `covered / covered` | `bash-posix-doc-071.sh` | The ‘ulimit’ builtin uses a block size of 512 bytes for the ‘-c’ and ‘-f’ options. |
 | `C5.BUILTIN.ULIMIT` | `bash-man` | bash(1) section SHELL BUILTIN COMMANDS | `covered / covered` | `man-bash-posix-04-misc-builtins` | ulimit |
 
 Notes:
 
-- `BPOSIX.CORE.071`: Scaffold comparator case mapped and executable; strict row-level assertions pending; Source: bash/POSIX 6.11.2 item 71.
+- `BPOSIX.CORE.071`: Strict comparator case validates POSIX row 71 behavior in current runtime lane.
 - `C5.BUILTIN.ULIMIT`: Seeded from tests/compat/bash_posix_man_coverage.tsv
 
 ### `builtin:umask`
@@ -1008,8 +1008,8 @@ Notes:
 | Req ID | Source | Source Ref | Status (default/posix) | Tests | Feature |
 |---|---|---|---|---|---|
 | `BPOSIX.CORE.026` | `bash-posix-doc` | bash/POSIX 6.11.2 item 26 | `partial / partial` | `bash-posix-doc-026.sh` | Bash permanently removes jobs from the jobs table after notifying the user of their termination via the ‘wait’ or ‘jobs’ builtins. It removes the job from the jobs list after notifying the user of its termination, but the status is still available via ‘wait’, as long as ‘wait’ is supplied a PID argument. |
-| `BPOSIX.CORE.074` | `bash-posix-doc` | bash/POSIX 6.11.2 item 74 | `partial / partial` | `bash-posix-doc-074.sh` | The arrival of ‘SIGCHLD’ when a trap is set on ‘SIGCHLD’ does not interrupt the ‘wait’ builtin and cause it to return immediately. The trap command is run once for each child that exits. |
-| `BPOSIX.CORE.075` | `bash-posix-doc` | bash/POSIX 6.11.2 item 75 | `partial / partial` | `bash-posix-doc-075.sh` | Bash removes an exited background process's status from the list of such statuses after the ‘wait’ builtin returns it. |
+| `BPOSIX.CORE.074` | `bash-posix-doc` | bash/POSIX 6.11.2 item 74 | `covered / covered` | `bash-posix-doc-074.sh` | The arrival of ‘SIGCHLD’ when a trap is set on ‘SIGCHLD’ does not interrupt the ‘wait’ builtin and cause it to return immediately. The trap command is run once for each child that exits. |
+| `BPOSIX.CORE.075` | `bash-posix-doc` | bash/POSIX 6.11.2 item 75 | `covered / covered` | `bash-posix-doc-075.sh` | Bash removes an exited background process's status from the list of such statuses after the ‘wait’ builtin returns it. |
 | `C5.BUILTIN.WAIT` | `bash-man` | bash(1) section SHELL BUILTIN COMMANDS | `covered / covered` | `man-bash-posix-03-io-signals` | wait |
 | `C8.JOB.05` | `bash-man` | bash(1) section SIGNALS + JOB CONTROL + builtins | `covered / covered` | `man-ash-kill-wait.sh` | wait builtin with pid/jobspec and status propagation |
 | `C8.JOB.28` | `bash-man` | bash(1) section JOB CONTROL | `covered / covered` | `run_jobs_interactive_matrix.sh` | with job control enabled, `wait` returns on job state change |
@@ -1018,8 +1018,8 @@ Notes:
 Notes:
 
 - `BPOSIX.CORE.026`: Scaffold comparator case mapped and executable; strict row-level assertions pending; Source: bash/POSIX 6.11.2 item 26.
-- `BPOSIX.CORE.074`: Scaffold comparator case mapped and executable; strict row-level assertions pending; Source: bash/POSIX 6.11.2 item 74.
-- `BPOSIX.CORE.075`: Scaffold comparator case mapped and executable; strict row-level assertions pending; Source: bash/POSIX 6.11.2 item 75.
+- `BPOSIX.CORE.074`: Strict comparator case validates POSIX row 74 behavior in current runtime lane.
+- `BPOSIX.CORE.075`: Strict comparator case validates POSIX row 75 behavior in current runtime lane.
 - `C5.BUILTIN.WAIT`: Seeded from tests/compat/bash_posix_man_coverage.tsv
 - `C8.JOB.05`: Row-level evidence mapping assigned from requirement->case rules. Evidence run: mapped tests all pass.
 - `C8.JOB.28`: Interactive strict matrix `wait-state-change` lane asserts `wait %1` returns stop-status (`147`) after `SIGSTOP` transition before terminat…
