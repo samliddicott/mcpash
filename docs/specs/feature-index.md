@@ -1,6 +1,6 @@
 # Feature Index
 
-Generated: 2026-03-09 14:41:32Z
+Generated: 2026-03-09 16:07:30Z
 
 Purpose: group requirement rows by feature/topic so design, implementation, and tests can be handled as coherent feature stories instead of row-by-row patches.
 
@@ -27,7 +27,7 @@ Source matrices:
 | `builtin:builtin` | 1 | 1 | 0 | 0 |
 | `builtin:caller` | 1 | 1 | 0 | 0 |
 | `builtin:cd` | 3 | 3 | 0 | 0 |
-| `builtin:command` | 34 | 24 | 10 | 0 |
+| `builtin:command` | 34 | 25 | 9 | 0 |
 | `builtin:compgen` | 2 | 2 | 0 | 0 |
 | `builtin:complete` | 1 | 1 | 0 | 0 |
 | `builtin:compopt` | 1 | 1 | 0 | 0 |
@@ -79,7 +79,7 @@ Source matrices:
 | `builtin:unset` | 4 | 3 | 1 | 0 |
 | `builtin:wait` | 7 | 7 | 0 | 0 |
 | `runtime:history` | 6 | 6 | 0 | 0 |
-| `runtime:job-control` | 9 | 7 | 2 | 0 |
+| `runtime:job-control` | 9 | 9 | 0 | 0 |
 | `runtime:prompt` | 3 | 3 | 0 | 0 |
 | `runtime:signals-traps` | 4 | 4 | 0 | 0 |
 | `runtime:startup` | 7 | 7 | 0 | 0 |
@@ -324,7 +324,7 @@ Notes:
 | `BPOSIX.CORE.016` | `bash-posix-doc` | bash/POSIX 6.11.2 item 16 | `covered / covered` | `bash-posix-doc-016.sh` | Command substitutions don't set the ‘?’ special parameter. The exit status of a simple command without a command word is still the exit status of the last command substitution that occurred while evaluating the variable assignments and redirections in that command, but that does not happen until after all of the assignments and redirections. |
 | `BPOSIX.CORE.020` | `bash-posix-doc` | bash/POSIX 6.11.2 item 20 | `covered / covered` | `bash-posix-doc-020.sh` | When a command in the hash table no longer exists, Bash will re-search ‘$PATH’ to find the new location. This is also available with ‘shopt -s checkhash’. |
 | `BPOSIX.CORE.021` | `bash-posix-doc` | bash/POSIX 6.11.2 item 21 | `covered / covered` | `bash-posix-doc-021.sh` | Bash will not insert a command without the execute bit set into the command hash table, even if it returns it as a (last-ditch) result from a ‘$PATH’ search. |
-| `BPOSIX.CORE.027` | `bash-posix-doc` | bash/POSIX 6.11.2 item 27 | `partial / partial` | `bash-posix-doc-027.sh` | The ‘vi’ editing mode will invoke the ‘vi’ editor directly when the ‘v’ command is run, instead of checking ‘$VISUAL’ and ‘$EDITOR’. |
+| `BPOSIX.CORE.027` | `bash-posix-doc` | bash/POSIX 6.11.2 item 27 | `covered / covered` | `bash-posix-doc-027.sh` | The ‘vi’ editing mode will invoke the ‘vi’ editor directly when the ‘v’ command is run, instead of checking ‘$VISUAL’ and ‘$EDITOR’. |
 | `BPOSIX.CORE.034` | `bash-posix-doc` | bash/POSIX 6.11.2 item 34 | `covered / covered` | `bash-posix-doc-034.sh` | If a POSIX special builtin returns an error status, a non-interactive shell exits. The fatal errors are those listed in the POSIX standard, and include things like passing incorrect options, redirection errors, variable assignment errors for assignments preceding the command name, and so on. |
 | `BPOSIX.CORE.035` | `bash-posix-doc` | bash/POSIX 6.11.2 item 35 | `covered / covered` | `bash-posix-doc-035.sh` | A non-interactive shell exits with an error status if a variable assignment error occurs when no command name follows the assignment statements. A variable assignment error occurs, for example, when trying to assign a value to a readonly variable. |
 | `BPOSIX.CORE.036` | `bash-posix-doc` | bash/POSIX 6.11.2 item 36 | `covered / covered` | `bash-posix-doc-036.sh` | A non-interactive shell exits with an error status if a variable assignment error occurs in an assignment statement preceding a special builtin, but not with any other simple command. For any other simple command, the shell aborts execution of that command, and execution continues at the top level ("the shell shall not perform any further processing of the command in which the error occurred"). |
@@ -1049,8 +1049,8 @@ Notes:
 
 | Req ID | Source | Source Ref | Status (default/posix) | Tests | Feature |
 |---|---|---|---|---|---|
-| `BPOSIX.CORE.022` | `bash-posix-doc` | bash/POSIX 6.11.2 item 22 | `partial / partial` | `bash-posix-doc-022.sh` | The message printed by the job control code and builtins when a job exits with a non-zero status is 'Done(status)'. |
-| `BPOSIX.CORE.023` | `bash-posix-doc` | bash/POSIX 6.11.2 item 23 | `partial / partial` | `bash-posix-doc-023.sh` | The message printed by the job control code and builtins when a job is stopped is 'Stopped(SIGNAME)', where SIGNAME is, for example, ‘SIGTSTP’. |
+| `BPOSIX.CORE.022` | `bash-posix-doc` | bash/POSIX 6.11.2 item 22 | `covered / covered` | `bash-posix-doc-022.sh` | The message printed by the job control code and builtins when a job exits with a non-zero status is 'Done(status)'. |
+| `BPOSIX.CORE.023` | `bash-posix-doc` | bash/POSIX 6.11.2 item 23 | `covered / covered` | `bash-posix-doc-023.sh` | The message printed by the job control code and builtins when a job is stopped is 'Stopped(SIGNAME)', where SIGNAME is, for example, ‘SIGTSTP’. |
 | `BPOSIX.CORE.024` | `bash-posix-doc` | bash/POSIX 6.11.2 item 24 | `covered / covered` | `bash-posix-doc-024.sh` | If the shell is interactive, Bash does not perform job notifications between executing commands in lists separated by ‘;’ or newline. Non-interactive shells print status messages after a foreground job in a list completes. |
 | `BPOSIX.CORE.025` | `bash-posix-doc` | bash/POSIX 6.11.2 item 25 | `covered / covered` | `bash-posix-doc-025.sh` | If the shell is interactive, Bash waits until the next prompt before printing the status of a background job that changes status or a foreground job that terminates due to a signal. Non-interactive shells print status messages after a foreground job completes. |
 | `C8.JOB.01` | `bash-man` | bash(1) section SIGNALS + JOB CONTROL + builtins | `covered / covered` | `man-bash-posix-13-exec-errors-signals-jobs.sh` | job table maintenance for async commands |
@@ -1061,8 +1061,8 @@ Notes:
 
 Notes:
 
-- `BPOSIX.CORE.022`: Scaffold comparator case mapped and executable; strict row-level assertions pending; Source: bash/POSIX 6.11.2 item 22.
-- `BPOSIX.CORE.023`: Scaffold comparator case mapped and executable; strict row-level assertions pending; Source: bash/POSIX 6.11.2 item 23.
+- `BPOSIX.CORE.022`: Strict comparator case validates Done(status) state reporting for non-zero completed jobs under monitor mode.
+- `BPOSIX.CORE.023`: Strict comparator case validates stopped-job state reporting in jobs output under monitor mode.
 - `BPOSIX.CORE.024`: Comparator case validates interactive notification timing scaffold behavior for row 24.
 - `BPOSIX.CORE.025`: Comparator case validates interactive notification prompt-boundary behavior for row 25.
 - `C8.JOB.01`: Row-level evidence mapping assigned from requirement->case rules. Evidence run: mapped tests all pass.

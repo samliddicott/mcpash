@@ -1207,7 +1207,9 @@ class Runtime:
     def _format_job_notification_line(self, job_id: int) -> str:
         status = self._bg_status.get(job_id, 0)
         state = "Done"
-        if status < 0:
+        if status > 0:
+            state = f"Done({status})"
+        elif status < 0:
             try:
                 sig_name = signal.Signals(-status).name.replace("SIG", "")
             except Exception:
@@ -6558,9 +6560,18 @@ class Runtime:
             done = (th is None) or (not th.is_alive())
             state_model = self._job_state.get(job_id)
             if state_model == JOB_STOPPED or job_id in self._bg_stopped:
-                state = "Stopped(SIGSTOP)"
+                sig_num = self._latest_job_event_value(job_id, "stopped")
+                if sig_num is not None:
+                    try:
+                        sig_name = signal.Signals(sig_num).name.replace("SIG", "")
+                        state = f"Stopped({sig_name})"
+                    except Exception:
+                        state = "Stopped"
+                else:
+                    state = "Stopped"
             elif state_model == JOB_DONE:
-                state = "Done"
+                status = self._bg_status.get(job_id, 0)
+                state = f"Done({status})" if status > 0 else "Done"
             else:
                 state = "Done" if done else "Running"
             if pid_only:
@@ -9845,10 +9856,6 @@ class Runtime:
                     self.options["r"] = True
                     self._activate_restricted_mode()
                     return 0
-            if opt == "m" and enabled and not os.isatty(0):
-                self._report_error(self._diag_msg(DiagnosticKey.SET_CANT_ACCESS_TTY), line=self.current_line, context=None)
-                self.options["m"] = False
-                return 0
             self.options[opt] = enabled
             if opt == "m" and enabled:
                 self._ensure_job_control_ready()

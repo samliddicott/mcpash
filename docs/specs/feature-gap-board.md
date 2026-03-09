@@ -1,6 +1,6 @@
 # Feature Gap Board
 
-Generated: 2026-03-09 14:41:32Z
+Generated: 2026-03-09 16:07:30Z
 
 Purpose: implementation-first backlog grouped by feature topic (rows where either default or posix status is not `covered`).
 
@@ -10,7 +10,7 @@ Purpose: implementation-first backlog grouped by feature topic (rows where eithe
 |---|---:|
 | `builtin:bind` | 1 |
 | `builtin:break` | 2 |
-| `builtin:command` | 10 |
+| `builtin:command` | 9 |
 | `builtin:continue` | 1 |
 | `builtin:echo` | 1 |
 | `builtin:jobs` | 1 |
@@ -18,7 +18,6 @@ Purpose: implementation-first backlog grouped by feature topic (rows where eithe
 | `builtin:set` | 2 |
 | `builtin:test` | 1 |
 | `builtin:unset` | 1 |
-| `runtime:job-control` | 2 |
 | `subcategory:compat-delta` | 3 |
 | `syntax:arithmetic` | 2 |
 | `syntax:command-substitution` | 1 |
@@ -53,7 +52,6 @@ Purpose: implementation-first backlog grouped by feature topic (rows where eithe
 | `BCOMPAT.51.003` | `bash-compat-doc` | `partial / partial` | `bash-compat-doc-51-003.sh` | expressions used as arguments to arithmetic operators in the [[ conditional command can be expanded more than once |
 | `BCOMPAT.51.004` | `bash-compat-doc` | `partial / partial` | `bash-compat-doc-51-004.sh` | indexed and associative array subscripts used as arguments to the operators in the [[ conditional command (e.g., `[[ -v') can be expanded more than once. Bash-5.2 behaves as if the `assoc_expand_once' option were enabled. |
 | `BCOMPAT.51.010` | `bash-compat-doc` | `partial / partial` | `bash-compat-doc-51-010.sh` | Parsing command substitutions will act as if extended glob is enabled, so that parsing a command substitution containing an extglob pattern (say, as part of a shell function) will not fail. This assumes the intent is to enable extglob before the command is executed and word expansions are performed. It will fail at word expansion time if extglob hasn't been enabled by the time the command is executed. |
-| `BPOSIX.CORE.027` | `bash-posix-doc` | `partial / partial` | `bash-posix-doc-027.sh` | The ‘vi’ editing mode will invoke the ‘vi’ editor directly when the ‘v’ command is run, instead of checking ‘$VISUAL’ and ‘$EDITOR’. |
 
 ### `builtin:continue`
 
@@ -98,13 +96,6 @@ Purpose: implementation-first backlog grouped by feature topic (rows where eithe
 | Req ID | Source | Status (default/posix) | Tests | Feature |
 |---|---|---|---|---|
 | `BCOMPAT.51.001` | `bash-compat-doc` | `partial / partial` | `bash-compat-doc-51-001.sh` | The `unset' builtin will unset the array a given an argument like `a[@]'. Bash-5.2 will unset an element with key `@' (associative arrays) or remove all the elements without unsetting the array (indexed arrays) |
-
-### `runtime:job-control`
-
-| Req ID | Source | Status (default/posix) | Tests | Feature |
-|---|---|---|---|---|
-| `BPOSIX.CORE.022` | `bash-posix-doc` | `partial / partial` | `bash-posix-doc-022.sh` | The message printed by the job control code and builtins when a job exits with a non-zero status is 'Done(status)'. |
-| `BPOSIX.CORE.023` | `bash-posix-doc` | `partial / partial` | `bash-posix-doc-023.sh` | The message printed by the job control code and builtins when a job is stopped is 'Stopped(SIGNAME)', where SIGNAME is, for example, ‘SIGTSTP’. |
 
 ### `subcategory:compat-delta`
 
