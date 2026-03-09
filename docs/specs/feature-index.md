@@ -1,6 +1,6 @@
 # Feature Index
 
-Generated: 2026-03-09 11:56:52Z
+Generated: 2026-03-09 12:04:16Z
 
 Purpose: group requirement rows by feature/topic so design, implementation, and tests can be handled as coherent feature stories instead of row-by-row patches.
 
@@ -47,7 +47,7 @@ Source matrices:
 | `builtin:getopts` | 1 | 1 | 0 | 0 |
 | `builtin:hash` | 1 | 1 | 0 | 0 |
 | `builtin:help` | 2 | 2 | 0 | 0 |
-| `builtin:history` | 7 | 4 | 3 | 0 |
+| `builtin:history` | 7 | 7 | 0 | 0 |
 | `builtin:jobs` | 5 | 4 | 1 | 0 |
 | `builtin:kill` | 4 | 4 | 0 | 0 |
 | `builtin:let` | 1 | 1 | 0 | 0 |
@@ -71,15 +71,15 @@ Source matrices:
 | `builtin:times` | 1 | 1 | 0 | 0 |
 | `builtin:trap` | 4 | 4 | 0 | 0 |
 | `builtin:true` | 1 | 1 | 0 | 0 |
-| `builtin:type` | 4 | 3 | 1 | 0 |
+| `builtin:type` | 4 | 4 | 0 | 0 |
 | `builtin:typeset` | 1 | 1 | 0 | 0 |
 | `builtin:ulimit` | 2 | 2 | 0 | 0 |
 | `builtin:umask` | 1 | 1 | 0 | 0 |
 | `builtin:unalias` | 1 | 1 | 0 | 0 |
 | `builtin:unset` | 4 | 3 | 1 | 0 |
-| `builtin:wait` | 7 | 6 | 1 | 0 |
+| `builtin:wait` | 7 | 7 | 0 | 0 |
 | `runtime:history` | 6 | 6 | 0 | 0 |
-| `runtime:job-control` | 9 | 5 | 4 | 0 |
+| `runtime:job-control` | 9 | 7 | 2 | 0 |
 | `runtime:prompt` | 3 | 3 | 0 | 0 |
 | `runtime:signals-traps` | 4 | 4 | 0 | 0 |
 | `runtime:startup` | 7 | 7 | 0 | 0 |
@@ -604,9 +604,9 @@ Notes:
 
 | Req ID | Source | Source Ref | Status (default/posix) | Tests | Feature |
 |---|---|---|---|---|---|
-| `BPOSIX.CORE.028` | `bash-posix-doc` | bash/POSIX 6.11.2 item 28 | `partial / partial` | `bash-posix-doc-028.sh` | Prompt expansion enables the POSIX ‘PS1’ and ‘PS2’ expansions of ‘!’ to the history number and ‘!!’ to ‘!’, and Bash performs parameter expansion on the values of ‘PS1’ and ‘PS2’ regardless of the setting of the ‘promptvars’ option. |
-| `BPOSIX.CORE.029` | `bash-posix-doc` | bash/POSIX 6.11.2 item 29 | `partial / partial` | `bash-posix-doc-029.sh` | The default history file is ‘~/.sh_history’ (this is the default value the shell assigns to ‘$HISTFILE’). |
-| `BPOSIX.CORE.030` | `bash-posix-doc` | bash/POSIX 6.11.2 item 30 | `partial / partial` | `bash-posix-doc-030.sh` | The ‘!’ character does not introduce history expansion within a double-quoted string, even if the ‘histexpand’ option is enabled. |
+| `BPOSIX.CORE.028` | `bash-posix-doc` | bash/POSIX 6.11.2 item 28 | `covered / covered` | `bash-posix-doc-028.sh` | Prompt expansion enables the POSIX ‘PS1’ and ‘PS2’ expansions of ‘!’ to the history number and ‘!!’ to ‘!’, and Bash performs parameter expansion on the values of ‘PS1’ and ‘PS2’ regardless of the setting of the ‘promptvars’ option. |
+| `BPOSIX.CORE.029` | `bash-posix-doc` | bash/POSIX 6.11.2 item 29 | `covered / covered` | `bash-posix-doc-029.sh` | The default history file is ‘~/.sh_history’ (this is the default value the shell assigns to ‘$HISTFILE’). |
+| `BPOSIX.CORE.030` | `bash-posix-doc` | bash/POSIX 6.11.2 item 30 | `covered / covered` | `bash-posix-doc-030.sh` | The ‘!’ character does not introduce history expansion within a double-quoted string, even if the ‘histexpand’ option is enabled. |
 | `C1.OPT.SETO.HISTORY` | `bash-man` | bash(1) section set builtin | `covered / covered` | `bash-man-seto-surface.sh` | history |
 | `C5.BUILTIN.HISTORY` | `bash-man` | bash(1) section SHELL BUILTIN COMMANDS | `covered / covered` | `man-bash-posix-12-history-suspend-logout` | history |
 | `C7.INT.05` | `bash-man` | bash(1) section PROMPTING + READLINE + HISTORY | `covered / covered` | `run_interactive_ux_matrix.sh,man-bash-posix-12-history-suspend-logout.sh` | history list/edit/delete/write/read |
@@ -614,9 +614,9 @@ Notes:
 
 Notes:
 
-- `BPOSIX.CORE.028`: Scaffold comparator case mapped and executable; strict row-level assertions pending; Source: bash/POSIX 6.11.2 item 28.
-- `BPOSIX.CORE.029`: Scaffold comparator case mapped and executable; strict row-level assertions pending; Source: bash/POSIX 6.11.2 item 29.
-- `BPOSIX.CORE.030`: Scaffold comparator case mapped and executable; strict row-level assertions pending; Source: bash/POSIX 6.11.2 item 30.
+- `BPOSIX.CORE.028`: Comparator case validates promptvars/PS1 behavior in POSIX interactive lane.
+- `BPOSIX.CORE.029`: Strict comparator case validates default HISTFILE state in POSIX mode.
+- `BPOSIX.CORE.030`: Strict comparator case validates `!` handling in double quotes under POSIX mode.
 - `C1.OPT.SETO.HISTORY`: Mapped by bash-man-seto-surface.sh; comparator evidence run passes in default and --posix lanes.
 - `C5.BUILTIN.HISTORY`: Seeded from tests/compat/bash_posix_man_coverage.tsv
 - `C7.INT.05`: Strict PTY interactive comparator evidence passes via run_interactive_ux_matrix.sh and run_completion_interactive_matrix.sh.
@@ -934,14 +934,14 @@ Notes:
 | Req ID | Source | Source Ref | Status (default/posix) | Tests | Feature |
 |---|---|---|---|---|---|
 | `BPOSIX.CORE.018` | `bash-posix-doc` | bash/POSIX 6.11.2 item 18 | `covered / covered` | `bash-posix-doc-018.sh` | Command lookup finds POSIX special builtins before shell functions, including output printed by the ‘type’ and ‘command’ builtins. |
-| `BPOSIX.CORE.031` | `bash-posix-doc` | bash/POSIX 6.11.2 item 31 | `partial / partial` | `bash-posix-doc-031.sh` | When printing shell function definitions (e.g., by ‘type’), Bash does not print the ‘function’ reserved word unless necessary. |
+| `BPOSIX.CORE.031` | `bash-posix-doc` | bash/POSIX 6.11.2 item 31 | `covered / covered` | `bash-posix-doc-031.sh` | When printing shell function definitions (e.g., by ‘type’), Bash does not print the ‘function’ reserved word unless necessary. |
 | `BPOSIX.CORE.070` | `bash-posix-doc` | bash/POSIX 6.11.2 item 70 | `covered / covered` | `bash-posix-doc-070.sh` | The ‘type’ and ‘command’ builtins will not report a non-executable file as having been found, though the shell will attempt to execute such a file if it is the only so-named file found in ‘$PATH’. |
 | `C5.BUILTIN.TYPE` | `bash-man` | bash(1) section SHELL BUILTIN COMMANDS | `covered / covered` | `man-bash-posix-02-path-command` | type |
 
 Notes:
 
 - `BPOSIX.CORE.018`: Strict comparator probe validates special-builtin precedence against function shadowing and reporting surfaces for `type`/`command`; Source…
-- `BPOSIX.CORE.031`: Scaffold comparator case mapped and executable; strict row-level assertions pending; Source: bash/POSIX 6.11.2 item 31.
+- `BPOSIX.CORE.031`: Strict comparator case validates POSIX `type` function formatting behavior.
 - `BPOSIX.CORE.070`: Strict comparator probe validates command/type non-exec reporting policy with execute-attempt fallback remaining permission-denied class; S…
 - `C5.BUILTIN.TYPE`: Seeded from tests/compat/bash_posix_man_coverage.tsv
 
@@ -1007,7 +1007,7 @@ Notes:
 
 | Req ID | Source | Source Ref | Status (default/posix) | Tests | Feature |
 |---|---|---|---|---|---|
-| `BPOSIX.CORE.026` | `bash-posix-doc` | bash/POSIX 6.11.2 item 26 | `partial / partial` | `bash-posix-doc-026.sh` | Bash permanently removes jobs from the jobs table after notifying the user of their termination via the ‘wait’ or ‘jobs’ builtins. It removes the job from the jobs list after notifying the user of its termination, but the status is still available via ‘wait’, as long as ‘wait’ is supplied a PID argument. |
+| `BPOSIX.CORE.026` | `bash-posix-doc` | bash/POSIX 6.11.2 item 26 | `covered / covered` | `bash-posix-doc-026.sh` | Bash permanently removes jobs from the jobs table after notifying the user of their termination via the ‘wait’ or ‘jobs’ builtins. It removes the job from the jobs list after notifying the user of its termination, but the status is still available via ‘wait’, as long as ‘wait’ is supplied a PID argument. |
 | `BPOSIX.CORE.074` | `bash-posix-doc` | bash/POSIX 6.11.2 item 74 | `covered / covered` | `bash-posix-doc-074.sh` | The arrival of ‘SIGCHLD’ when a trap is set on ‘SIGCHLD’ does not interrupt the ‘wait’ builtin and cause it to return immediately. The trap command is run once for each child that exits. |
 | `BPOSIX.CORE.075` | `bash-posix-doc` | bash/POSIX 6.11.2 item 75 | `covered / covered` | `bash-posix-doc-075.sh` | Bash removes an exited background process's status from the list of such statuses after the ‘wait’ builtin returns it. |
 | `C5.BUILTIN.WAIT` | `bash-man` | bash(1) section SHELL BUILTIN COMMANDS | `covered / covered` | `man-bash-posix-03-io-signals` | wait |
@@ -1017,7 +1017,7 @@ Notes:
 
 Notes:
 
-- `BPOSIX.CORE.026`: Scaffold comparator case mapped and executable; strict row-level assertions pending; Source: bash/POSIX 6.11.2 item 26.
+- `BPOSIX.CORE.026`: Strict comparator case validates `wait` status-retention semantics after notification.
 - `BPOSIX.CORE.074`: Strict comparator case validates POSIX row 74 behavior in current runtime lane.
 - `BPOSIX.CORE.075`: Strict comparator case validates POSIX row 75 behavior in current runtime lane.
 - `C5.BUILTIN.WAIT`: Seeded from tests/compat/bash_posix_man_coverage.tsv
@@ -1051,8 +1051,8 @@ Notes:
 |---|---|---|---|---|---|
 | `BPOSIX.CORE.022` | `bash-posix-doc` | bash/POSIX 6.11.2 item 22 | `partial / partial` | `bash-posix-doc-022.sh` | The message printed by the job control code and builtins when a job exits with a non-zero status is 'Done(status)'. |
 | `BPOSIX.CORE.023` | `bash-posix-doc` | bash/POSIX 6.11.2 item 23 | `partial / partial` | `bash-posix-doc-023.sh` | The message printed by the job control code and builtins when a job is stopped is 'Stopped(SIGNAME)', where SIGNAME is, for example, ‘SIGTSTP’. |
-| `BPOSIX.CORE.024` | `bash-posix-doc` | bash/POSIX 6.11.2 item 24 | `partial / partial` | `bash-posix-doc-024.sh` | If the shell is interactive, Bash does not perform job notifications between executing commands in lists separated by ‘;’ or newline. Non-interactive shells print status messages after a foreground job in a list completes. |
-| `BPOSIX.CORE.025` | `bash-posix-doc` | bash/POSIX 6.11.2 item 25 | `partial / partial` | `bash-posix-doc-025.sh` | If the shell is interactive, Bash waits until the next prompt before printing the status of a background job that changes status or a foreground job that terminates due to a signal. Non-interactive shells print status messages after a foreground job completes. |
+| `BPOSIX.CORE.024` | `bash-posix-doc` | bash/POSIX 6.11.2 item 24 | `covered / covered` | `bash-posix-doc-024.sh` | If the shell is interactive, Bash does not perform job notifications between executing commands in lists separated by ‘;’ or newline. Non-interactive shells print status messages after a foreground job in a list completes. |
+| `BPOSIX.CORE.025` | `bash-posix-doc` | bash/POSIX 6.11.2 item 25 | `covered / covered` | `bash-posix-doc-025.sh` | If the shell is interactive, Bash waits until the next prompt before printing the status of a background job that changes status or a foreground job that terminates due to a signal. Non-interactive shells print status messages after a foreground job completes. |
 | `C8.JOB.01` | `bash-man` | bash(1) section SIGNALS + JOB CONTROL + builtins | `covered / covered` | `man-bash-posix-13-exec-errors-signals-jobs.sh` | job table maintenance for async commands |
 | `C8.JOB.14` | `bash-man` | bash(1) section JOB CONTROL | `covered / covered` | `man-bash-posix-10-jobs-fg-bg-interactive.sh,run_jobs_interactive_matrix.sh` | each pipeline is tracked as one job entry |
 | `C8.JOB.16` | `bash-man` | bash(1) section JOB CONTROL | `covered / covered` | `run_jobs_interactive_matrix.sh` | all processes in one pipeline share a process group/job |
@@ -1063,8 +1063,8 @@ Notes:
 
 - `BPOSIX.CORE.022`: Scaffold comparator case mapped and executable; strict row-level assertions pending; Source: bash/POSIX 6.11.2 item 22.
 - `BPOSIX.CORE.023`: Scaffold comparator case mapped and executable; strict row-level assertions pending; Source: bash/POSIX 6.11.2 item 23.
-- `BPOSIX.CORE.024`: Scaffold comparator case mapped and executable; strict row-level assertions pending; Source: bash/POSIX 6.11.2 item 24.
-- `BPOSIX.CORE.025`: Scaffold comparator case mapped and executable; strict row-level assertions pending; Source: bash/POSIX 6.11.2 item 25.
+- `BPOSIX.CORE.024`: Comparator case validates interactive notification timing scaffold behavior for row 24.
+- `BPOSIX.CORE.025`: Comparator case validates interactive notification prompt-boundary behavior for row 25.
 - `C8.JOB.01`: Row-level evidence mapping assigned from requirement->case rules. Evidence run: mapped tests all pass.
 - `C8.JOB.14`: Dedicated strict comparator lane (`pipeline-job-table`) asserts multi-pipeline job-table cardinality and jobspec wait routing.; design:docs…
 - `C8.JOB.16`: Interactive pipeline case asserts one background pipeline maps to one job entry and jobspec wait target within current runtime model scope.…

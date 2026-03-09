@@ -1,6 +1,6 @@
 # Feature Gap Board
 
-Generated: 2026-03-09 11:56:52Z
+Generated: 2026-03-09 12:04:16Z
 
 Purpose: implementation-first backlog grouped by feature topic (rows where either default or posix status is not `covered`).
 
@@ -13,15 +13,12 @@ Purpose: implementation-first backlog grouped by feature topic (rows where eithe
 | `builtin:command` | 10 |
 | `builtin:continue` | 1 |
 | `builtin:echo` | 1 |
-| `builtin:history` | 3 |
 | `builtin:jobs` | 1 |
 | `builtin:return` | 2 |
 | `builtin:set` | 2 |
 | `builtin:test` | 1 |
-| `builtin:type` | 1 |
 | `builtin:unset` | 1 |
-| `builtin:wait` | 1 |
-| `runtime:job-control` | 4 |
+| `runtime:job-control` | 2 |
 | `subcategory:compat-delta` | 3 |
 | `subcategory:expansion-redir` | 1 |
 | `subcategory:misc-posix-mode` | 1 |
@@ -72,14 +69,6 @@ Purpose: implementation-first backlog grouped by feature topic (rows where eithe
 |---|---|---|---|---|
 | `BPOSIX.EXTRA.003` | `bash-posix-doc` | `partial / out_of_scope` | `bash-posix-doc-extra-003.sh` | As noted above, Bash requires the ‘xpg_echo’ option to be enabled for the ‘echo’ builtin to be fully conformant. |
 
-### `builtin:history`
-
-| Req ID | Source | Status (default/posix) | Tests | Feature |
-|---|---|---|---|---|
-| `BPOSIX.CORE.028` | `bash-posix-doc` | `partial / partial` | `bash-posix-doc-028.sh` | Prompt expansion enables the POSIX ‘PS1’ and ‘PS2’ expansions of ‘!’ to the history number and ‘!!’ to ‘!’, and Bash performs parameter expansion on the values of ‘PS1’ and ‘PS2’ regardless of the setting of the ‘promptvars’ option. |
-| `BPOSIX.CORE.029` | `bash-posix-doc` | `partial / partial` | `bash-posix-doc-029.sh` | The default history file is ‘~/.sh_history’ (this is the default value the shell assigns to ‘$HISTFILE’). |
-| `BPOSIX.CORE.030` | `bash-posix-doc` | `partial / partial` | `bash-posix-doc-030.sh` | The ‘!’ character does not introduce history expansion within a double-quoted string, even if the ‘histexpand’ option is enabled. |
-
 ### `builtin:jobs`
 
 | Req ID | Source | Status (default/posix) | Tests | Feature |
@@ -106,23 +95,11 @@ Purpose: implementation-first backlog grouped by feature topic (rows where eithe
 |---|---|---|---|---|
 | `BCOMPAT.52.001` | `bash-compat-doc` | `partial / partial` | `bash-compat-doc-52-001.sh` | the test builtin uses its historical algorithm for parsing expressions composed of five or more primaries. |
 
-### `builtin:type`
-
-| Req ID | Source | Status (default/posix) | Tests | Feature |
-|---|---|---|---|---|
-| `BPOSIX.CORE.031` | `bash-posix-doc` | `partial / partial` | `bash-posix-doc-031.sh` | When printing shell function definitions (e.g., by ‘type’), Bash does not print the ‘function’ reserved word unless necessary. |
-
 ### `builtin:unset`
 
 | Req ID | Source | Status (default/posix) | Tests | Feature |
 |---|---|---|---|---|
 | `BCOMPAT.51.001` | `bash-compat-doc` | `partial / partial` | `bash-compat-doc-51-001.sh` | The `unset' builtin will unset the array a given an argument like `a[@]'. Bash-5.2 will unset an element with key `@' (associative arrays) or remove all the elements without unsetting the array (indexed arrays) |
-
-### `builtin:wait`
-
-| Req ID | Source | Status (default/posix) | Tests | Feature |
-|---|---|---|---|---|
-| `BPOSIX.CORE.026` | `bash-posix-doc` | `partial / partial` | `bash-posix-doc-026.sh` | Bash permanently removes jobs from the jobs table after notifying the user of their termination via the ‘wait’ or ‘jobs’ builtins. It removes the job from the jobs list after notifying the user of its termination, but the status is still available via ‘wait’, as long as ‘wait’ is supplied a PID argument. |
 
 ### `runtime:job-control`
 
@@ -130,8 +107,6 @@ Purpose: implementation-first backlog grouped by feature topic (rows where eithe
 |---|---|---|---|---|
 | `BPOSIX.CORE.022` | `bash-posix-doc` | `partial / partial` | `bash-posix-doc-022.sh` | The message printed by the job control code and builtins when a job exits with a non-zero status is 'Done(status)'. |
 | `BPOSIX.CORE.023` | `bash-posix-doc` | `partial / partial` | `bash-posix-doc-023.sh` | The message printed by the job control code and builtins when a job is stopped is 'Stopped(SIGNAME)', where SIGNAME is, for example, ‘SIGTSTP’. |
-| `BPOSIX.CORE.024` | `bash-posix-doc` | `partial / partial` | `bash-posix-doc-024.sh` | If the shell is interactive, Bash does not perform job notifications between executing commands in lists separated by ‘;’ or newline. Non-interactive shells print status messages after a foreground job in a list completes. |
-| `BPOSIX.CORE.025` | `bash-posix-doc` | `partial / partial` | `bash-posix-doc-025.sh` | If the shell is interactive, Bash waits until the next prompt before printing the status of a background job that changes status or a foreground job that terminates due to a signal. Non-interactive shells print status messages after a foreground job completes. |
 
 ### `subcategory:compat-delta`
 
