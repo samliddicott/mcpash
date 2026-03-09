@@ -91,6 +91,21 @@ Optional compile fallback diagnostics:
 MCTASH_BACKEND=compiled MCTASH_COMPILE_DEBUG=1 make diff-conformance
 ```
 
+Disable compiled backend globally (even if requested):
+
+```sh
+MCTASH_BACKEND=compiled MCTASH_ENABLE_COMPILED=0 make diff-conformance
+```
+
+Run interpreter-vs-compiled self-parity:
+
+```sh
+make backend-self-parity
+```
+
+Report output:
+- `docs/reports/backend-self-parity-latest.md`
+
 Run full BusyBox ash corpus:
 
 ```sh

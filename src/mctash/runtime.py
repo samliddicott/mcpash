@@ -484,6 +484,23 @@ class _PyBridge:
 
 
 class Runtime:
+    COMPILE_FALLBACK_REASONS: Dict[str, str] = {
+        "item-not-dict": "ASDL list item is not a dict node.",
+        "sentence-background": "Background sentence nodes are not compiled in phase 1.",
+        "sentence-child-invalid": "Sentence child node is invalid.",
+        "unsupported-list-item": "Unsupported ASDL list item type.",
+        "andor-has-ops": "And/or lists with logical operators are not compiled in phase 1.",
+        "andor-child-count": "And/or list shape is not a single pipeline.",
+        "pipeline-invalid": "Pipeline node is invalid.",
+        "pipeline-negated": "Negated pipelines are not compiled in phase 1.",
+        "pipeline-child-count": "Pipelines with multiple stages are not compiled in phase 1.",
+        "simple-not-eligible": "Simple command contains non-literal words or unsupported env/redir.",
+        "json-key-failed": "Failed to key compiled cache from ASDL node.",
+        "compiled-not-callable": "Compiled artifact did not produce callable entrypoint.",
+        "compile-failed": "Python compile/exec of backend artifact failed.",
+        "compiled-runtime-error": "Compiled artifact raised at runtime; interpreter fallback used.",
+        "compile-disabled-by-config": "MCTASH_ENABLE_COMPILED disabled compiled backend; interpreter forced.",
+    }
     OPTION_FLAG_ORDER = "abefhkmnptuvxBCEHPT"
     _thread_diag_lock = threading.Lock()
     _thread_diag_emitted: set[str] = set()
@@ -806,7 +823,18 @@ class Runtime:
         self._last_read_interrupt_status: int | None = None
         self._last_read_timed_out: bool = False
         backend = self.env.get("MCTASH_BACKEND", "interpreter").strip().lower()
-        self._exec_backend: str = backend if backend in {"interpreter", "compiled"} else "interpreter"
+        self._compiled_backend_enabled: bool = self.env.get("MCTASH_ENABLE_COMPILED", "1").strip().lower() not in {
+            "0",
+            "false",
+            "no",
+            "off",
+        }
+        self._exec_backend_requested: str = backend if backend in {"interpreter", "compiled"} else "interpreter"
+        self._exec_backend: str = (
+            "compiled"
+            if self._exec_backend_requested == "compiled" and self._compiled_backend_enabled
+            else "interpreter"
+        )
         self._compile_debug: bool = self.env.get("MCTASH_COMPILE_DEBUG", "").strip().lower() in {"1", "true", "yes", "on"}
         self._compiled_cache: Dict[str, Callable[["Runtime"], int]] = {}
         self._compile_fallback_seen: set[str] = set()
@@ -1040,6 +1068,8 @@ class Runtime:
             pass
 
     def run(self, script: Script) -> int:
+        if self._exec_backend_requested == "compiled" and not self._compiled_backend_enabled:
+            self._compile_note("compile-disabled-by-config")
         return self._exec_list(script.body)
 
     def _install_signal_handlers(self) -> None:
@@ -1617,6 +1647,13 @@ class Runtime:
         if reason in self._compile_fallback_seen:
             return
         self._compile_fallback_seen.add(reason)
+        desc = self.COMPILE_FALLBACK_REASONS.get(reason, "")
+        if desc:
+            self._print_stderr(f"[mctash-compile] fallback: {reason} ({desc})")
+            return
+        if reason.startswith("unsupported-list-item:"):
+            self._print_stderr(f"[mctash-compile] fallback: {reason} ({self.COMPILE_FALLBACK_REASONS.get('unsupported-list-item', '')})")
+            return
         self._print_stderr(f"[mctash-compile] fallback: {reason}")
 
     def _asdl_word_is_compile_literal(self, word: Any) -> bool:
@@ -1705,6 +1742,8 @@ class Runtime:
             return None
 
     def _exec_asdl_list_item(self, item: dict[str, Any]) -> int:
+        if self._exec_backend_requested == "compiled" and not self._compiled_backend_enabled:
+            self._compile_note("compile-disabled-by-config")
         if self._exec_backend == "compiled" and self._compiled_depth == 0:
             compiled = self._compile_asdl_list_item(item)
             if compiled is not None:
