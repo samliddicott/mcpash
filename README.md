@@ -85,6 +85,21 @@ Run the same differential harness with the compile backend enabled:
 MCTASH_BACKEND=compiled make diff-conformance
 ```
 
+Emit Python modules from shell source in parse-only mode (`-n`):
+
+```sh
+PYTHONPATH=src python3 -m mctash -n --emit-python=docs/reports/emitted-python path/to/script.sh
+```
+
+Emit alternate idiomatic-style output:
+
+```sh
+PYTHONPATH=src python3 -m mctash -n --emit-python --emit-python-style=idiomatic path/to/script.sh
+```
+
+This writes one `.py` file per statically discovered sourced file (where the
+operand to `.`/`source` is a literal path) plus `manifest.json`.
+
 Optional compile fallback diagnostics:
 
 ```sh
