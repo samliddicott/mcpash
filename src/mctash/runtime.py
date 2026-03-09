@@ -5885,7 +5885,10 @@ class Runtime:
                     return 1
                 if not parts:
                     return 1
-                proc = subprocess.run(parts + [path], text=True, check=False)
+                # Match shell runtime-visible environment for editor process.
+                # This keeps FCEDIT/EDITOR execution aligned with current shell
+                # state rather than host launcher environment.
+                proc = subprocess.run(parts + [path], text=True, check=False, env=dict(self.env))
                 if proc.returncode != 0:
                     return proc.returncode
             with open(path, "r", encoding="utf-8") as f:
