@@ -79,6 +79,18 @@ For bash-baseline differential cases, you can mirror compat settings across both
 PARITY_BASH_COMPAT=50 PARITY_MIRROR_POSIX=1 make diff-conformance
 ```
 
+Run the same differential harness with the compile backend enabled:
+
+```sh
+MCTASH_BACKEND=compiled make diff-conformance
+```
+
+Optional compile fallback diagnostics:
+
+```sh
+MCTASH_BACKEND=compiled MCTASH_COMPILE_DEBUG=1 make diff-conformance
+```
+
 Run full BusyBox ash corpus:
 
 ```sh

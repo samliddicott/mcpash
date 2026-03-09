@@ -27,7 +27,7 @@ import resource
 from contextlib import contextmanager, redirect_stdout
 from collections.abc import MutableMapping
 from dataclasses import dataclass
-from typing import Any, Dict, Iterable, Iterator, List, Optional, Tuple
+from typing import Any, Callable, Dict, Iterable, Iterator, List, Optional, Tuple
 
 from .ast_nodes import (
     AndOr,
@@ -805,6 +805,12 @@ class Runtime:
         self._is_login_shell: bool = False
         self._last_read_interrupt_status: int | None = None
         self._last_read_timed_out: bool = False
+        backend = self.env.get("MCTASH_BACKEND", "interpreter").strip().lower()
+        self._exec_backend: str = backend if backend in {"interpreter", "compiled"} else "interpreter"
+        self._compile_debug: bool = self.env.get("MCTASH_COMPILE_DEBUG", "").strip().lower() in {"1", "true", "yes", "on"}
+        self._compiled_cache: Dict[str, Callable[["Runtime"], int]] = {}
+        self._compile_fallback_seen: set[str] = set()
+        self._compiled_depth: int = 0
         # POSIX shells initialize IFS by default; many parameter-expansion
         # operator-word edge cases depend on IFS being set.
         self.env.setdefault("IFS", " \t\n")
@@ -1605,7 +1611,113 @@ class Runtime:
         self._drain_process_subst()
         return status
 
+    def _compile_note(self, reason: str) -> None:
+        if not self._compile_debug:
+            return
+        if reason in self._compile_fallback_seen:
+            return
+        self._compile_fallback_seen.add(reason)
+        self._print_stderr(f"[mctash-compile] fallback: {reason}")
+
+    def _asdl_word_is_compile_literal(self, word: Any) -> bool:
+        if not isinstance(word, dict) or word.get("type") != "word.Compound":
+            return False
+        for p in (word.get("parts") or []):
+            if not isinstance(p, dict):
+                return False
+            t = str(p.get("type", ""))
+            if t not in {"word_part.Literal", "word_part.SingleQuoted"}:
+                return False
+        return True
+
+    def _asdl_simple_command_compile_eligible(self, node: Any) -> bool:
+        if not isinstance(node, dict) or node.get("type") != "command.Simple":
+            return False
+        if node.get("redirects") or node.get("more_env"):
+            return False
+        words = node.get("words") or []
+        if not words:
+            return False
+        return all(self._asdl_word_is_compile_literal(w) for w in words)
+
+    def _asdl_item_compile_eligible(self, item: Any) -> tuple[bool, str]:
+        if not isinstance(item, dict):
+            return False, "item-not-dict"
+        t = str(item.get("type", ""))
+        if t == "command.Sentence":
+            term = self._asdl_token_text(item.get("terminator"))
+            if term == "&":
+                return False, "sentence-background"
+            child = item.get("child")
+            if not isinstance(child, dict):
+                return False, "sentence-child-invalid"
+            return self._asdl_item_compile_eligible(child)
+        if t != "command.AndOr":
+            return False, f"unsupported-list-item:{t}"
+        ops = item.get("ops") or []
+        children = item.get("children") or []
+        if ops:
+            return False, "andor-has-ops"
+        if len(children) != 1:
+            return False, "andor-child-count"
+        pipeline = children[0]
+        if not isinstance(pipeline, dict) or pipeline.get("type") != "command.Pipeline":
+            return False, "pipeline-invalid"
+        if pipeline.get("negated"):
+            return False, "pipeline-negated"
+        p_children = pipeline.get("children") or []
+        if len(p_children) != 1:
+            return False, "pipeline-child-count"
+        if not self._asdl_simple_command_compile_eligible(p_children[0]):
+            return False, "simple-not-eligible"
+        return True, "ok"
+
+    def _compile_asdl_list_item(self, item: dict[str, Any]) -> Callable[["Runtime"], int] | None:
+        eligible, reason = self._asdl_item_compile_eligible(item)
+        if not eligible:
+            self._compile_note(reason)
+            return None
+        try:
+            key = json.dumps(item, sort_keys=True, separators=(",", ":"))
+        except Exception:
+            self._compile_note("json-key-failed")
+            return None
+        fn = self._compiled_cache.get(key)
+        if fn is not None:
+            return fn
+        try:
+            src = (
+                "def __mctash_compiled(rt, __node):\n"
+                "    return rt._exec_asdl_list_item_impl(__node)\n"
+            )
+            glb: dict[str, object] = {}
+            code = compile(src, "<mctash-compiled>", "exec")
+            exec(code, glb)
+            compiled_impl = glb["__mctash_compiled"]
+            if not callable(compiled_impl):
+                self._compile_note("compiled-not-callable")
+                return None
+            fn = lambda rt, _impl=compiled_impl, _node=item: int(_impl(rt, _node))
+            self._compiled_cache[key] = fn
+            return fn
+        except Exception:
+            self._compile_note("compile-failed")
+            return None
+
     def _exec_asdl_list_item(self, item: dict[str, Any]) -> int:
+        if self._exec_backend == "compiled" and self._compiled_depth == 0:
+            compiled = self._compile_asdl_list_item(item)
+            if compiled is not None:
+                self._compiled_depth += 1
+                try:
+                    return compiled(self)
+                except Exception:
+                    self._compile_note("compiled-runtime-error")
+                finally:
+                    self._compiled_depth -= 1
+        return self._exec_asdl_list_item_impl(item)
+
+    def _exec_asdl_list_item_impl(self, item: dict[str, Any]) -> int:
         t = item.get("type")
         if t == "command.Sentence":
             self._command_number += 1

@@ -10,6 +10,7 @@ BASH_BIN="${BASH_BIN:-bash --posix}"
 read -r -a BASH_CMD <<< "${BASH_BIN}"
 MCTASH_CMD="${MCTASH_CMD:-PYTHONPATH=${ROOT}/src python3 -m mctash}"
 MCTASH_MODE_DEFAULT="${MCTASH_MODE_DEFAULT:-posix}"
+MCTASH_BACKEND="${MCTASH_BACKEND:-interpreter}"
 PARITY_BASH_COMPAT="${PARITY_BASH_COMPAT:-}"
 PARITY_MIRROR_POSIX="${PARITY_MIRROR_POSIX:-0}"
 
@@ -152,7 +153,7 @@ for case in "${CASE_FILES[@]}"; do
       mctash_mode="bash"
       mctash_prefix="BASH_COMPAT=${PARITY_BASH_COMPAT} "
     fi
-    mctash_prefix="MCTASH_MODE=${mctash_mode} ${mctash_prefix}"
+    mctash_prefix="MCTASH_BACKEND=${MCTASH_BACKEND} MCTASH_MODE=${mctash_mode} ${mctash_prefix}"
     if [[ "${PARITY_MIRROR_POSIX}" == "1" ]]; then
       mctash_opts="--posix "
     fi
