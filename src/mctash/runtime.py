@@ -266,6 +266,22 @@ class _PyVarsMapping(MutableMapping[str, object]):
     def declare(self, name: str, value: object = "", **flags: object) -> None:
         self._rt._declare_var(name, self._rt._py_to_shell(value), **flags)
 
+    def __getattr__(self, name: str) -> object:
+        if name.startswith("_"):
+            raise AttributeError(name)
+        return self[name]
+
+    def __setattr__(self, name: str, value: object) -> None:
+        if name == "_rt" or name.startswith("_"):
+            object.__setattr__(self, name, value)
+            return
+        self[name] = value
+
+    def __delattr__(self, name: str) -> None:
+        if name.startswith("_"):
+            raise AttributeError(name)
+        del self[name]
+
 
 class _PyEnvMapping(MutableMapping[str, str]):
     def __init__(self, rt: "Runtime") -> None:
@@ -365,6 +381,135 @@ class _PyFnNamespace(MutableMapping[str, object]):
         return self[name]
 
 
+class _PyArgsView:
+    def __init__(self, rt: "Runtime") -> None:
+        self._rt = rt
+
+    def _as_list(self) -> list[str]:
+        return [self._rt.script_name] + list(self._rt.positional)
+
+    def __getitem__(self, idx: int | slice) -> object:
+        vals = self._as_list()
+        if isinstance(idx, slice):
+            return vals[idx]
+        return vals[idx]
+
+    def __len__(self) -> int:
+        return len(self._rt.positional) + 1
+
+    def __iter__(self) -> Iterator[str]:
+        return iter(self._as_list())
+
+    def set(self, *values: object) -> None:
+        if len(values) == 1 and isinstance(values[0], (list, tuple)):
+            values = tuple(values[0])
+        self._rt.positional = [self._rt._py_to_shell(v) for v in values]
+
+
+class _PyExpand:
+    def __init__(self, rt: "Runtime") -> None:
+        self._rt = rt
+
+    def split_ifs(self, text: object) -> list[str]:
+        return self._rt._split_ifs(self._rt._py_to_shell(text))
+
+    def substr(self, value: object, offset: int, length: int | None = None) -> str:
+        arg_text = str(int(offset)) if length is None else f"{int(offset)}:{int(length)}"
+        return self._rt._substring(self._rt._py_to_shell(value), arg_text)
+
+    def substr_text(self, value: object, arg_text: str) -> str:
+        return self._rt._substring(self._rt._py_to_shell(value), str(arg_text))
+
+    def substr_var(self, name: str, offset: int, length: int | None = None) -> str:
+        arg_text = str(int(offset)) if length is None else f"{int(offset)}:{int(length)}"
+        return self._rt._substring(self._rt._get_var(str(name)), arg_text)
+
+    def substr_var_text(self, name: str, arg_text: str) -> str:
+        return self._rt._substring(self._rt._get_var(str(name)), str(arg_text))
+
+
+class _PyRunCommand:
+    def __init__(self, runner: "_PyRunProxy", name: str) -> None:
+        self._runner = runner
+        self._name = name
+
+    def __call__(self, *args: object, **kwargs: object) -> subprocess.CompletedProcess[str]:
+        return self._runner.argv([self._name, *args], **kwargs)
+
+
+class _PyRunProxy:
+    def __init__(self, bridge: "_PyBridge") -> None:
+        self._bridge = bridge
+
+    def __call__(
+        self,
+        *args: object,
+        capture_output: bool = False,
+        stdout: Any = None,
+        stderr: Any = None,
+        check: bool = False,
+        input: str | None = None,
+        shell: bool = True,
+        cwd: str | None = None,
+        env: dict[str, str] | None = None,
+        timeout: float | None = None,
+    ) -> subprocess.CompletedProcess[str]:
+        return self._bridge._run_script(
+            *args,
+            capture_output=capture_output,
+            stdout=stdout,
+            stderr=stderr,
+            check=check,
+            input=input,
+            shell=shell,
+            cwd=cwd,
+            env=env,
+            timeout=timeout,
+        )
+
+    def argv(
+        self,
+        argv: list[object],
+        *,
+        check: bool = False,
+        capture_output: bool = False,
+    ) -> subprocess.CompletedProcess[str]:
+        rt = self._bridge._rt
+        cmd = [rt._py_to_shell(a) for a in argv]
+        if not cmd:
+            cp = subprocess.CompletedProcess(args=cmd, returncode=0, stdout="" if capture_output else None, stderr="")
+            return cp
+        if capture_output:
+            status, out, _ = rt._capture_command_output(
+                SimpleCommand(
+                    argv=[Word(a) for a in cmd],
+                    assignments=[],
+                    redirects=[],
+                    line=rt.current_line,
+                ),
+                data=None,
+                force_epipe=False,
+            )
+            stdout_text = out.decode("utf-8", errors="replace")
+            cp = subprocess.CompletedProcess(args=cmd, returncode=int(status), stdout=stdout_text, stderr="")
+        else:
+            status = rt._run_argv_dispatch(cmd)
+            cp = subprocess.CompletedProcess(args=cmd, returncode=int(status), stdout=None, stderr=None)
+        if check and cp.returncode != 0:
+            raise ShellCalledProcessError(
+                returncode=int(cp.returncode),
+                cmd=shlex.join(cmd),
+                stdout=(cp.stdout or ""),
+                stderr=(cp.stderr or ""),
+            )
+        return cp
+
+    def __getattr__(self, name: str) -> _PyRunCommand:
+        if name.startswith("_"):
+            raise AttributeError(name)
+        return _PyRunCommand(self, name)
+
+
 class _PyBridge:
     PIPE = subprocess.PIPE
     STDOUT = subprocess.STDOUT
@@ -376,6 +521,9 @@ class _PyBridge:
         self.env = _PyEnvMapping(rt)
         self.fn = _PyFnNamespace(rt)
         self.shared = _PySharedMapping(rt)
+        self.args = _PyArgsView(rt)
+        self.expand = _PyExpand(rt)
+        self.run = _PyRunProxy(self)
 
     @property
     def stack(self) -> list[dict[str, object]]:
@@ -406,7 +554,7 @@ class _PyBridge:
             return args[0]
         return shlex.join([str(a) for a in args])
 
-    def run(
+    def _run_script(
         self,
         *args: object,
         capture_output: bool = False,
@@ -10910,6 +11058,12 @@ class Runtime:
             bool(payload)
             and (callable(self._resolve_py_name(payload[0])) or payload[0] in self._py_callables)
         )
+        shell_callable_mode = False
+        if callable_mode and payload:
+            cobj = self._resolve_py_name(payload[0])
+            if cobj is None:
+                cobj = self._py_callables.get(payload[0])
+            shell_callable_mode = bool(getattr(cobj, "__mctash_shell_function__", False))
         source_from_stdin = False
         if not payload:
             source_from_stdin = True
@@ -10944,6 +11098,12 @@ class Runtime:
             self._assign_shell_var(stdout_var, py_stdout.getvalue())
         if return_var is not None:
             self._assign_shell_var(return_var, self._py_to_shell(py_result))
+        if shell_callable_mode:
+            try:
+                return (int(py_result) if py_result is not None else 0) % 256
+            except (TypeError, ValueError):
+                print(f"{entry_name}: shell-style callable must return int status, got {type(py_result).__name__}", file=sys.stderr)
+                return 1
         if callable_mode and py_result is not None and stdout_var is None and return_var is None and not eval_mode:
             print(self._py_to_shell(py_result))
         if eval_mode and py_result is not None and stdout_var is None and return_var is None:
@@ -11024,6 +11184,9 @@ class Runtime:
             return 2
         try:
             mod = self._load_py_module(mod_ref)
+            bind = getattr(mod, "mctash_bind", None)
+            if callable(bind):
+                bind(self._py_globals.get("sh"))
             if name == "*":
                 for k in dir(mod):
                     if k.startswith("_"):
@@ -12631,6 +12794,26 @@ class Runtime:
             return self._run_builtin(name, [name] + cmd[1:])
         except SystemExit as e:
             return int(e.code) if e.code is not None else 0
+
+    def _run_argv_dispatch(
+        self,
+        cmd: List[str],
+        *,
+        path_override: str | None = None,
+    ) -> int:
+        if not cmd:
+            return 0
+        if self._is_builtin_enabled(cmd[0]):
+            try:
+                return self._run_builtin(cmd[0], cmd)
+            except SystemExit as e:
+                return int(e.code) if e.code is not None else 0
+        if self._has_function(cmd[0]):
+            return self._run_function(cmd[0], cmd[1:])
+        env = dict(self.env)
+        if path_override is not None:
+            env["PATH"] = path_override
+        return self._run_external(cmd, env, [])
 
     def _run_trap(self, args: List[str]) -> int:
         if len(args) == 1 and args[0] == "-l":

@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import signal
 import shlex
 import sys
@@ -497,6 +498,156 @@ def _asdl_assignment_static_pair(node: object) -> tuple[str, str] | None:
     return name, val
 
 
+def _asdl_simple_command_node(item: object) -> dict[str, object] | None:
+    if not isinstance(item, dict):
+        return None
+    n = item
+    if n.get("type") == "command.Sentence":
+        child = n.get("child")
+        if not isinstance(child, dict):
+            return None
+        n = child
+    if n.get("type") != "command.AndOr":
+        return None
+    if n.get("ops") or len(n.get("children") or []) != 1:
+        return None
+    pl = (n.get("children") or [None])[0]
+    if not isinstance(pl, dict) or pl.get("type") != "command.Pipeline" or pl.get("negated"):
+        return None
+    children = pl.get("children") or []
+    if len(children) != 1:
+        return None
+    cmd = children[0]
+    if not isinstance(cmd, dict) or cmd.get("type") != "command.Simple":
+        return None
+    return cmd
+
+
+def _word_expr_from_asdl(word: object) -> str | None:
+    if not isinstance(word, dict) or word.get("type") != "word.Compound":
+        return None
+    parts = word.get("parts") or []
+    exprs: list[str] = []
+    for part in parts:
+        if not isinstance(part, dict):
+            return None
+        p_type = str(part.get("type", ""))
+        if p_type == "word_part.Literal":
+            exprs.append(json.dumps(str(part.get("tval", ""))))
+            continue
+        if p_type == "word_part.SingleQuoted":
+            exprs.append(json.dumps(str(part.get("sval", ""))))
+            continue
+        if p_type == "word_part.SimpleVarSub":
+            name = str(part.get("name", ""))
+            if name.isdigit():
+                exprs.append(f"_s(sh.args[{int(name)}])")
+            else:
+                exprs.append(f"_s(sh.vars[{json.dumps(name)}])")
+            continue
+        if p_type == "word_part.BracedVarSub":
+            name = str(part.get("name", ""))
+            op = str(part.get("op") or "")
+            if op in {"", "none"}:
+                exprs.append(f"_s(sh.vars[{json.dumps(name)}])")
+                continue
+            if op == ":substr":
+                arg_word = part.get("arg")
+                arg_text = _asdl_word_static_literal_text(arg_word)
+                if arg_text is None:
+                    return None
+                exprs.append(f"_s(sh.expand.substr_var_text({json.dumps(name)}, {json.dumps(arg_text)}))")
+                continue
+            return None
+        if p_type == "word_part.DoubleQuoted":
+            inner = part.get("parts") or []
+            inner_exprs: list[str] = []
+            for inner_part in inner:
+                if not isinstance(inner_part, dict):
+                    return None
+                inner_type = str(inner_part.get("type", ""))
+                if inner_type == "word_part.Literal":
+                    inner_exprs.append(json.dumps(str(inner_part.get("tval", ""))))
+                    continue
+                if inner_type == "word_part.SimpleVarSub":
+                    n = str(inner_part.get("name", ""))
+                    if n.isdigit():
+                        inner_exprs.append(f"_s(sh.args[{int(n)}])")
+                    else:
+                        inner_exprs.append(f"_s(sh.vars[{json.dumps(n)}])")
+                    continue
+                if inner_type == "word_part.BracedVarSub":
+                    n = str(inner_part.get("name", ""))
+                    op = str(inner_part.get("op") or "")
+                    if op in {"", "none"}:
+                        inner_exprs.append(f"_s(sh.vars[{json.dumps(n)}])")
+                        continue
+                    if op == ":substr":
+                        arg_word = inner_part.get("arg")
+                        arg_text = _asdl_word_static_literal_text(arg_word)
+                        if arg_text is None:
+                            return None
+                        inner_exprs.append(f"_s(sh.expand.substr_var_text({json.dumps(n)}, {json.dumps(arg_text)}))")
+                        continue
+                return None
+            if not inner_exprs:
+                exprs.append(json.dumps(""))
+            elif len(inner_exprs) == 1:
+                exprs.append(inner_exprs[0])
+            else:
+                exprs.append("(" + " + ".join(inner_exprs) + ")")
+            continue
+        return None
+    if not exprs:
+        return json.dumps("")
+    if len(exprs) == 1:
+        return exprs[0]
+    return "(" + " + ".join(exprs) + ")"
+
+
+def _word_is_single_unquoted_var(word: object) -> str | None:
+    if not isinstance(word, dict) or word.get("type") != "word.Compound":
+        return None
+    parts = word.get("parts") or []
+    if len(parts) != 1:
+        return None
+    p = parts[0]
+    if not isinstance(p, dict) or p.get("type") != "word_part.SimpleVarSub":
+        return None
+    return str(p.get("name", ""))
+
+
+def _emit_simple_argv_lines(simple: dict[str, object]) -> list[str] | None:
+    words = simple.get("words") or []
+    if not isinstance(words, list) or not words:
+        return None
+    argv_parts: list[str] = []
+    arg_exprs: list[str] = []
+    for idx, w in enumerate(words):
+        var_name = _word_is_single_unquoted_var(w)
+        if var_name:
+            if var_name.isdigit():
+                expr = f"*sh.expand.split_ifs(_s(sh.args[{int(var_name)}]))"
+            else:
+                expr = f"*sh.expand.split_ifs(_s(sh.vars[{json.dumps(var_name)}]))"
+            argv_parts.append(expr)
+            if idx > 0:
+                arg_exprs.append(expr)
+            continue
+        expr = _word_expr_from_asdl(w)
+        if expr is None:
+            return None
+        argv_parts.append(expr)
+        if idx > 0:
+            arg_exprs.append(expr)
+    cmd0 = _asdl_word_static_literal_text(words[0])
+    if cmd0 and re.match(r"^[A-Za-z_][A-Za-z0-9_]*$", cmd0):
+        if arg_exprs:
+            return [f"status = sh.run.{cmd0}(" + ", ".join(arg_exprs) + ").returncode"]
+        return [f"status = sh.run.{cmd0}().returncode"]
+    return ["argv = [" + ", ".join(argv_parts) + "]", "status = sh.run.argv(argv).returncode"]
+
+
 def _collect_static_source_operands(node: object, out: List[str]) -> None:
     if isinstance(node, dict):
         argv = _asdl_simple_command_static_argv(node)
@@ -544,16 +695,42 @@ def _emit_python_module_idiomatic(
     asdl_items: List[dict],
     item_sources: List[str],
 ) -> None:
-    run_lines: List[str] = [
-        "def run(rt):",
-        "    import subprocess",
+    lines: List[str] = [
+        "#!/usr/bin/env python3",
+        f"# emitted from: {source_name}",
+        f"# mode: {mode}",
+        "# style: idiomatic",
+        "",
+        "sh = None",
+        "",
+        "def mctash_bind(bridge):",
+        "    global sh",
+        "    sh = bridge",
+        "",
+        "def _s(v):",
+        "    if v is None:",
+        "        return ''",
+        "    return v if isinstance(v, str) else str(v)",
+        "",
+        "def _require_sh():",
+        "    if sh is None:",
+        "        raise RuntimeError('mctash bridge not bound; import via mctash from-import or call run(rt=...)')",
+        "    return sh",
+        "",
+        "def run(*_argv, rt=None):",
+        "    if rt is not None:",
+        "        mctash_bind(rt._py_globals['sh'])",
+        "    sh = _require_sh()",
+        "    _saved_args = list(sh.args[1:])",
+        "    if _argv:",
+        "        sh.args.set(*_argv)",
         "    status = 0",
     ]
     for i, item in enumerate(asdl_items):
         src = item_sources[i] if i < len(item_sources) else ""
         src_line = " ".join(part.strip() for part in src.splitlines() if part.strip())
         if src_line:
-            run_lines.append(f"    # shell: {src_line}")
+            lines.append(f"    # shell: {src_line}")
         argv: List[str] | None = None
         assignment: tuple[str, str] | None = None
         leaf = item
@@ -585,29 +762,29 @@ def _emit_python_module_idiomatic(
                     argv = _asdl_simple_command_static_argv(children[0])
         if assignment is not None:
             name, value = assignment
-            run_lines.append(f"    rt._assign_shell_var({json.dumps(name)}, {json.dumps(value)})")
-            run_lines.append("    status = 0")
+            lines.append(f"    sh.vars[{json.dumps(name)}] = {json.dumps(value)}")
+            lines.append("    status = 0")
             continue
+        simple = _asdl_simple_command_node(item)
+        if simple is not None:
+            argv_lines = _emit_simple_argv_lines(simple)
+            if argv_lines is not None:
+                lines.append(f"    # item {i}: lowered simple command")
+                for l in argv_lines:
+                    lines.append(f"    {l}")
+                continue
         if argv:
-            run_lines.append(f"    # item {i}: {' '.join(shlex.quote(a) for a in argv)}")
-            run_lines.append(f"    argv_{i} = {json.dumps(argv)}")
-            run_lines.append(f"    if rt._is_builtin_enabled(argv_{i}[0]) or rt._has_function(argv_{i}[0]):")
-            run_lines.append(f"        status = rt._eval_source({json.dumps(src)}, parse_context='emit-idiomatic-builtin')")
-            run_lines.append("    else:")
-            run_lines.append(f"        status = subprocess.run(argv_{i}, env=dict(rt.env), check=False).returncode")
+            lines.append(f"    # item {i}: {' '.join(shlex.quote(a) for a in argv)}")
+            lines.append(f"    status = sh.run.argv({json.dumps(argv)}).returncode")
             continue
-        run_lines.append(f"    # item {i}: fallback to shell-eval snippet")
-        run_lines.append(f"    status = rt._eval_source({json.dumps(src)}, parse_context='emit-idiomatic-fallback')")
-    run_lines.append("    return status")
-    lines: List[str] = [
-        "#!/usr/bin/env python3",
-        f"# emitted from: {source_name}",
-        f"# mode: {mode}",
-        "# style: idiomatic",
-        "",
-        *run_lines,
-        "",
-    ]
+        lines.append(f"    # item {i}: fallback shell eval")
+        lines.append(f"    status = rt._eval_source({json.dumps(src)}, parse_context='emit-idiomatic-fallback')")
+    lines.append("    if _argv:")
+    lines.append("        sh.args.set(*_saved_args)")
+    lines.append("    return status")
+    lines.append("")
+    lines.append("run.__mctash_shell_function__ = True")
+    lines.append("")
     with open(module_path, "w", encoding="utf-8") as f:
         f.write("\n".join(lines))
 
