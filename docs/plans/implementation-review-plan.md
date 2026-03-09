@@ -1,5 +1,9 @@
 # Implementation Review Plan
 
+Note:
+- Active detailed execution plan is `docs/plans/011-posix-compat-model-review.md`.
+- This file remains as umbrella philosophy and prioritization policy.
+
 ## Philosophy
 
 Implement by coherent feature groups, not by test-file clusters.
