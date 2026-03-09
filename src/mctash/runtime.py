@@ -5802,8 +5802,25 @@ class Runtime:
                 j += 1
             i += 1
         rest = args[i:]
+        if mode == "subst":
+            if rest and "=" in rest[0]:
+                if len(rest) > 2:
+                    return 1
+            elif len(rest) > 1:
+                return 1
+        else:
+            # bash accepts extra trailing args in non-substitution forms.
+            if len(rest) > 2:
+                rest = rest[:2]
+
         if not self._history:
-            return 1
+            # Bash is permissive for list/edit surfaces when no history exists,
+            # except `fc -e -` (re-exec mode) which fails without a command.
+            if mode == "subst":
+                return 1
+            if mode == "edit" and editor == "-":
+                return 1
+            return 0
         current_is_fc = bool(self._history) and self._history[-1].lstrip().startswith("fc")
         default_ref = "-2" if current_is_fc else "-1"
 
