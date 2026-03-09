@@ -1,13 +1,13 @@
 # Bash POSIX Man-Page Matrix
 
-Generated: 2026-03-07 15:48:25Z
+Generated: 2026-03-09 08:44:02Z
 
 ## Summary
 
-- covered builtins: 60
+- covered builtins: 63
 - partial builtins: 0
 - out-of-scope builtins: 0
-- executed case files: 22
+- executed case files: 25
 - matrix exit code: 0
 - mismatch lines detected: 0
 
@@ -21,6 +21,9 @@ Generated: 2026-03-07 15:48:25Z
 - bash-builtin-help.sh
 - bash-compat-mapfile-readarray.sh
 - man-ash-fc.sh
+- man-ash-fc-e-override.sh
+- man-ash-fc-editor-env.sh
+- man-ash-fc-empty-history.sh
 - man-bash-posix-01-core-state.sh
 - man-bash-posix-02-path-command.sh
 - man-bash-posix-03-io-signals.sh

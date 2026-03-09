@@ -1,6 +1,6 @@
 # Feature Gap Board
 
-Generated: 2026-03-09 08:23:38Z
+Generated: 2026-03-09 08:44:23Z
 
 Purpose: implementation-first backlog grouped by feature topic (rows where either default or posix status is not `covered`).
 

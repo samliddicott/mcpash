@@ -183,6 +183,9 @@ C5.BUILTIN.EXIT	5	builtin.command	builtin	exit	present	SHELL BUILTIN COMMANDS	Bu
 C5.BUILTIN.EXPORT	5	builtin.command	builtin	export	present	SHELL BUILTIN COMMANDS	Builtin command documented in SHELL BUILTIN COMMANDS.
 C5.BUILTIN.FALSE	5	builtin.command	builtin	false	extension	SHELL BUILTIN COMMANDS	Builtin command documented in SHELL BUILTIN COMMANDS.
 C5.BUILTIN.FC	5	builtin.command	builtin	fc	extension	SHELL BUILTIN COMMANDS	Builtin command documented in SHELL BUILTIN COMMANDS.
+C5.BUILTIN.FC.ENV	5	builtin.command	builtin	fc editor env propagation	extension	SHELL BUILTIN COMMANDS	Editor subprocess for fc should observe shell runtime env (FCEDIT/EDITOR and exported vars).
+C5.BUILTIN.FC.EMPTY	5	builtin.command	builtin	fc empty-history behavior	extension	SHELL BUILTIN COMMANDS	fc empty-history surfaces should match comparator behavior across list/edit/reexec/substitute forms.
+C5.BUILTIN.FC.EOVERRIDE	5	builtin.command	builtin	fc -e override precedence	extension	SHELL BUILTIN COMMANDS	Explicit `-e editor` takes precedence over FCEDIT and EDITOR fallback.
 C5.BUILTIN.FG	5	builtin.command	builtin	fg	extension	SHELL BUILTIN COMMANDS	Builtin command documented in SHELL BUILTIN COMMANDS.
 C5.BUILTIN.GETOPTS	5	builtin.command	builtin	getopts	present	SHELL BUILTIN COMMANDS	Builtin command documented in SHELL BUILTIN COMMANDS.
 C5.BUILTIN.HASH	5	builtin.command	builtin	hash	present	SHELL BUILTIN COMMANDS	Builtin command documented in SHELL BUILTIN COMMANDS.

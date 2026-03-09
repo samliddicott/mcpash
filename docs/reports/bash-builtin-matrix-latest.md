@@ -1,6 +1,6 @@
 # Bash Builtin Matrix
 
-Generated: 2026-03-06 09:08:50Z
+Generated: 2026-03-09 08:44:18Z
 
 ## Summary
 
@@ -19,6 +19,10 @@ Generated: 2026-03-06 09:08:50Z
 - bash-builtin-dirstack.sh
 - bash-builtin-disown.sh
 - bash-builtin-completion.sh
+- man-ash-fc.sh
+- man-ash-fc-editor-env.sh
+- man-ash-fc-empty-history.sh
+- man-ash-fc-e-override.sh
 
 ## Bash-Compat Cases
 

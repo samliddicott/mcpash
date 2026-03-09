@@ -34,6 +34,10 @@ core_cases=(
   bash-builtin-dirstack
   bash-builtin-disown
   bash-builtin-completion
+  man-ash-fc
+  man-ash-fc-editor-env
+  man-ash-fc-empty-history
+  man-ash-fc-e-override
 )
 
 run_lane core "${core_cases[@]}"

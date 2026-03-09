@@ -183,6 +183,9 @@ C5.BUILTIN.EXIT	5	builtin.command	builtin	exit	present	covered	covered	man-bash-
 C5.BUILTIN.EXPORT	5	builtin.command	builtin	export	present	covered	covered	man-bash-posix-01-core-state	Seeded from tests/compat/bash_posix_man_coverage.tsv
 C5.BUILTIN.FALSE	5	builtin.command	builtin	false	extension	covered	covered	man-bash-posix-04-misc-builtins	Seeded from tests/compat/bash_posix_man_coverage.tsv
 C5.BUILTIN.FC	5	builtin.command	builtin	fc	extension	covered	covered	man-ash-fc	Seeded from tests/compat/bash_posix_man_coverage.tsv
+C5.BUILTIN.FC.ENV	5	builtin.command	builtin	fc editor env propagation	extension	covered	covered	man-ash-fc-editor-env	Strict comparator case verifies fc editor subprocess observes shell runtime env snapshot.
+C5.BUILTIN.FC.EMPTY	5	builtin.command	builtin	fc empty-history behavior	extension	covered	covered	man-ash-fc-empty-history	Strict comparator case covers empty-history behavior for list/edit/reexec/substitute forms.
+C5.BUILTIN.FC.EOVERRIDE	5	builtin.command	builtin	fc -e override precedence	extension	covered	covered	man-ash-fc-e-override	Strict comparator case verifies explicit -e editor precedence over FCEDIT/EDITOR.
 C5.BUILTIN.FG	5	builtin.command	builtin	fg	extension	covered	covered	man-bash-posix-10-jobs-fg-bg-interactive	Seeded from tests/compat/bash_posix_man_coverage.tsv
 C5.BUILTIN.GETOPTS	5	builtin.command	builtin	getopts	present	covered	covered	man-bash-posix-01-core-state	Seeded from tests/compat/bash_posix_man_coverage.tsv
 C5.BUILTIN.HASH	5	builtin.command	builtin	hash	present	covered	covered	man-bash-posix-02-path-command	Seeded from tests/compat/bash_posix_man_coverage.tsv
