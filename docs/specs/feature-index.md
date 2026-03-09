@@ -1,6 +1,6 @@
 # Feature Index
 
-Generated: 2026-03-09 12:33:38Z
+Generated: 2026-03-09 14:41:32Z
 
 Purpose: group requirement rows by feature/topic so design, implementation, and tests can be handled as coherent feature stories instead of row-by-row patches.
 
@@ -35,7 +35,7 @@ Source matrices:
 | `builtin:declare` | 2 | 2 | 0 | 0 |
 | `builtin:dirs` | 1 | 1 | 0 | 0 |
 | `builtin:disown` | 1 | 1 | 0 | 0 |
-| `builtin:echo` | 3 | 2 | 1 | 0 |
+| `builtin:echo` | 3 | 3 | 0 | 0 |
 | `builtin:enable` | 1 | 1 | 0 | 0 |
 | `builtin:eval` | 1 | 1 | 0 | 0 |
 | `builtin:exec` | 2 | 2 | 0 | 0 |
@@ -86,7 +86,7 @@ Source matrices:
 | `subcategory:compat-delta` | 3 | 0 | 3 | 0 |
 | `subcategory:compatibility` | 4 | 4 | 0 | 0 |
 | `subcategory:expansion` | 8 | 8 | 0 | 0 |
-| `subcategory:expansion-redir` | 3 | 2 | 1 | 0 |
+| `subcategory:expansion-redir` | 3 | 3 | 0 | 0 |
 | `subcategory:grammar.core` | 19 | 19 | 0 | 0 |
 | `subcategory:interactive` | 4 | 4 | 0 | 0 |
 | `subcategory:invocation.long-option` | 13 | 13 | 0 | 0 |
@@ -437,13 +437,13 @@ Notes:
 | Req ID | Source | Source Ref | Status (default/posix) | Tests | Feature |
 |---|---|---|---|---|---|
 | `BPOSIX.CORE.051` | `bash-posix-doc` | bash/POSIX 6.11.2 item 51 | `covered / covered` | `bash-posix-doc-051.sh` | When the ‘xpg_echo’ option is enabled, Bash does not attempt to interpret any arguments to ‘echo’ as options. ‘echo’ displays each argument after converting escape sequences. |
-| `BPOSIX.EXTRA.003` | `bash-posix-doc` | bash/POSIX 6.11.2 item 3 | `partial / out_of_scope` | `bash-posix-doc-extra-003.sh` | As noted above, Bash requires the ‘xpg_echo’ option to be enabled for the ‘echo’ builtin to be fully conformant. |
+| `BPOSIX.EXTRA.003` | `bash-posix-doc` | bash/POSIX 6.11.2 item 3 | `covered / out_of_scope` | `bash-posix-doc-extra-003.sh` | As noted above, Bash requires the ‘xpg_echo’ option to be enabled for the ‘echo’ builtin to be fully conformant. |
 | `C5.BUILTIN.ECHO` | `bash-man` | bash(1) section SHELL BUILTIN COMMANDS | `covered / covered` | `man-bash-posix-04-misc-builtins` | echo |
 
 Notes:
 
 - `BPOSIX.CORE.051`: Strict comparator case validates xpg_echo interaction in POSIX lane.
-- `BPOSIX.EXTRA.003`: Requires explicit strict-posix-default policy decision before parity claim; Source: bash/POSIX 6.11.2 additional-behavior item 3 (numbering…
+- `BPOSIX.EXTRA.003`: Policy decision: bash mode follows bash xpg_echo semantics; ash/posix lane intentionally remains mode-specific and out-of-scope for this ba…
 - `C5.BUILTIN.ECHO`: Seeded from tests/compat/bash_posix_man_coverage.tsv
 
 ### `builtin:enable`
@@ -1183,13 +1183,13 @@ Notes:
 |---|---|---|---|---|---|
 | `BPOSIX.CORE.013` | `bash-posix-doc` | bash/POSIX 6.11.2 item 13 | `covered / covered` | `bash-posix-doc-013.sh` | While variable indirection is available, it may not be applied to the ‘#’ and ‘?’ special parameters. |
 | `BPOSIX.CORE.017` | `bash-posix-doc` | bash/POSIX 6.11.2 item 17 | `covered / covered` | `bash-posix-doc-017.sh` | Literal tildes that appear as the first character in elements of the ‘PATH’ variable are not expanded as described above under *note Tilde Expansion::. |
-| `BPOSIX.EXTRA.001` | `bash-posix-doc` | bash/POSIX 6.11.2 item 1 | `partial / out_of_scope` | `bash-posix-doc-extra-001.sh` | POSIX requires that word splitting be byte-oriented. That is, each _byte_ in the value of ‘IFS’ potentially splits a word, even if that byte is part of a multibyte character in ‘IFS’ or part of multibyte character in the word. Bash allows multibyte characters in the value of ‘IFS’, treating a valid multibyte character as a single delimiter, and will not split a valid multibyte character even if one of the bytes composing that character appears in ‘IFS’. This is POSIX interpretation 1560, further modified by issue 1924. |
+| `BPOSIX.EXTRA.001` | `bash-posix-doc` | bash/POSIX 6.11.2 item 1 | `covered / covered` | `bash-posix-doc-extra-001.sh` | POSIX requires that word splitting be byte-oriented. That is, each _byte_ in the value of ‘IFS’ potentially splits a word, even if that byte is part of a multibyte character in ‘IFS’ or part of multibyte character in the word. Bash allows multibyte characters in the value of ‘IFS’, treating a valid multibyte character as a single delimiter, and will not split a valid multibyte character even if one of the bytes composing that character appears in ‘IFS’. This is POSIX interpretation 1560, further modified by issue 1924. |
 
 Notes:
 
 - `BPOSIX.CORE.013`: Comparator parity: alias expansion timing in command substitutions aligns in POSIX lane.
 - `BPOSIX.CORE.017`: Comparator parity: command substitution parsing and quoting behavior aligns in POSIX lane.
-- `BPOSIX.EXTRA.001`: Requires explicit strict-posix-default policy decision before parity claim; Source: bash/POSIX 6.11.2 additional-behavior item 1 (numbering…
+- `BPOSIX.EXTRA.001`: Policy decision: follow bash multibyte-aware IFS splitting behavior (not strict byte-wise POSIX interpretation) across modes; covered by ba…
 
 ### `subcategory:grammar.core`
 

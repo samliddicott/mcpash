@@ -1,6 +1,6 @@
 # Feature Gap Board
 
-Generated: 2026-03-09 12:33:38Z
+Generated: 2026-03-09 14:41:32Z
 
 Purpose: implementation-first backlog grouped by feature topic (rows where either default or posix status is not `covered`).
 
@@ -20,7 +20,6 @@ Purpose: implementation-first backlog grouped by feature topic (rows where eithe
 | `builtin:unset` | 1 |
 | `runtime:job-control` | 2 |
 | `subcategory:compat-delta` | 3 |
-| `subcategory:expansion-redir` | 1 |
 | `syntax:arithmetic` | 2 |
 | `syntax:command-substitution` | 1 |
 | `syntax:parameter-expansion` | 2 |
@@ -66,7 +65,7 @@ Purpose: implementation-first backlog grouped by feature topic (rows where eithe
 
 | Req ID | Source | Status (default/posix) | Tests | Feature |
 |---|---|---|---|---|
-| `BPOSIX.EXTRA.003` | `bash-posix-doc` | `partial / out_of_scope` | `bash-posix-doc-extra-003.sh` | As noted above, Bash requires the ‘xpg_echo’ option to be enabled for the ‘echo’ builtin to be fully conformant. |
+| `BPOSIX.EXTRA.003` | `bash-posix-doc` | `covered / out_of_scope` | `bash-posix-doc-extra-003.sh` | As noted above, Bash requires the ‘xpg_echo’ option to be enabled for the ‘echo’ builtin to be fully conformant. |
 
 ### `builtin:jobs`
 
@@ -114,12 +113,6 @@ Purpose: implementation-first backlog grouped by feature topic (rows where eithe
 | `BCOMPAT.41.001` | `bash-compat-doc` | `partial / partial` | `bash-compat-doc-41-001.sh` | in posix mode, `time' may be followed by options and still be recognized as a reserved word (this is POSIX interpretation 267) |
 | `BCOMPAT.44.001` | `bash-compat-doc` | `partial / partial` | `bash-compat-doc-44-001.sh` | the shell sets up the values used by BASH_ARGV and BASH_ARGC so they can expand to the shell's positional parameters even if extended debug mode is not enabled |
 | `BCOMPAT.51.005` | `bash-compat-doc` | `partial / partial` | `bash-compat-doc-51-005.sh` | the expressions in substring parameter brace expansion can be expanded more than once |
-
-### `subcategory:expansion-redir`
-
-| Req ID | Source | Status (default/posix) | Tests | Feature |
-|---|---|---|---|---|
-| `BPOSIX.EXTRA.001` | `bash-posix-doc` | `partial / out_of_scope` | `bash-posix-doc-extra-001.sh` | POSIX requires that word splitting be byte-oriented. That is, each _byte_ in the value of ‘IFS’ potentially splits a word, even if that byte is part of a multibyte character in ‘IFS’ or part of multibyte character in the word. Bash allows multibyte characters in the value of ‘IFS’, treating a valid multibyte character as a single delimiter, and will not split a valid multibyte character even if one of the bytes composing that character appears in ‘IFS’. This is POSIX interpretation 1560, further modified by issue 1924. |
 
 ### `syntax:arithmetic`
 

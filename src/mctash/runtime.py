@@ -11247,6 +11247,44 @@ class Runtime:
             i += 1
         return "".join(out)
 
+    def _decode_backslash_escapes_bash_xpg(self, text: str) -> str:
+        # Bash xpg_echo decodes a limited escape set for echo; notably it does
+        # not treat octal/hex forms like \141 as numeric escapes.
+        out: List[str] = []
+        i = 0
+        mapping = {
+            "a": "\a",
+            "b": "\b",
+            "e": "\x1b",
+            "E": "\x1b",
+            "f": "\f",
+            "n": "\n",
+            "r": "\r",
+            "t": "\t",
+            "v": "\v",
+            "\\": "\\",
+            "'": "'",
+            '"': '"',
+        }
+        while i < len(text):
+            ch = text[i]
+            if ch != "\\":
+                out.append(ch)
+                i += 1
+                continue
+            if i + 1 >= len(text):
+                out.append("\\")
+                i += 1
+                continue
+            esc = text[i + 1]
+            if esc in mapping:
+                out.append(mapping[esc])
+            else:
+                out.append("\\")
+                out.append(esc)
+            i += 2
+        return "".join(out)
+
     def _run_echo(self, args: List[str]) -> int:
         newline = True
         i = 0
@@ -11263,8 +11301,12 @@ class Runtime:
                 break
         args = args[i:]
         data = " ".join(args)
+        mode = self.env.get("MCTASH_MODE", "").strip().lower()
         if self._shopts.get("xpg_echo", False):
-            data = self._decode_backslash_escapes(data)
+            if mode == "bash":
+                data = self._decode_backslash_escapes_bash_xpg(data)
+            else:
+                data = self._decode_backslash_escapes(data)
         if newline:
             data += "\n"
         if self._force_broken_pipe and self._fd_redirect_depth == 0:
