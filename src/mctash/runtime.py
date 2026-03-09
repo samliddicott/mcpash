@@ -11310,7 +11310,7 @@ class Runtime:
         data = " ".join(args)
         mode = self.env.get("MCTASH_MODE", "").strip().lower()
         if self._shopts.get("xpg_echo", False):
-            if mode == "bash":
+            if mode == "bash" or self.options.get("posix", False):
                 data = self._decode_backslash_escapes_bash_xpg(data)
             else:
                 data = self._decode_backslash_escapes(data)

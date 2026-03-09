@@ -1,6 +1,6 @@
 # Feature Gap Board
 
-Generated: 2026-03-09 16:07:30Z
+Generated: 2026-03-09 16:12:48Z
 
 Purpose: implementation-first backlog grouped by feature topic (rows where either default or posix status is not `covered`).
 
@@ -12,7 +12,6 @@ Purpose: implementation-first backlog grouped by feature topic (rows where eithe
 | `builtin:break` | 2 |
 | `builtin:command` | 9 |
 | `builtin:continue` | 1 |
-| `builtin:echo` | 1 |
 | `builtin:jobs` | 1 |
 | `builtin:return` | 2 |
 | `builtin:set` | 2 |
@@ -58,12 +57,6 @@ Purpose: implementation-first backlog grouped by feature topic (rows where eithe
 | Req ID | Source | Status (default/posix) | Tests | Feature |
 |---|---|---|---|---|
 | `BCOMPAT.44.003` | `bash-compat-doc` | `partial / partial` | `bash-compat-doc-44-003.sh` | variable assignments preceding builtins like export and readonly that set attributes continue to affect variables with the same name in the calling environment even if the shell is not in posix mode |
-
-### `builtin:echo`
-
-| Req ID | Source | Status (default/posix) | Tests | Feature |
-|---|---|---|---|---|
-| `BPOSIX.EXTRA.003` | `bash-posix-doc` | `covered / out_of_scope` | `bash-posix-doc-extra-003.sh` | As noted above, Bash requires the ‘xpg_echo’ option to be enabled for the ‘echo’ builtin to be fully conformant. |
 
 ### `builtin:jobs`
 

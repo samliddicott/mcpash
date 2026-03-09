@@ -1,6 +1,6 @@
 # Feature Index
 
-Generated: 2026-03-09 16:07:30Z
+Generated: 2026-03-09 16:12:48Z
 
 Purpose: group requirement rows by feature/topic so design, implementation, and tests can be handled as coherent feature stories instead of row-by-row patches.
 
@@ -437,13 +437,13 @@ Notes:
 | Req ID | Source | Source Ref | Status (default/posix) | Tests | Feature |
 |---|---|---|---|---|---|
 | `BPOSIX.CORE.051` | `bash-posix-doc` | bash/POSIX 6.11.2 item 51 | `covered / covered` | `bash-posix-doc-051.sh` | When the ‘xpg_echo’ option is enabled, Bash does not attempt to interpret any arguments to ‘echo’ as options. ‘echo’ displays each argument after converting escape sequences. |
-| `BPOSIX.EXTRA.003` | `bash-posix-doc` | bash/POSIX 6.11.2 item 3 | `covered / out_of_scope` | `bash-posix-doc-extra-003.sh` | As noted above, Bash requires the ‘xpg_echo’ option to be enabled for the ‘echo’ builtin to be fully conformant. |
+| `BPOSIX.EXTRA.003` | `bash-posix-doc` | bash/POSIX 6.11.2 item 3 | `covered / covered` | `bash-posix-doc-extra-003.sh` | As noted above, Bash requires the ‘xpg_echo’ option to be enabled for the ‘echo’ builtin to be fully conformant. |
 | `C5.BUILTIN.ECHO` | `bash-man` | bash(1) section SHELL BUILTIN COMMANDS | `covered / covered` | `man-bash-posix-04-misc-builtins` | echo |
 
 Notes:
 
 - `BPOSIX.CORE.051`: Strict comparator case validates xpg_echo interaction in POSIX lane.
-- `BPOSIX.EXTRA.003`: Policy decision: bash mode follows bash xpg_echo semantics; ash/posix lane intentionally remains mode-specific and out-of-scope for this ba…
+- `BPOSIX.EXTRA.003`: Policy update: in both bash and posix lanes, xpg_echo behavior follows bash --posix-compatible semantics for this row; validated by bash-po…
 - `C5.BUILTIN.ECHO`: Seeded from tests/compat/bash_posix_man_coverage.tsv
 
 ### `builtin:enable`
