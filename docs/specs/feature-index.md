@@ -1,6 +1,6 @@
 # Feature Index
 
-Generated: 2026-03-09 16:12:48Z
+Generated: 2026-03-09 16:22:34Z
 
 Purpose: group requirement rows by feature/topic so design, implementation, and tests can be handled as coherent feature stories instead of row-by-row patches.
 
@@ -1061,8 +1061,8 @@ Notes:
 
 Notes:
 
-- `BPOSIX.CORE.022`: Strict comparator case validates Done(status) state reporting for non-zero completed jobs under monitor mode.
-- `BPOSIX.CORE.023`: Strict comparator case validates stopped-job state reporting in jobs output under monitor mode.
+- `BPOSIX.CORE.022`: Strict comparator case validates Done(status) state reporting for non-zero completed jobs under monitor mode. Note: this row currently uses…
+- `BPOSIX.CORE.023`: Strict comparator case validates stopped-job state reporting in jobs output under monitor mode. Note: this row currently uses normalized in…
 - `BPOSIX.CORE.024`: Comparator case validates interactive notification timing scaffold behavior for row 24.
 - `BPOSIX.CORE.025`: Comparator case validates interactive notification prompt-boundary behavior for row 25.
 - `C8.JOB.01`: Row-level evidence mapping assigned from requirement->case rules. Evidence run: mapped tests all pass.

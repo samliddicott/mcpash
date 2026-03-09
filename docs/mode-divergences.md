@@ -35,3 +35,14 @@ Lanes:
 - Requirement-level source of truth remains in:
   - `docs/specs/bash-posix-mode-requirements.tsv`
   - `docs/specs/bash-posix-mode-implementation-matrix.tsv`
+
+## Footnotes
+
+- `[interactive-transcript-depth]`:
+  - "Normalized interactive assertions" means tests assert semantic markers
+    (state/result fields) instead of exact full PTY transcript bytes.
+  - A "deep byte-for-byte transcript" lane would capture and compare full
+    terminal streams (prompt timing, control chars, line discipline effects,
+    signal races, and ordering) against comparator shells.
+  - We use normalized assertions in standard gates for determinism; deep
+    transcript parity can be added as an additional strict lane.
