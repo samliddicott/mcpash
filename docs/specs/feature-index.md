@@ -1,6 +1,6 @@
 # Feature Index
 
-Generated: 2026-03-09 09:00:46Z
+Generated: 2026-03-09 09:41:14Z
 
 Purpose: group requirement rows by feature/topic so design, implementation, and tests can be handled as coherent feature stories instead of row-by-row patches.
 
@@ -62,7 +62,7 @@ Source matrices:
 | `builtin:readarray` | 1 | 1 | 0 | 0 |
 | `builtin:readonly` | 2 | 1 | 1 | 0 |
 | `builtin:return` | 4 | 2 | 2 | 0 |
-| `builtin:set` | 12 | 6 | 6 | 0 |
+| `builtin:set` | 12 | 7 | 5 | 0 |
 | `builtin:shift` | 2 | 1 | 1 | 0 |
 | `builtin:shopt` | 3 | 3 | 0 | 0 |
 | `builtin:source` | 3 | 1 | 2 | 0 |
@@ -82,7 +82,7 @@ Source matrices:
 | `runtime:job-control` | 9 | 5 | 4 | 0 |
 | `runtime:prompt` | 3 | 3 | 0 | 0 |
 | `runtime:signals-traps` | 4 | 3 | 1 | 0 |
-| `runtime:startup` | 7 | 6 | 1 | 0 |
+| `runtime:startup` | 7 | 7 | 0 | 0 |
 | `subcategory:compat-delta` | 3 | 0 | 3 | 0 |
 | `subcategory:compatibility` | 4 | 4 | 0 | 0 |
 | `subcategory:expansion` | 8 | 8 | 0 | 0 |
@@ -96,7 +96,7 @@ Source matrices:
 | `subcategory:invocation.startup-files` | 2 | 2 | 0 | 0 |
 | `subcategory:misc-posix-mode` | 1 | 0 | 1 | 0 |
 | `subcategory:mode-framework` | 3 | 3 | 0 | 0 |
-| `subcategory:parse-grammar` | 2 | 0 | 2 | 0 |
+| `subcategory:parse-grammar` | 2 | 1 | 1 | 0 |
 | `subcategory:redirection` | 9 | 9 | 0 | 0 |
 | `subcategory:requirements-matrix` | 7 | 7 | 0 | 0 |
 | `subcategory:shopt-option-surface` | 45 | 45 | 0 | 0 |
@@ -802,7 +802,7 @@ Notes:
 |---|---|---|---|---|---|
 | `BCOMPAT.50.001` | `bash-compat-doc` | bash/COMPAT level 50 item 1 | `partial / partial` | `bash-compat-doc-50-001.sh` | Bash-5.1 changed the way $RANDOM is generated to introduce slightly more randomness. If the shell compatibility level is set to 50 or lower, it reverts to the method from bash-5.0 and previous versions, so seeding the random number generator by assigning a value to RANDOM will produce the same sequence as in bash-5.0 |
 | `BCOMPAT.50.003` | `bash-compat-doc` | bash/COMPAT level 50 item 3 | `partial / partial` | `bash-compat-doc-50-003.sh` | Bash-5.1 and later use pipes for here-documents and here-strings if they are smaller than the pipe capacity. If the shell compatibility level is set to 50 or lower, it reverts to using temporary files. |
-| `BPOSIX.CORE.001` | `bash-posix-doc` | bash/POSIX 6.11.2 item 1 | `partial / partial` | `bash-posix-doc-001.sh` | Bash ensures that the ‘POSIXLY_CORRECT’ variable is set. |
+| `BPOSIX.CORE.001` | `bash-posix-doc` | bash/POSIX 6.11.2 item 1 | `covered / covered` | `bash-posix-doc-001.sh` | Bash ensures that the ‘POSIXLY_CORRECT’ variable is set. |
 | `BPOSIX.CORE.063` | `bash-posix-doc` | bash/POSIX 6.11.2 item 63 | `partial / partial` | `bash-posix-doc-063.sh` | When the ‘set’ builtin is invoked without options, it does not display shell function names and definitions. |
 | `BPOSIX.CORE.064` | `bash-posix-doc` | bash/POSIX 6.11.2 item 64 | `partial / partial` | `bash-posix-doc-064.sh` | When the ‘set’ builtin is invoked without options, it displays variable values without quotes, unless they contain shell metacharacters, even if the result contains nonprinting characters. |
 | `BPOSIX.CORE.069` | `bash-posix-doc` | bash/POSIX 6.11.2 item 69 | `partial / partial` | `bash-posix-doc-069.sh` | ‘trap -p’ without arguments displays signals whose dispositions are set to SIG_DFL and those that were ignored when the shell started, not just trapped signals. |
@@ -817,7 +817,7 @@ Notes:
 
 - `BCOMPAT.50.001`: Scaffold comparator case mapped and executable; strict row-level assertions pending. Source: bash/COMPAT compat50 (set using BASH_COMPAT) i…
 - `BCOMPAT.50.003`: Scaffold comparator case mapped and executable; strict row-level assertions pending. Source: bash/COMPAT compat50 (set using BASH_COMPAT) i…
-- `BPOSIX.CORE.001`: Comparator probe mismatch: mctash --posix currently does not set POSIXLY_CORRECT automatically. Evidence: tests/diff/cases/bash-posix-doc-0…
+- `BPOSIX.CORE.001`: Row-level comparator evidence now passes for --posix POSIXLY_CORRECT exposure in focused lane; Source: bash/POSIX 6.11.2 item 1.
 - `BPOSIX.CORE.063`: Scaffold comparator case mapped and executable; strict row-level assertions pending; Source: bash/POSIX 6.11.2 item 63.
 - `BPOSIX.CORE.064`: Scaffold comparator case mapped and executable; strict row-level assertions pending; Source: bash/POSIX 6.11.2 item 64.
 - `BPOSIX.CORE.069`: Scaffold comparator case mapped and executable; strict row-level assertions pending; Source: bash/POSIX 6.11.2 item 69.
@@ -1105,7 +1105,7 @@ Notes:
 
 | Req ID | Source | Source Ref | Status (default/posix) | Tests | Feature |
 |---|---|---|---|---|---|
-| `BPOSIX.CORE.002` | `bash-posix-doc` | bash/POSIX 6.11.2 item 2 | `partial / partial` | `bash-posix-doc-002.sh` | Bash reads and executes the POSIX startup files (‘$ENV’) rather than the normal Bash files (*note Bash Startup Files::. |
+| `BPOSIX.CORE.002` | `bash-posix-doc` | bash/POSIX 6.11.2 item 2 | `covered / covered` | `bash-posix-doc-002.sh` | Bash reads and executes the POSIX startup files (‘$ENV’) rather than the normal Bash files (*note Bash Startup Files::. |
 | `C1.STARTUP.01` | `bash-man` | bash(1) section INVOCATION | `covered / covered` | `run_startup_mode_matrix.sh` | login-shell startup sequence |
 | `C1.STARTUP.02` | `bash-man` | bash(1) section INVOCATION | `covered / covered` | `run_startup_mode_matrix.sh` | interactive non-login startup |
 | `C1.STARTUP.03` | `bash-man` | bash(1) section INVOCATION | `covered / covered` | `run_startup_mode_matrix.sh` | non-interactive startup |
@@ -1115,7 +1115,7 @@ Notes:
 
 Notes:
 
-- `BPOSIX.CORE.002`: Comparator probe mismatch: nested interactive --posix startup did not source ENV under current mctash path. Evidence: tests/diff/cases/bash…
+- `BPOSIX.CORE.002`: Row-level comparator evidence now passes for POSIX interactive ENV startup loading in focused lane; Source: bash/POSIX 6.11.2 item 2.
 - `C1.STARTUP.01`: Row-level evidence mapping assigned from requirement->case rules. Evidence run: mapped tests all pass.
 - `C1.STARTUP.02`: Row-level evidence mapping assigned from requirement->case rules. Evidence run: mapped tests all pass.
 - `C1.STARTUP.03`: Row-level evidence mapping assigned from requirement->case rules. Evidence run: mapped tests all pass.
@@ -1420,12 +1420,12 @@ Notes:
 
 | Req ID | Source | Source Ref | Status (default/posix) | Tests | Feature |
 |---|---|---|---|---|---|
-| `BPOSIX.CORE.007` | `bash-posix-doc` | bash/POSIX 6.11.2 item 7 | `partial / partial` | `bash-posix-doc-007.sh` | The parser does not recognize ‘time’ as a reserved word if the next token begins with a ‘-’. |
+| `BPOSIX.CORE.007` | `bash-posix-doc` | bash/POSIX 6.11.2 item 7 | `covered / covered` | `bash-posix-doc-007.sh` | The parser does not recognize ‘time’ as a reserved word if the next token begins with a ‘-’. |
 | `BPOSIX.CORE.011` | `bash-posix-doc` | bash/POSIX 6.11.2 item 11 | `partial / partial` | `bash-posix-doc-011.sh` | Function names may not be the same as one of the POSIX special builtins. |
 
 Notes:
 
-- `BPOSIX.CORE.007`: Comparator probe mismatch: `time -p` status diverges (bash --posix=125 vs mctash --posix=0 in probe). Evidence: tests/diff/cases/bash-posix…
+- `BPOSIX.CORE.007`: Row-level comparator evidence now passes after POSIX dispatch model update for `time -...`; Source: bash/POSIX 6.11.2 item 7.
 - `BPOSIX.CORE.011`: Scaffold comparator case mapped and executable; strict row-level assertions pending; Source: bash/POSIX 6.11.2 item 11.
 
 ### `subcategory:redirection`

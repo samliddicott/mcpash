@@ -1,6 +1,6 @@
 # Feature Gap Board
 
-Generated: 2026-03-09 09:00:46Z
+Generated: 2026-03-09 09:41:14Z
 
 Purpose: implementation-first backlog grouped by feature topic (rows where either default or posix status is not `covered`).
 
@@ -26,7 +26,7 @@ Purpose: implementation-first backlog grouped by feature topic (rows where eithe
 | `builtin:read` | 1 |
 | `builtin:readonly` | 1 |
 | `builtin:return` | 2 |
-| `builtin:set` | 6 |
+| `builtin:set` | 5 |
 | `builtin:shift` | 1 |
 | `builtin:source` | 2 |
 | `builtin:test` | 3 |
@@ -37,12 +37,11 @@ Purpose: implementation-first backlog grouped by feature topic (rows where eithe
 | `builtin:wait` | 3 |
 | `runtime:job-control` | 4 |
 | `runtime:signals-traps` | 1 |
-| `runtime:startup` | 1 |
 | `subcategory:compat-delta` | 3 |
 | `subcategory:expansion-redir` | 3 |
 | `subcategory:interactive` | 1 |
 | `subcategory:misc-posix-mode` | 1 |
-| `subcategory:parse-grammar` | 2 |
+| `subcategory:parse-grammar` | 1 |
 | `syntax:arithmetic` | 2 |
 | `syntax:command-substitution` | 1 |
 | `syntax:parameter-expansion` | 2 |
@@ -194,7 +193,6 @@ Purpose: implementation-first backlog grouped by feature topic (rows where eithe
 |---|---|---|---|---|
 | `BCOMPAT.50.001` | `bash-compat-doc` | `partial / partial` | `bash-compat-doc-50-001.sh` | Bash-5.1 changed the way $RANDOM is generated to introduce slightly more randomness. If the shell compatibility level is set to 50 or lower, it reverts to the method from bash-5.0 and previous versions, so seeding the random number generator by assigning a value to RANDOM will produce the same sequence as in bash-5.0 |
 | `BCOMPAT.50.003` | `bash-compat-doc` | `partial / partial` | `bash-compat-doc-50-003.sh` | Bash-5.1 and later use pipes for here-documents and here-strings if they are smaller than the pipe capacity. If the shell compatibility level is set to 50 or lower, it reverts to using temporary files. |
-| `BPOSIX.CORE.001` | `bash-posix-doc` | `partial / partial` | `bash-posix-doc-001.sh` | Bash ensures that the ‘POSIXLY_CORRECT’ variable is set. |
 | `BPOSIX.CORE.063` | `bash-posix-doc` | `partial / partial` | `bash-posix-doc-063.sh` | When the ‘set’ builtin is invoked without options, it does not display shell function names and definitions. |
 | `BPOSIX.CORE.064` | `bash-posix-doc` | `partial / partial` | `bash-posix-doc-064.sh` | When the ‘set’ builtin is invoked without options, it displays variable values without quotes, unless they contain shell metacharacters, even if the result contains nonprinting characters. |
 | `BPOSIX.CORE.069` | `bash-posix-doc` | `partial / partial` | `bash-posix-doc-069.sh` | ‘trap -p’ without arguments displays signals whose dispositions are set to SIG_DFL and those that were ignored when the shell started, not just trapped signals. |
@@ -272,12 +270,6 @@ Purpose: implementation-first backlog grouped by feature topic (rows where eithe
 |---|---|---|---|---|
 | `BPOSIX.CORE.041` | `bash-posix-doc` | `partial / partial` | `bash-posix-doc-041.sh` | Assignment statements preceding POSIX special builtins persist in the shell environment after the builtin completes. |
 
-### `runtime:startup`
-
-| Req ID | Source | Status (default/posix) | Tests | Feature |
-|---|---|---|---|---|
-| `BPOSIX.CORE.002` | `bash-posix-doc` | `partial / partial` | `bash-posix-doc-002.sh` | Bash reads and executes the POSIX startup files (‘$ENV’) rather than the normal Bash files (*note Bash Startup Files::. |
-
 ### `subcategory:compat-delta`
 
 | Req ID | Source | Status (default/posix) | Tests | Feature |
@@ -310,7 +302,6 @@ Purpose: implementation-first backlog grouped by feature topic (rows where eithe
 
 | Req ID | Source | Status (default/posix) | Tests | Feature |
 |---|---|---|---|---|
-| `BPOSIX.CORE.007` | `bash-posix-doc` | `partial / partial` | `bash-posix-doc-007.sh` | The parser does not recognize ‘time’ as a reserved word if the next token begins with a ‘-’. |
 | `BPOSIX.CORE.011` | `bash-posix-doc` | `partial / partial` | `bash-posix-doc-011.sh` | Function names may not be the same as one of the POSIX special builtins. |
 
 ### `syntax:arithmetic`
