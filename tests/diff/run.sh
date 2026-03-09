@@ -81,11 +81,24 @@ fi
 
 FILTERED=()
 if [[ ${#CASE_FILTER[@]} -gt 0 ]]; then
-  for case in "${CASE_FILES[@]}"; do
-    for filter in "${CASE_FILTER[@]}"; do
-      [[ "${case}" == *"${filter}"* ]] && FILTERED+=("${case}") && break
+  for filter in "${CASE_FILTER[@]}"; do
+    exact_name="${filter%.sh}.sh"
+    exact_hits=()
+    for case in "${CASE_FILES[@]}"; do
+      [[ "${case}" == "${exact_name}" ]] && exact_hits+=("${case}")
+    done
+    if [[ ${#exact_hits[@]} -gt 0 ]]; then
+      FILTERED+=("${exact_hits[@]}")
+      continue
+    fi
+    for case in "${CASE_FILES[@]}"; do
+      [[ "${case}" == *"${filter}"* ]] && FILTERED+=("${case}")
     done
   done
+  # Deduplicate while preserving order.
+  if [[ ${#FILTERED[@]} -gt 0 ]]; then
+    mapfile -t FILTERED < <(printf '%s\n' "${FILTERED[@]}" | awk '!seen[$0]++')
+  fi
   CASE_FILES=("${FILTERED[@]}")
 fi
 

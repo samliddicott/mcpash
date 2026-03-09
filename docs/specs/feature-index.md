@@ -1,6 +1,6 @@
 # Feature Index
 
-Generated: 2026-03-09 09:41:14Z
+Generated: 2026-03-09 09:45:11Z
 
 Purpose: group requirement rows by feature/topic so design, implementation, and tests can be handled as coherent feature stories instead of row-by-row patches.
 
@@ -27,7 +27,7 @@ Source matrices:
 | `builtin:builtin` | 1 | 1 | 0 | 0 |
 | `builtin:caller` | 1 | 1 | 0 | 0 |
 | `builtin:cd` | 3 | 1 | 2 | 0 |
-| `builtin:command` | 34 | 14 | 20 | 0 |
+| `builtin:command` | 34 | 16 | 18 | 0 |
 | `builtin:compgen` | 2 | 2 | 0 | 0 |
 | `builtin:complete` | 1 | 1 | 0 | 0 |
 | `builtin:compopt` | 1 | 1 | 0 | 0 |
@@ -71,7 +71,7 @@ Source matrices:
 | `builtin:times` | 1 | 1 | 0 | 0 |
 | `builtin:trap` | 4 | 2 | 2 | 0 |
 | `builtin:true` | 1 | 1 | 0 | 0 |
-| `builtin:type` | 4 | 1 | 3 | 0 |
+| `builtin:type` | 4 | 3 | 1 | 0 |
 | `builtin:typeset` | 1 | 1 | 0 | 0 |
 | `builtin:ulimit` | 2 | 1 | 1 | 0 |
 | `builtin:umask` | 1 | 1 | 0 | 0 |
@@ -322,8 +322,8 @@ Notes:
 | `BPOSIX.CORE.012` | `bash-posix-doc` | bash/POSIX 6.11.2 item 12 | `partial / partial` | `bash-posix-doc-012.sh` | Tilde expansion is only performed on assignments preceding a command name, rather than on all assignment statements on the line. |
 | `BPOSIX.CORE.015` | `bash-posix-doc` | bash/POSIX 6.11.2 item 15 | `partial / partial` | `bash-posix-doc-015.sh` | A double quote character (‘"’) is treated specially when it appears in a backquoted command substitution in the body of a here-document that undergoes expansion. That means, for example, that a backslash preceding a double quote character will escape it and the backslash will be removed. |
 | `BPOSIX.CORE.016` | `bash-posix-doc` | bash/POSIX 6.11.2 item 16 | `partial / partial` | `bash-posix-doc-016.sh` | Command substitutions don't set the ‘?’ special parameter. The exit status of a simple command without a command word is still the exit status of the last command substitution that occurred while evaluating the variable assignments and redirections in that command, but that does not happen until after all of the assignments and redirections. |
-| `BPOSIX.CORE.020` | `bash-posix-doc` | bash/POSIX 6.11.2 item 20 | `partial / partial` | `bash-posix-doc-020.sh` | When a command in the hash table no longer exists, Bash will re-search ‘$PATH’ to find the new location. This is also available with ‘shopt -s checkhash’. |
-| `BPOSIX.CORE.021` | `bash-posix-doc` | bash/POSIX 6.11.2 item 21 | `partial / partial` | `bash-posix-doc-021.sh` | Bash will not insert a command without the execute bit set into the command hash table, even if it returns it as a (last-ditch) result from a ‘$PATH’ search. |
+| `BPOSIX.CORE.020` | `bash-posix-doc` | bash/POSIX 6.11.2 item 20 | `covered / covered` | `bash-posix-doc-020.sh` | When a command in the hash table no longer exists, Bash will re-search ‘$PATH’ to find the new location. This is also available with ‘shopt -s checkhash’. |
+| `BPOSIX.CORE.021` | `bash-posix-doc` | bash/POSIX 6.11.2 item 21 | `covered / covered` | `bash-posix-doc-021.sh` | Bash will not insert a command without the execute bit set into the command hash table, even if it returns it as a (last-ditch) result from a ‘$PATH’ search. |
 | `BPOSIX.CORE.027` | `bash-posix-doc` | bash/POSIX 6.11.2 item 27 | `partial / partial` | `bash-posix-doc-027.sh` | The ‘vi’ editing mode will invoke the ‘vi’ editor directly when the ‘v’ command is run, instead of checking ‘$VISUAL’ and ‘$EDITOR’. |
 | `BPOSIX.CORE.034` | `bash-posix-doc` | bash/POSIX 6.11.2 item 34 | `partial / partial` | `bash-posix-doc-034.sh` | If a POSIX special builtin returns an error status, a non-interactive shell exits. The fatal errors are those listed in the POSIX standard, and include things like passing incorrect options, redirection errors, variable assignment errors for assignments preceding the command name, and so on. |
 | `BPOSIX.CORE.035` | `bash-posix-doc` | bash/POSIX 6.11.2 item 35 | `partial / partial` | `bash-posix-doc-035.sh` | A non-interactive shell exits with an error status if a variable assignment error occurs when no command name follows the assignment statements. A variable assignment error occurs, for example, when trying to assign a value to a readonly variable. |
@@ -933,16 +933,16 @@ Notes:
 
 | Req ID | Source | Source Ref | Status (default/posix) | Tests | Feature |
 |---|---|---|---|---|---|
-| `BPOSIX.CORE.018` | `bash-posix-doc` | bash/POSIX 6.11.2 item 18 | `partial / partial` | `bash-posix-doc-018.sh` | Command lookup finds POSIX special builtins before shell functions, including output printed by the ‘type’ and ‘command’ builtins. |
+| `BPOSIX.CORE.018` | `bash-posix-doc` | bash/POSIX 6.11.2 item 18 | `covered / covered` | `bash-posix-doc-018.sh` | Command lookup finds POSIX special builtins before shell functions, including output printed by the ‘type’ and ‘command’ builtins. |
 | `BPOSIX.CORE.031` | `bash-posix-doc` | bash/POSIX 6.11.2 item 31 | `partial / partial` | `bash-posix-doc-031.sh` | When printing shell function definitions (e.g., by ‘type’), Bash does not print the ‘function’ reserved word unless necessary. |
-| `BPOSIX.CORE.070` | `bash-posix-doc` | bash/POSIX 6.11.2 item 70 | `partial / partial` | `bash-posix-doc-070.sh` | The ‘type’ and ‘command’ builtins will not report a non-executable file as having been found, though the shell will attempt to execute such a file if it is the only so-named file found in ‘$PATH’. |
+| `BPOSIX.CORE.070` | `bash-posix-doc` | bash/POSIX 6.11.2 item 70 | `covered / covered` | `bash-posix-doc-070.sh` | The ‘type’ and ‘command’ builtins will not report a non-executable file as having been found, though the shell will attempt to execute such a file if it is the only so-named file found in ‘$PATH’. |
 | `C5.BUILTIN.TYPE` | `bash-man` | bash(1) section SHELL BUILTIN COMMANDS | `covered / covered` | `man-bash-posix-02-path-command` | type |
 
 Notes:
 
-- `BPOSIX.CORE.018`: Scaffold comparator case mapped and executable; strict row-level assertions pending; Source: bash/POSIX 6.11.2 item 18.
+- `BPOSIX.CORE.018`: Strict comparator probe validates special-builtin precedence against function shadowing and reporting surfaces for `type`/`command`; Source…
 - `BPOSIX.CORE.031`: Scaffold comparator case mapped and executable; strict row-level assertions pending; Source: bash/POSIX 6.11.2 item 31.
-- `BPOSIX.CORE.070`: Scaffold comparator case mapped and executable; strict row-level assertions pending; Source: bash/POSIX 6.11.2 item 70.
+- `BPOSIX.CORE.070`: Strict comparator probe validates command/type non-exec reporting policy with execute-attempt fallback remaining permission-denied class; S…
 - `C5.BUILTIN.TYPE`: Seeded from tests/compat/bash_posix_man_coverage.tsv
 
 ### `builtin:typeset`
