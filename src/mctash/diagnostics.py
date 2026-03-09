@@ -56,6 +56,11 @@ class DiagnosticKey(str, Enum):
     PY_USAGE = "py_usage"
     UNALIAS_USAGE = "unalias_usage"
     WRITE_ERROR = "write_error"
+    FC_USAGE = "fc_usage"
+    FC_NO_HISTORY = "fc_no_history"
+    FC_EVENT_NOT_FOUND = "fc_event_not_found"
+    FC_INVALID_EDITOR = "fc_invalid_editor"
+    FC_RECURSION_GUARD = "fc_recursion_guard"
 
 
 _TEMPLATES: dict[str, dict[DiagnosticKey, str]] = {
@@ -112,6 +117,11 @@ _TEMPLATES: dict[str, dict[DiagnosticKey, str]] = {
         DiagnosticKey.PY_USAGE: "usage: {entry} [-e] [-x] [--no-dedent] [-v VAR] [-r VAR] [-t VAR] [-u VAR] [CODE]",
         DiagnosticKey.UNALIAS_USAGE: "unalias: usage: unalias [-a] name ...",
         DiagnosticKey.WRITE_ERROR: "ash: write error: {error}",
+        DiagnosticKey.FC_USAGE: "usage: fc [-e ename] [-lnr] [first] [last] or fc -s [old=new] [command]",
+        DiagnosticKey.FC_NO_HISTORY: "fc: no command found",
+        DiagnosticKey.FC_EVENT_NOT_FOUND: "fc: event not found: {ref}",
+        DiagnosticKey.FC_INVALID_EDITOR: "fc: invalid editor command",
+        DiagnosticKey.FC_RECURSION_GUARD: "fc: recursive replay blocked",
     },
     "bash": {
         DiagnosticKey.COMMAND_NOT_FOUND: "{name}: command not found",
@@ -164,6 +174,11 @@ _TEMPLATES: dict[str, dict[DiagnosticKey, str]] = {
         DiagnosticKey.PY_USAGE: "usage: {entry} [-e] [-x] [--no-dedent] [-v VAR] [-r VAR] [-t VAR] [-u VAR] [CODE]",
         DiagnosticKey.UNALIAS_USAGE: "unalias: usage: unalias [-a] name ...",
         DiagnosticKey.WRITE_ERROR: "ash: write error: {error}",
+        DiagnosticKey.FC_USAGE: "usage: fc [-e ename] [-lnr] [first] [last] or fc -s [old=new] [command]",
+        DiagnosticKey.FC_NO_HISTORY: "fc: no command found",
+        DiagnosticKey.FC_EVENT_NOT_FOUND: "fc: event not found: {ref}",
+        DiagnosticKey.FC_INVALID_EDITOR: "fc: invalid editor command",
+        DiagnosticKey.FC_RECURSION_GUARD: "fc: recursive replay blocked",
     },
 }
 

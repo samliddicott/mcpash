@@ -790,6 +790,8 @@ class Runtime:
         self._call_stack: List[str] = []
         self._history: List[str] = []
         self._history_ts: List[float | None] = []
+        self._fc_replay_depth: int = 0
+        self._fc_active_replay_signatures: set[tuple[str, ...]] = set()
         self._cmd_hash: Dict[str, str] = {}
         self._errexit_suppressed: int = 0
         self._py_callables: Dict[str, Any] = {}
@@ -5759,6 +5761,32 @@ class Runtime:
                 return i
         return None
 
+    def _fc_fail(self, key: DiagnosticKey, **kwargs: str) -> int:
+        self._report_error(self._diag_msg(key, **kwargs), line=self.current_line, context="fc")
+        return 1
+
+    def _fc_execute_lines(self, lines: list[str]) -> int:
+        replay_lines = [line for line in lines if line.strip()]
+        if not replay_lines:
+            return 0
+        sig = tuple(replay_lines)
+        if sig in self._fc_active_replay_signatures:
+            return self._fc_fail(DiagnosticKey.FC_RECURSION_GUARD)
+        if self._fc_replay_depth >= 32:
+            return self._fc_fail(DiagnosticKey.FC_RECURSION_GUARD)
+        self._fc_active_replay_signatures.add(sig)
+        self._fc_replay_depth += 1
+        try:
+            status = 0
+            for line in replay_lines:
+                print(line)
+                self.add_history_entry(line)
+                status = self._eval_source(line)
+            return status
+        finally:
+            self._fc_replay_depth -= 1
+            self._fc_active_replay_signatures.discard(sig)
+
     def _run_fc(self, args: List[str]) -> int:
         mode = "edit"  # edit | list | subst
         reverse = False
@@ -5793,32 +5821,32 @@ class Runtime:
                         continue
                     i += 1
                     if i >= len(args):
-                        return 1
+                        return self._fc_fail(DiagnosticKey.FC_USAGE)
                     editor = args[i]
                     j = len(a)
                     continue
                 else:
-                    return 1
+                    return self._fc_fail(DiagnosticKey.FC_USAGE)
                 j += 1
             i += 1
         rest = args[i:]
         if mode == "subst":
             if rest and "=" in rest[0]:
                 if len(rest) > 2:
-                    return 1
+                    return self._fc_fail(DiagnosticKey.FC_USAGE)
             elif len(rest) > 1:
-                return 1
+                return self._fc_fail(DiagnosticKey.FC_USAGE)
         else:
             if len(rest) > 2:
-                return 1
+                return self._fc_fail(DiagnosticKey.FC_USAGE)
 
         if not self._history:
             # Bash is permissive for list/edit surfaces when no history exists,
             # except `fc -e -` (re-exec mode) which fails without a command.
             if mode == "subst":
-                return 1
+                return self._fc_fail(DiagnosticKey.FC_NO_HISTORY)
             if mode == "edit" and editor == "-":
-                return 1
+                return self._fc_fail(DiagnosticKey.FC_NO_HISTORY)
             return 0
         current_is_fc = bool(self._history) and self._history[-1].lstrip().startswith("fc")
         default_ref = "-2" if current_is_fc else "-1"
@@ -5833,7 +5861,8 @@ class Runtime:
             first_idx = _resolve_ref(rest[0]) if len(rest) >= 1 else max(0, len(self._history) - 15)
             last_idx = _resolve_ref(rest[1]) if len(rest) >= 2 else _resolve_ref(default_ref)
             if first_idx is None or last_idx is None:
-                return 1
+                bad_ref = rest[0] if first_idx is None and len(rest) >= 1 else (rest[1] if len(rest) >= 2 else default_ref)
+                return self._fc_fail(DiagnosticKey.FC_EVENT_NOT_FOUND, ref=str(bad_ref))
             seq = list(range(first_idx, last_idx + 1)) if first_idx <= last_idx else list(range(first_idx, last_idx - 1, -1))
             if reverse:
                 seq = list(reversed(seq))
@@ -5851,21 +5880,21 @@ class Runtime:
                 rest = rest[1:]
             idx = _resolve_ref(rest[0] if rest else default_ref)
             if idx is None:
-                return 1
+                bad_ref = rest[0] if rest else default_ref
+                return self._fc_fail(DiagnosticKey.FC_EVENT_NOT_FOUND, ref=str(bad_ref))
             cmd = self._history[idx]
             if substitute is not None:
                 old, new = substitute.split("=", 1)
                 cmd = cmd.replace(old, new, 1)
-            print(cmd)
-            self.add_history_entry(cmd)
-            return self._eval_source(cmd)
+            return self._fc_execute_lines([cmd])
 
         first_tok = rest[0] if len(rest) >= 1 else default_ref
         last_tok = rest[1] if len(rest) >= 2 else first_tok
         first_idx = _resolve_ref(first_tok)
         last_idx = _resolve_ref(last_tok)
         if first_idx is None or last_idx is None:
-            return 1
+            bad_ref = first_tok if first_idx is None else last_tok
+            return self._fc_fail(DiagnosticKey.FC_EVENT_NOT_FOUND, ref=str(bad_ref))
         seq = list(range(first_idx, last_idx + 1)) if first_idx <= last_idx else list(range(first_idx, last_idx - 1, -1))
         if reverse:
             seq = list(reversed(seq))
@@ -5882,9 +5911,9 @@ class Runtime:
                 try:
                     parts = shlex.split(editor_cmd)
                 except ValueError:
-                    return 1
+                    return self._fc_fail(DiagnosticKey.FC_INVALID_EDITOR)
                 if not parts:
-                    return 1
+                    return self._fc_fail(DiagnosticKey.FC_INVALID_EDITOR)
                 # Match shell runtime-visible environment for editor process.
                 # This keeps FCEDIT/EDITOR execution aligned with current shell
                 # state rather than host launcher environment.
@@ -5900,14 +5929,7 @@ class Runtime:
                 except OSError:
                     pass
 
-        status = 0
-        for line in lines:
-            if not line.strip():
-                continue
-            print(line)
-            self.add_history_entry(line)
-            status = self._eval_source(line)
-        return status
+        return self._fc_execute_lines(lines)
 
     def _run_external(
         self,
