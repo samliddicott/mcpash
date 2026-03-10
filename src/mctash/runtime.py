@@ -649,7 +649,7 @@ class Runtime:
         "compiled-runtime-error": "Compiled artifact raised at runtime; interpreter fallback used.",
         "compile-disabled-by-config": "MCTASH_ENABLE_COMPILED disabled compiled backend; interpreter forced.",
     }
-    OPTION_FLAG_ORDER = "abefhkmnptuvxBCEHPT"
+    OPTION_FLAG_ORDER = "abefhikmnptuvxBCEHPT"
     _thread_diag_lock = threading.Lock()
     _thread_diag_emitted: set[str] = set()
     SET_O_LIST_ORDER: List[str] = [
@@ -8865,7 +8865,23 @@ class Runtime:
                 split_fields: list[ExpansionField] = []
                 literal_only = True
                 for field in fields:
-                    split_fields.extend(self._split_structured_field(field))
+                    # POSIX parameter-op words (e.g. ${x:-word}) undergo field
+                    # splitting after quote removal. Mark unquoted segments as
+                    # split-active even when they originated as literals.
+                    adjusted = ExpansionField(
+                        [
+                            ExpansionSegment(
+                                text=seg.text,
+                                quoted=seg.quoted,
+                                glob_active=(seg.glob_active or (not seg.quoted)),
+                                split_active=(seg.split_active or (not seg.quoted)),
+                                source_kind=seg.source_kind,
+                            )
+                            for seg in field.segments
+                        ],
+                        preserve_boundary=field.preserve_boundary,
+                    )
+                    split_fields.extend(self._split_structured_field(adjusted))
                 for field in split_fields:
                     has_active_pattern = any(
                         seg.glob_active and any(ch in seg.text for ch in ("*", "?", "["))
@@ -8926,6 +8942,15 @@ class Runtime:
                         for seg in getattr(f, "segments", [])
                     )
                     if all_quoted:
+                        return _expand_alt_fields(text, arg_fields)
+                    ifs_value, ifs_set = self._get_var_with_state("IFS")
+                    if not ifs_set:
+                        ifs_value = " \t\n"
+                    ifs_nonws = "".join(ch for ch in ifs_value if ch not in " \t\n")
+                    if ifs_nonws:
+                        # Non-whitespace IFS splitting is sensitive to quote
+                        # boundaries inside operator words; use structured
+                        # fields instead of legacy text retokenization.
                         return _expand_alt_fields(text, arg_fields)
                     return _expand_alt_fields(text)
                 if any(ch in text for ch in [" ", "\t", "\n"]):

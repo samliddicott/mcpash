@@ -235,6 +235,21 @@ def _find_matching_brace(text: str, start: int) -> int:
         if text[i] == "\\":
             i += 2
             continue
+        if text.startswith("$((", i):
+            _, consumed = _parse_arith_sub(text, i)
+            if consumed > 1:
+                i += consumed
+                continue
+        if text.startswith("$(", i):
+            _, consumed = _parse_command_sub(text, i)
+            if consumed > 1:
+                i += consumed
+                continue
+        if text[i] == "`":
+            end_bt = _find_backtick(text, i + 1)
+            if end_bt != -1:
+                i = end_bt + 1
+                continue
         if text.startswith("${", i):
             depth += 1
             i += 2
