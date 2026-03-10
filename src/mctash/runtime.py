@@ -10788,6 +10788,10 @@ class Runtime:
             )
             raise SystemExit(2)
         if n > len(self.positional):
+            if self._diag.style != "bash":
+                # ash behavior: out-of-range shift fails but is non-fatal and
+                # does not emit a diagnostic.
+                return 1
             self._report_error(
                 self._diag_msg(DiagnosticKey.SHIFT_COUNT_OUT_OF_RANGE, value=str(n)),
                 line=self.current_line,
