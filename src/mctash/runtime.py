@@ -3895,12 +3895,13 @@ class Runtime:
                     continue
                 # Unquoted multi-value expansions splice into words like shell
                 # fields: prefix sticks to first field, suffix to last.
-                if presplit and (not quoted) and len(vals) > 1:
+                if (not quoted) and len(vals) > 1:
+                    split_active = not presplit
                     first_seg = ExpansionSegment(
                         text=vals[0],
                         quoted=False,
                         glob_active=True,
-                        split_active=False,
+                        split_active=split_active,
                         source_kind=kind,
                     )
                     next_fields.append(
@@ -3918,7 +3919,7 @@ class Runtime:
                                         text=mid,
                                         quoted=False,
                                         glob_active=True,
-                                        split_active=False,
+                                        split_active=split_active,
                                         source_kind=kind,
                                     )
                                 ],
@@ -3929,15 +3930,15 @@ class Runtime:
                     next_fields.append(
                         ExpansionField(
                             segments=[
-                                ExpansionSegment(
-                                    text=vals[-1],
-                                    quoted=False,
-                                    glob_active=True,
-                                    split_active=False,
-                                    source_kind=kind,
-                                )
-                            ],
-                            preserve_boundary=(vals[-1] == ""),
+                                    ExpansionSegment(
+                                        text=vals[-1],
+                                        quoted=False,
+                                        glob_active=True,
+                                        split_active=split_active,
+                                        source_kind=kind,
+                                    )
+                                ],
+                                preserve_boundary=(vals[-1] == ""),
                         )
                     )
                     next_active.append(True)
@@ -4224,10 +4225,19 @@ class Runtime:
                 chars.append((ch, seg.split_active, seg.glob_active, seg.quoted, seg.source_kind))
         if not chars:
             return [field]
+        start, end, cuts = self._find_brace_candidate(chars)
+        if start == -1 or end == -1 or not cuts:
+            return [field]
         expanded = self._brace_expand_chars(chars)
         out: list[ExpansionField] = []
         for item in expanded:
-            out.append(self._chars_to_structured_field(item))
+            mapped = self._chars_to_structured_field(item)
+            out.append(
+                ExpansionField(
+                    segments=mapped.segments,
+                    preserve_boundary=(mapped.preserve_boundary or field.preserve_boundary),
+                )
+            )
         return out
 
     def _brace_expand_chars(
@@ -4289,6 +4299,30 @@ class Runtime:
         return -1, -1, []
 
     def _split_structured_field(self, field: ExpansionField) -> list[ExpansionField]:
+        def _empty_split_field() -> ExpansionField:
+            return ExpansionField(
+                [
+                    ExpansionSegment(
+                        text="",
+                        quoted=False,
+                        glob_active=False,
+                        split_active=False,
+                        source_kind="split",
+                    )
+                ],
+                preserve_boundary=False,
+            )
+
+        leading_quoted_boundary = (
+            bool(field.segments)
+            and bool(field.segments[0].quoted)
+            and field.segments[0].text == ""
+        )
+        trailing_quoted_boundary = (
+            bool(field.segments)
+            and bool(field.segments[-1].quoted)
+            and field.segments[-1].text == ""
+        )
         chars: list[tuple[str, bool, bool, bool, str]] = []
         for seg in field.segments:
             for ch in seg.text:
@@ -4310,6 +4344,8 @@ class Runtime:
         i = 0
         last_sep_nonws = False
 
+        if leading_quoted_boundary and chars and chars[0][1] and chars[0][0] in ifs_ws:
+            out.append(_empty_split_field())
         while i < n and chars[i][1] and chars[i][0] in ifs_ws:
             i += 1
 
@@ -4337,20 +4373,7 @@ class Runtime:
                 # adjacent non-whitespace delimiters, but avoid adding an
                 # extra trailing empty for a single terminal delimiter.
                 if not out or last_sep_nonws:
-                    out.append(
-                        ExpansionField(
-                            [
-                                ExpansionSegment(
-                                    text="",
-                                    quoted=False,
-                                    glob_active=False,
-                                    split_active=False,
-                                    source_kind="split",
-                                )
-                            ],
-                            preserve_boundary=False,
-                        )
-                    )
+                    out.append(_empty_split_field())
 
             if j >= n:
                 break
@@ -4365,6 +4388,9 @@ class Runtime:
                 while j < n and chars[j][1] and chars[j][0] in ifs_ws:
                     j += 1
             i = j
+
+        if trailing_quoted_boundary and chars and chars[-1][1] and chars[-1][0] in ifs_ws:
+            out.append(_empty_split_field())
 
         if out:
             return out
