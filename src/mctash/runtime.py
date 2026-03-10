@@ -4509,6 +4509,51 @@ class Runtime:
                 return True
         return False
 
+    def _replace_spec_pattern_is_dynamic(self, spec: str) -> bool:
+        text = spec
+        if text.startswith(("/", "#", "%")):
+            text = text[1:]
+        if text.startswith("/"):
+            text = text[1:]
+        pat_raw, _ = self._split_unescaped_slash(text)
+        in_single = False
+        in_double = False
+        i = 0
+        while i < len(pat_raw):
+            ch = pat_raw[i]
+            if in_single:
+                if ch == "'":
+                    in_single = False
+                i += 1
+                continue
+            if in_double:
+                if ch == "\\" and i + 1 < len(pat_raw):
+                    i += 2
+                    continue
+                if ch == '"':
+                    in_double = False
+                    i += 1
+                    continue
+                if ch in {"$", "`"}:
+                    return True
+                i += 1
+                continue
+            if ch == "\\" and i + 1 < len(pat_raw):
+                i += 2
+                continue
+            if ch == "'":
+                in_single = True
+                i += 1
+                continue
+            if ch == '"':
+                in_double = True
+                i += 1
+                continue
+            if ch in {"$", "`"}:
+                return True
+            i += 1
+        return False
+
     def _asdl_word_has_quoted_at(self, node: dict[str, Any]) -> tuple[bool, bool]:
         if not isinstance(node, dict) or node.get("type") != "word.Compound":
             return False, False
@@ -8610,7 +8655,7 @@ class Runtime:
             return self._option_flags()
         if name == "LINENO":
             line = self.current_line if self.current_line is not None else 0
-            if self.script_name == "":
+            if self.c_string_mode:
                 line = max(0, line - 1)
             return str(line)
         value, is_set = self._get_param_state(name)
@@ -8937,7 +8982,8 @@ class Runtime:
                     )
                     vals = [self._remove_suffix(v, pattern, longest=(op == "%%")) for v in vals]
                 elif op == "/":
-                    spec_struct = self._split_replace_spec_structured(arg_fields)
+                    use_struct = arg_fields is not None and not self._replace_spec_pattern_is_dynamic(arg_text)
+                    spec_struct = self._split_replace_spec_structured(arg_fields) if use_struct else None
                     if spec_struct is None:
                         vals = [self._replace_pattern(v, arg_text) for v in vals]
                     else:
@@ -9098,7 +9144,8 @@ class Runtime:
         if op == "/":
             if not is_set:
                 return ""
-            spec_struct = self._split_replace_spec_structured(arg_fields)
+            use_struct = arg_fields is not None and not self._replace_spec_pattern_is_dynamic(arg_text)
+            spec_struct = self._split_replace_spec_structured(arg_fields) if use_struct else None
             if spec_struct is None:
                 return self._replace_pattern(value, arg_text)
             g, pfx, sfx, pat_f, repl_f = spec_struct
@@ -10060,7 +10107,7 @@ class Runtime:
             return self._option_flags(), True
         if name == "LINENO":
             line = self.current_line if self.current_line is not None else 0
-            if self.script_name == "":
+            if self.c_string_mode:
                 line = max(0, line - 1)
             return str(line), True
         if name == "@":
@@ -10122,7 +10169,7 @@ class Runtime:
                 if seg.quoted:
                     raw_parts.append(self._escape_case_pattern_literal(seg.text))
                 else:
-                    raw_parts.append(seg.text)
+                    raw_parts.append(self._tilde_expand(seg.text))
         return self._pattern_from_literalized_raw("".join(raw_parts), for_case=for_case)
 
     def _structured_fields_to_assignment_scalar(self, fields: list[ExpansionField]) -> str:
