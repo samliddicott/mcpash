@@ -3129,7 +3129,11 @@ class Runtime:
             return 0
 
         declaration_cmds = {"declare", "typeset", "local", "readonly", "export"}
-        argv_assigns = None if (argv and argv[0] in declaration_cmds) else self._argv_assignment_words(argv)
+        eligible: list[bool] | None = None
+        words_src = node.get("words") or []
+        if isinstance(words_src, list) and len(words_src) == len(argv):
+            eligible = [self._asdl_word_is_plain_assignment_candidate(w) for w in words_src]
+        argv_assigns = None if (argv and argv[0] in declaration_cmds) else self._argv_assignment_words(argv, eligible=eligible)
         if argv_assigns is not None:
             saved_env = self.env
             try:
@@ -3759,6 +3763,7 @@ class Runtime:
             return []
         parts = node.get("parts") or []
         fields: list[ExpansionField] = [ExpansionField([])]
+        active: list[bool] = [True]
         i = 0
         while i < len(parts):
             part = parts[i]
@@ -3781,8 +3786,13 @@ class Runtime:
                     )
                     if decoded is not None:
                         text_decoded, _ = decoded
-                        next_fields = []
-                        for base in fields:
+                        next_fields: list[ExpansionField] = []
+                        next_active: list[bool] = []
+                        for base, base_active in zip(fields, active):
+                            if not base_active:
+                                next_fields.append(base)
+                                next_active.append(False)
+                                continue
                             segs = []
                             if prefix:
                                 segs.extend(self._asdl_literal_to_segments(prefix, quoted_context=False, source_kind=kind))
@@ -3801,7 +3811,9 @@ class Runtime:
                                     preserve_boundary=True,
                                 )
                             )
+                            next_active.append(True)
                         fields = next_fields
+                        active = next_active
                         i += 2
                         continue
             # Parse locale $"..." form represented by lexer/parser as
@@ -3816,11 +3828,16 @@ class Runtime:
                 lit = str(part.get("tval", ""))
                 if lit.endswith("$"):
                     prefix = lit[:-1]
-                    vals, _ = self._expand_asdl_word_part_values(parts[i + 1], quoted_context=True)
+                    vals, _, _ = self._expand_asdl_word_part_values(parts[i + 1], quoted_context=True)
                     if not vals:
                         vals = [""]
                     next_fields: list[ExpansionField] = []
-                    for base in fields:
+                    next_active: list[bool] = []
+                    for base, base_active in zip(fields, active):
+                        if not base_active:
+                            next_fields.append(base)
+                            next_active.append(False)
+                            continue
                         for val in vals:
                             segs = []
                             if prefix:
@@ -3840,26 +3857,91 @@ class Runtime:
                                     preserve_boundary=True,
                                 )
                             )
+                            next_active.append(True)
                     fields = next_fields
+                    active = next_active
                     i += 2
                     continue
             if isinstance(part, dict) and part.get("type") == "word_part.Literal":
                 literal = str(part.get("tval", ""))
                 segs = self._asdl_literal_to_segments(literal, quoted_context=False, source_kind=kind)
-                next_fields = []
-                for base in fields:
+                next_fields: list[ExpansionField] = []
+                next_active: list[bool] = []
+                for base, base_active in zip(fields, active):
+                    if not base_active:
+                        next_fields.append(base)
+                        next_active.append(False)
+                        continue
                     next_fields.append(
                         ExpansionField(
                             segments=base.segments + segs,
                             preserve_boundary=base.preserve_boundary or any(s.quoted for s in segs),
                         )
                     )
+                    next_active.append(True)
                 fields = next_fields
+                active = next_active
                 i += 1
                 continue
-            vals, quoted = self._expand_asdl_word_part_values(part, quoted_context=False)
-            next_fields = []
-            for base in fields:
+            vals, quoted, presplit = self._expand_asdl_word_part_values(part, quoted_context=False)
+            next_fields: list[ExpansionField] = []
+            next_active: list[bool] = []
+            for base, base_active in zip(fields, active):
+                if not base_active:
+                    next_fields.append(base)
+                    next_active.append(False)
+                    continue
+                if not vals:
+                    continue
+                # Unquoted multi-value expansions splice into words like shell
+                # fields: prefix sticks to first field, suffix to last.
+                if presplit and (not quoted) and len(vals) > 1:
+                    first_seg = ExpansionSegment(
+                        text=vals[0],
+                        quoted=False,
+                        glob_active=True,
+                        split_active=False,
+                        source_kind=kind,
+                    )
+                    next_fields.append(
+                        ExpansionField(
+                            segments=base.segments + [first_seg],
+                            preserve_boundary=base.preserve_boundary or vals[0] == "",
+                        )
+                    )
+                    next_active.append(False)
+                    for mid in vals[1:-1]:
+                        next_fields.append(
+                            ExpansionField(
+                                segments=[
+                                    ExpansionSegment(
+                                        text=mid,
+                                        quoted=False,
+                                        glob_active=True,
+                                        split_active=False,
+                                        source_kind=kind,
+                                    )
+                                ],
+                                preserve_boundary=(mid == ""),
+                            )
+                        )
+                        next_active.append(False)
+                    next_fields.append(
+                        ExpansionField(
+                            segments=[
+                                ExpansionSegment(
+                                    text=vals[-1],
+                                    quoted=False,
+                                    glob_active=True,
+                                    split_active=False,
+                                    source_kind=kind,
+                                )
+                            ],
+                            preserve_boundary=(vals[-1] == ""),
+                        )
+                    )
+                    next_active.append(True)
+                    continue
                 for v in vals:
                     next_fields.append(
                         ExpansionField(
@@ -3869,14 +3951,16 @@ class Runtime:
                                     text=v,
                                     quoted=quoted,
                                     glob_active=(not quoted),
-                                    split_active=(not quoted),
+                                    split_active=((not quoted) and (not presplit)),
                                     source_kind=kind,
                                 )
                             ],
-                            preserve_boundary=base.preserve_boundary or quoted,
+                            preserve_boundary=base.preserve_boundary or quoted or (presplit and v == ""),
                         )
                     )
+                    next_active.append(True)
             fields = next_fields
+            active = next_active
             i += 1
         return fields
 
@@ -4074,7 +4158,9 @@ class Runtime:
                     digits.append(text[k])
                     k += 1
                 try:
-                    out.append(chr(int("".join(digits), 8)))
+                    code = int("".join(digits), 8)
+                    if code != 0:
+                        out.append(chr(code))
                 except Exception:
                     out.append("".join(digits))
                 j = k
@@ -4087,11 +4173,14 @@ class Runtime:
                     k += 1
                 if digits:
                     try:
-                        out.append(chr(int("".join(digits), 16)))
+                        code = int("".join(digits), 16)
+                        if code != 0:
+                            out.append(chr(code))
                     except Exception:
                         out.append("".join(digits))
                     j = k
                     continue
+            out.append("\\")
             out.append(esc)
             j += 2
         return None
@@ -4341,6 +4430,8 @@ class Runtime:
                 pat.append("[[]")
             elif ch == "]":
                 pat.append("[]]")
+            elif ch == "-":
+                pat.append("\\-")
             elif ch == "\\":
                 pat.append("[\\\\]")
             else:
@@ -4373,7 +4464,7 @@ class Runtime:
             i += 1
         if not has_active_glob:
             return [text]
-        pat_text = "".join(pat)
+        pat_text = self._normalize_class_escapes("".join(pat))
         pattern = pat_text if all_quoted else self._tilde_expand(pat_text)
         matches = sorted(glob.glob(pattern))
         if matches:
@@ -4423,12 +4514,14 @@ class Runtime:
                     only_qat = False
         return has_qat, (has_qat and only_qat)
 
-    def _expand_asdl_word_part_values(self, node: dict[str, Any], quoted_context: bool) -> tuple[list[str], bool]:
+    def _expand_asdl_word_part_values(
+        self, node: dict[str, Any], quoted_context: bool
+    ) -> tuple[list[str], bool, bool]:
         t = node.get("type")
         if t == "word_part.Literal":
-            return [self._decode_asdl_literal(str(node.get("tval", "")), quoted_context=quoted_context)], quoted_context
+            return [self._decode_asdl_literal(str(node.get("tval", "")), quoted_context=quoted_context)], quoted_context, False
         if t == "word_part.SingleQuoted":
-            return [str(node.get("sval", ""))], True
+            return [str(node.get("sval", ""))], True, False
         if t == "word_part.DoubleQuoted":
             parts = node.get("parts") or []
             pieces: list[str] = [""]
@@ -4436,7 +4529,7 @@ class Runtime:
             had_effective_part = False
             for p in parts:
                 had_any_part = True
-                vals, _ = self._expand_asdl_word_part_values(p, quoted_context=True)
+                vals, _, _ = self._expand_asdl_word_part_values(p, quoted_context=True)
                 if not vals:
                     p_type = p.get("type") if isinstance(p, dict) else None
                     if (
@@ -4456,13 +4549,18 @@ class Runtime:
                 pieces[-1] = pieces[-1] + vals[0]
                 pieces.extend(vals[1:])
             if had_any_part and not had_effective_part:
-                return [], True
-            return pieces, True
+                return [], True, False
+            return pieces, True, False
         if t == "word_part.SimpleVarSub":
             val = self._expand_param(str(node.get("name", "")), quoted_context)
             if isinstance(val, PresplitFields):
-                return [str(v) for v in val], True
-            return self._normalize_asdl_expanded_values(val), quoted_context
+                vals = [str(v) for v in val]
+                if val.lead_boundary and len(vals) > 1:
+                    vals = [""] + vals
+                if val.trail_boundary and len(vals) > 1:
+                    vals = vals + [""]
+                return vals, quoted_context, True
+            return self._normalize_asdl_expanded_values(val), quoted_context, False
         if t == "word_part.BracedVarSub":
             arg_node = node.get("arg")
             arg_text, _arg_fields = self._asdl_operator_arg_text_and_fields(arg_node)
@@ -4475,20 +4573,25 @@ class Runtime:
                 arg_node=arg_node if isinstance(arg_node, dict) else None,
             )
             if isinstance(val, PresplitFields):
-                return [str(v) for v in val], True
-            return self._normalize_asdl_expanded_values(val), quoted_context
+                vals = [str(v) for v in val]
+                if val.lead_boundary and len(vals) > 1:
+                    vals = [""] + vals
+                if val.trail_boundary and len(vals) > 1:
+                    vals = vals + [""]
+                return vals, quoted_context, True
+            return self._normalize_asdl_expanded_values(val), quoted_context, False
         if t == "word_part.CommandSub":
             child = node.get("child")
             syntax = str(node.get("syntax") or "dollar")
             backtick = syntax == "backtick"
             if isinstance(child, dict) and child.get("type") == "command.CommandList":
-                return [self._expand_command_subst_asdl(child, backtick=backtick)], quoted_context
+                return [self._expand_command_subst_asdl(child, backtick=backtick)], quoted_context, False
             src = str(node.get("child_source") or "")
-            return [self._expand_command_subst_text(src, backtick=backtick)], quoted_context
+            return [self._expand_command_subst_text(src, backtick=backtick)], quoted_context, False
         if t == "word_part.ArithSub":
             expr = str(node.get("expr_source") or node.get("code") or "")
-            return [self._expand_arith(expr)], quoted_context
-        return [""], quoted_context
+            return [self._expand_arith(expr)], quoted_context, False
+        return [""], quoted_context, False
 
     def _asdl_operator_arg_text_and_fields(self, arg_node: Any) -> tuple[str | None, list[ExpansionField] | None]:
         if not isinstance(arg_node, dict):
@@ -4531,16 +4634,9 @@ class Runtime:
     def _escape_case_pattern_literal(self, text: str) -> str:
         out: list[str] = []
         for ch in text:
-            if ch == "*":
-                out.append("[*]")
-            elif ch == "?":
-                out.append("[?]")
-            elif ch == "[":
-                out.append("[[]")
-            elif ch == "]":
-                out.append("[]]")
-            elif ch == "\\":
-                out.append("[\\\\]")
+            if ch in {"*", "?", "[", "]", "\\", "-", "!"}:
+                out.append("\\")
+                out.append(ch)
             else:
                 out.append(ch)
         return "".join(out)
@@ -8708,6 +8804,11 @@ class Runtime:
             if assignment_context:
                 return _expand_alt_word(text)
             if arg_fields is not None:
+                # Keep legacy token-boundary behavior for quote-sensitive
+                # alternate words (e.g. ${x:+'' ''}) where empty quoted atoms
+                # carry field-count semantics.
+                if any(mark in text for mark in ["'", '"', "`", "$(", "${"]):
+                    return _expand_alt_fields(text)
                 return _expand_alt_fields(text, arg_fields)
             if any(mark in text for mark in ["'", '"', "`", "$(", "${"]):
                 return _expand_alt_fields(text)
@@ -9575,11 +9676,16 @@ class Runtime:
                 return i
         return None
 
-    def _argv_assignment_words(self, argv: list[str]) -> list[tuple[str, str, object, bool]] | None:
+    def _argv_assignment_words(
+        self, argv: list[str], eligible: list[bool] | None = None
+    ) -> list[tuple[str, str, object, bool]] | None:
         out: list[tuple[str, str, object, bool]] = []
         i = 0
         while i < len(argv):
             tok = argv[i]
+            if eligible is not None:
+                if i >= len(eligible) or not eligible[i]:
+                    return None
             m_comp = re.match(r"^([A-Za-z_][A-Za-z0-9_]*)(\+?=)\((.*)$", tok)
             if m_comp is not None:
                 name = m_comp.group(1)
@@ -9638,6 +9744,23 @@ class Runtime:
             out.append((name, op, value, False))
             i += 1
         return out
+
+    def _asdl_word_is_plain_assignment_candidate(self, node: Any) -> bool:
+        if not isinstance(node, dict) or node.get("type") != "word.Compound":
+            return False
+        parts = node.get("parts") or []
+        if not isinstance(parts, list) or not parts:
+            return False
+        for part in parts:
+            if not isinstance(part, dict):
+                return False
+            if part.get("type") != "word_part.Literal":
+                return False
+            if "\\" in str(part.get("tval", "")):
+                # Escapes/quoting in source means this is not a lexical
+                # assignment word, even if expanded text contains '='.
+                return False
+        return True
 
     def _assign_compound_var(self, name: str, op: str, values: list[str]) -> None:
         if self._bash_compat_level is None:
@@ -9940,8 +10063,8 @@ class Runtime:
         return value
 
     def _pattern_from_word(self, text: str, for_case: bool = False) -> str:
-        raw = self._expand_assignment_word_protected(text)
-        return self._pattern_from_literalized_raw(raw, for_case=for_case)
+        fields = self._legacy_word_to_expansion_fields(text, assignment=True)
+        return self._pattern_from_structured_fields(fields, for_case=for_case)
 
     def _pattern_from_structured_fields(self, fields: list[ExpansionField], *, for_case: bool = False) -> str:
         # Parameter-op and case-pattern helpers can pass ASDL-derived structured
@@ -9966,8 +10089,6 @@ class Runtime:
         return self._ifs_join(texts)
 
     def _pattern_from_literalized_raw(self, raw: str, *, for_case: bool = False) -> str:
-        rb = r"\]" if for_case else "]"
-        raw = raw.replace(r"\]", rb)
         out: List[str] = []
         i = 0
         in_class = False

@@ -83,6 +83,16 @@ def _parse_parts(text: str, in_double: bool) -> list[LstWordPart]:
 
     while i < len(text):
         ch = text[i]
+        if not in_double and ch == "$" and i + 1 < len(text) and text[i + 1] == "'":
+            flush_literal()
+            end = _find_ansi_c_single_quote_end(text, i + 2)
+            if end == -1:
+                parts.append(LstLiteralPart(text[i:]))
+                return parts
+            parts.append(LstLiteralPart("$"))
+            parts.append(LstSingleQuotedPart(text[i + 2 : end]))
+            i = end + 1
+            continue
         if not in_double and ch == "'":
             flush_literal()
             end = text.find("'", i + 1)
@@ -269,6 +279,19 @@ def _find_backtick(text: str, start: int) -> int:
             i += 2
             continue
         if text[i] == "`":
+            return i
+        i += 1
+    return -1
+
+
+def _find_ansi_c_single_quote_end(text: str, start: int) -> int:
+    i = start
+    while i < len(text):
+        ch = text[i]
+        if ch == "\\" and i + 1 < len(text):
+            i += 2
+            continue
+        if ch == "'":
             return i
         i += 1
     return -1
