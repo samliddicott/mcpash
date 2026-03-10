@@ -13778,7 +13778,7 @@ class Runtime:
             if line_hint is not None:
                 report_line = line_hint + line_offset
                 self._report_error(text, line=report_line, context=parse_context)
-                if parse_context in {"eval", "command substitution"}:
+                if self._diag.style == "bash" and parse_context in {"eval", "command substitution"}:
                     src_for_diag = source
                     if (
                         parse_context == "command substitution"
