@@ -1167,6 +1167,16 @@ class Runtime:
 
     def set_positional_args(self, args: List[str]) -> None:
         self.positional = list(args)
+        if self._bash_compat_level is not None:
+            # Minimal bash-call-stack exposure used by compatibility probes.
+            argc = str(len(self.positional))
+            argv_vals = list(reversed(self.positional))
+            self._typed_vars["BASH_ARGC"] = [argc]
+            self._typed_vars["BASH_ARGV"] = argv_vals
+            self._set_var_attrs("BASH_ARGC", array=True)
+            self._set_var_attrs("BASH_ARGV", array=True)
+            self._set_subscript_projection("BASH_ARGC", argc)
+            self._set_subscript_projection("BASH_ARGV", argv_vals[0] if argv_vals else "")
 
     def set_script_name(self, name: str) -> None:
         self.script_name = name
@@ -2651,6 +2661,11 @@ class Runtime:
         saved_options = dict(self.options)
         saved_local = [dict(s) for s in self.local_stack]
         saved_positional = list(self.positional)
+        saved_loop_depth = self._loop_depth
+        if self._bash_compat_level is not None and self._bash_compat_level >= 44:
+            # bash compat>=44: subshell should not inherit active loop context
+            # for break/continue propagation.
+            self._loop_depth = 0
         saved_cwd = os.getcwd()
         saved_traps = dict(self.traps)
         self.traps = {
@@ -2694,6 +2709,7 @@ class Runtime:
             self.options = saved_options
             self.local_stack = saved_local
             self.positional = saved_positional
+            self._loop_depth = saved_loop_depth
             self.traps = saved_traps
             try:
                 os.chdir(saved_cwd)
@@ -5476,6 +5492,9 @@ class Runtime:
         saved_options = dict(self.options)
         saved_local = [dict(s) for s in self.local_stack]
         saved_positional = list(self.positional)
+        saved_loop_depth = self._loop_depth
+        if self._bash_compat_level is not None and self._bash_compat_level >= 44:
+            self._loop_depth = 0
         saved_cwd = os.getcwd()
         saved_traps = dict(self.traps)
         # EXIT trap is not inherited by subshells; additionally, TERM/WINCH
@@ -5521,6 +5540,7 @@ class Runtime:
             self.options = saved_options
             self.local_stack = saved_local
             self.positional = saved_positional
+            self._loop_depth = saved_loop_depth
             self.traps = saved_traps
             try:
                 os.chdir(saved_cwd)
@@ -6091,6 +6111,11 @@ class Runtime:
         self.set_positional_args(args)
         self.local_stack.append({})
         self._call_stack.append(name)
+        saved_loop_depth = self._loop_depth
+        if self._bash_compat_level is not None and self._bash_compat_level >= 44:
+            # bash compat>=44: function body should not inherit caller loop control
+            # context for break/continue.
+            self._loop_depth = 0
         status = 0
         try:
             with self._push_frame(kind="function", funcname=name):
@@ -6101,6 +6126,7 @@ class Runtime:
         except ReturnFromFunction as e:
             status = e.code
         finally:
+            self._loop_depth = saved_loop_depth
             self._call_stack.pop()
             self.local_stack.pop()
             self.set_positional_args(saved_positional)
@@ -6605,6 +6631,7 @@ class Runtime:
 
     def _run_hash(self, args: List[str]) -> int:
         verbose = False
+        reusable = False
         did_reset = False
         i = 0
         while i < len(args) and args[i].startswith("-"):
@@ -6617,16 +6644,23 @@ class Runtime:
                 verbose = True
                 i += 1
                 continue
+            if args[i] == "-l":
+                reusable = True
+                i += 1
+                continue
             return 2
         names = args[i:]
-        if did_reset and not names and not verbose:
+        if did_reset and not names and not verbose and not reusable:
             return 0
         if not names:
-            if not self._cmd_hash and self._bash_compat_level is not None:
+            if not self._cmd_hash and self._bash_compat_level is not None and not reusable:
                 print("hash: hash table empty", flush=True)
                 return 0
             for name in sorted(self._cmd_hash.keys()):
-                print(f"{name}={self._cmd_hash[name]}", flush=True)
+                if reusable:
+                    print(f"builtin hash -p {shlex.quote(self._cmd_hash[name])} {shlex.quote(name)}", flush=True)
+                else:
+                    print(f"{name}={self._cmd_hash[name]}", flush=True)
             return 0
         status = 0
         for name in names:
@@ -9888,6 +9922,8 @@ class Runtime:
         declare_array = False
         declare_assoc = False
         declare_integer = False
+        declare_lower = False
+        declare_upper = False
         declare_export = False
         declare_readonly = False
         force_global = False
@@ -9912,6 +9948,10 @@ class Runtime:
                     declare_assoc = True
                 elif ch == "i":
                     declare_integer = True
+                elif ch == "l":
+                    declare_lower = True
+                elif ch == "u":
+                    declare_upper = True
                 elif ch == "x":
                     declare_export = True
                 elif ch == "r":
@@ -10038,6 +10078,12 @@ class Runtime:
             attr_flags["assoc"] = True
         if declare_integer:
             attr_flags["integer"] = True
+        if declare_lower:
+            attr_flags["lowercase"] = True
+            attr_flags["uppercase"] = False
+        if declare_upper:
+            attr_flags["uppercase"] = True
+            attr_flags["lowercase"] = False
         if declare_export:
             attr_flags["exported"] = True
         if declare_readonly:
