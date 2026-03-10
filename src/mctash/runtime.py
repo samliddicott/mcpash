@@ -4630,7 +4630,8 @@ class Runtime:
                     vals = [""] + vals
                 if val.trail_boundary:
                     vals = vals + [""]
-                return vals, quoted_context, True
+                force_single_quoted = bool(getattr(val, "force_single_quoted", False))
+                return vals, (quoted_context or (force_single_quoted and len(vals) == 1)), True
             return self._normalize_asdl_expanded_values(val), quoted_context, False
         if t == "word_part.BracedVarSub":
             arg_node = node.get("arg")
@@ -4649,7 +4650,8 @@ class Runtime:
                     vals = [""] + vals
                 if val.trail_boundary:
                     vals = vals + [""]
-                return vals, quoted_context, True
+                force_single_quoted = bool(getattr(val, "force_single_quoted", False))
+                return vals, (quoted_context or (force_single_quoted and len(vals) == 1)), True
             return self._normalize_asdl_expanded_values(val), quoted_context, False
         if t == "word_part.CommandSub":
             child = node.get("child")
@@ -8832,21 +8834,35 @@ class Runtime:
                 return _expand_param_op_word_quoted(text, arg_node)
             return self._expand_assignment_word_protected(text)
 
-        def _expand_alt_fields(text: str, fields: list[ExpansionField] | None = None) -> PresplitFields:
+        def _expand_alt_fields(
+            text: str,
+            fields: list[ExpansionField] | None = None,
+            *,
+            respect_edge_ws: bool = True,
+        ) -> PresplitFields:
             if fields is not None:
                 out_fields: List[str] = []
                 split_fields: list[ExpansionField] = []
+                literal_only = True
                 for field in fields:
                     split_fields.extend(self._split_structured_field(field))
                 for field in split_fields:
+                    has_active_pattern = any(
+                        seg.glob_active and any(ch in seg.text for ch in ("*", "?", "["))
+                        for seg in field.segments
+                    )
+                    if has_active_pattern:
+                        literal_only = False
                     out_fields.extend(self._glob_structured_field(field))
                 ifs_value, ifs_set = self._get_var_with_state("IFS")
                 if not ifs_set:
                     ifs_value = " \t\n"
                 ifs_ws = "".join(ch for ch in ifs_value if ch in " \t\n")
-                lead_boundary = bool(text) and bool(ifs_ws) and text[0] in ifs_ws
-                trail_boundary = bool(text) and bool(ifs_ws) and text[-1] in ifs_ws
-                return PresplitFields(out_fields, lead_boundary=lead_boundary, trail_boundary=trail_boundary)
+                lead_boundary = respect_edge_ws and bool(text) and bool(ifs_ws) and text[0] in ifs_ws
+                trail_boundary = respect_edge_ws and bool(text) and bool(ifs_ws) and text[-1] in ifs_ws
+                out = PresplitFields(out_fields, lead_boundary=lead_boundary, trail_boundary=trail_boundary)
+                setattr(out, "force_single_quoted", literal_only)
+                return out
             reader = TokenReader(text)
             ctx = LexContext(reserved_words=set(), allow_reserved=False, allow_newline=False)
             words: List[str] = []
@@ -8867,8 +8883,9 @@ class Runtime:
             if not ifs_set:
                 ifs_value = " \t\n"
             ifs_ws = "".join(ch for ch in ifs_value if ch in " \t\n")
-            lead_boundary = bool(text) and bool(ifs_ws) and text[0] in ifs_ws
-            trail_boundary = bool(text) and bool(ifs_ws) and text[-1] in ifs_ws
+            edge_ws = respect_edge_ws and not (out_fields and all(v == "" for v in out_fields))
+            lead_boundary = edge_ws and bool(text) and bool(ifs_ws) and text[0] in ifs_ws
+            trail_boundary = edge_ws and bool(text) and bool(ifs_ws) and text[-1] in ifs_ws
             return PresplitFields(out_fields, lead_boundary=lead_boundary, trail_boundary=trail_boundary)
 
         def _expand_alt_unquoted(text: str):
@@ -8883,6 +8900,13 @@ class Runtime:
                 # alternate words (e.g. ${x:+'' ''}) where empty quoted atoms
                 # carry field-count semantics.
                 if any(mark in text for mark in ["'", '"', "`", "$(", "${"]):
+                    all_quoted = all(
+                        getattr(seg, "quoted", False)
+                        for f in arg_fields
+                        for seg in getattr(f, "segments", [])
+                    )
+                    if all_quoted:
+                        return _expand_alt_fields(text, arg_fields)
                     return _expand_alt_fields(text)
                 if any(ch in text for ch in [" ", "\t", "\n"]):
                     # When operator-arg fields are all literal, the adapter can
