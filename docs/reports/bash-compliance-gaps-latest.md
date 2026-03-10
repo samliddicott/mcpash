@@ -6,11 +6,11 @@ This report tracks observed gaps from runnable evidence.
 
 ## Explicit Known Gaps
 
-None currently open.
+None at current HEAD.
 
 ## Known Unknowns (Compliance-Risk Tracking)
 
-None currently open in this board.
+None at current HEAD.
 
 ## Basis
 
