@@ -2108,10 +2108,10 @@ class Runtime:
         prev = None
         statuses: list[int] = []
         for i, cmd in enumerate(commands):
-            cmd_env = dict(self.env)
+            cmd_env = self._exported_env_view(self.env)
             for scope in self.local_stack:
                 for k, v in scope.items():
-                    if k in self.env:
+                    if k in self.env and "exported" in self._var_attrs.get(k, set()):
                         cmd_env[k] = v
             saved_env = self.env
             try:
@@ -3292,10 +3292,18 @@ class Runtime:
                 print(self._py_to_shell(result))
             return 0
         try:
-            exec_env = dict(local_env)
+            exec_env = {
+                k: v
+                for k, v in local_env.items()
+                if "exported" in self._var_attrs.get(k, set())
+            }
+            for env_pair in assign_pairs:
+                name = str(env_pair.get("name") or "")
+                if name:
+                    exec_env[name] = local_env.get(name, "")
             for scope in self.local_stack:
                 for k, v in scope.items():
-                    if k in self.env:
+                    if k in self.env and "exported" in self._var_attrs.get(k, set()):
                         exec_env[k] = v
             saved_line = self.current_line
             end_line = self._asdl_simple_command_end_line(node)
@@ -4743,10 +4751,10 @@ class Runtime:
         for i, cmd in enumerate(node.commands):
             if not isinstance(cmd, SimpleCommand):
                 return self._exec_command(cmd)
-            cmd_env = dict(self.env)
+            cmd_env = self._exported_env_view(self.env)
             for scope in self.local_stack:
                 for k, v in scope.items():
-                    if k in self.env:
+                    if k in self.env and "exported" in self._var_attrs.get(k, set()):
                         cmd_env[k] = v
             for assign in cmd.assignments:
                 value = self._expand_assignment_word(assign.value)
@@ -5476,12 +5484,18 @@ class Runtime:
                     print(self._py_to_shell(result))
                 return 0
             try:
-                exec_env = dict(local_env)
+                exec_env = {
+                    k: v
+                    for k, v in local_env.items()
+                    if "exported" in self._var_attrs.get(k, set())
+                }
+                for assign in node.assignments:
+                    exec_env[assign.name] = local_env.get(assign.name, "")
                 # Local variables should shadow exported globals for external
                 # commands, but only when that name is already exported.
                 for scope in self.local_stack:
                     for k, v in scope.items():
-                        if k in self.env:
+                        if k in self.env and "exported" in self._var_attrs.get(k, set()):
                             exec_env[k] = v
                 return self._run_external(argv, exec_env, node.redirects)
             except RuntimeError as e:
@@ -5856,7 +5870,7 @@ class Runtime:
                     exec_argv0 = "-" + base.lstrip("-")
                 status = self._run_external(
                     cmd,
-                    dict(self.env),
+                    self._exported_env_view(self.env),
                     [],
                     context="exec",
                     argv0_override=exec_argv0,
@@ -5907,7 +5921,7 @@ class Runtime:
             if self._has_function(cmd[0]):
                 status = self._run_function(cmd[0], cmd[1:])
                 raise SystemExit(status)
-            status = self._run_external(cmd, dict(self.env), [], context="exec")
+            status = self._run_external(cmd, self._exported_env_view(self.env), [], context="exec")
             raise SystemExit(status)
         if name == "trap":
             return self._run_trap(argv[1:])
@@ -10643,7 +10657,7 @@ class Runtime:
                 self._report_error(msg, line=self.current_line, context="unset")
                 # ash-style lane keeps historical special-builtin fatal behavior;
                 # bash-style lane reports status and continues script execution.
-                if self._diag.style != "bash" and self._is_noninteractive() and not self.options.get("posix", False):
+                if self._diag.style != "bash" and self._is_noninteractive():
                     raise SystemExit(2)
                 status = 1 if self._diag.style == "bash" else 2
                 continue
@@ -11746,6 +11760,13 @@ class Runtime:
                         break
                 else:
                     self.env[name] = coerced
+
+    def _exported_env_view(self, env: dict[str, str]) -> dict[str, str]:
+        return {
+            k: v
+            for k, v in env.items()
+            if "exported" in self._var_attrs.get(k, set())
+        }
 
     def _declare_var(self, name: str, value: str = "", local_scope: bool = False, **flags: object) -> None:
         if local_scope and self.local_stack:
