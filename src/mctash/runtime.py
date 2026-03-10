@@ -4006,7 +4006,7 @@ class Runtime:
                         text=text,
                         quoted=quoted_context,
                         glob_active=(not quoted_context),
-                        split_active=(not quoted_context),
+                        split_active=False,
                         source_kind=source_kind,
                     )
                 ]
@@ -4026,7 +4026,7 @@ class Runtime:
                             text="".join(buf),
                             quoted=quoted_context,
                             glob_active=(not quoted_context),
-                            split_active=(not quoted_context),
+                            split_active=False,
                             source_kind=source_kind,
                         )
                     )
@@ -4047,7 +4047,7 @@ class Runtime:
                         text="".join(buf),
                         quoted=quoted_context,
                         glob_active=(not quoted_context),
-                        split_active=(not quoted_context),
+                        split_active=False,
                         source_kind=source_kind,
                     )
                 )
@@ -4064,7 +4064,7 @@ class Runtime:
                     text="".join(buf),
                     quoted=quoted,
                     glob_active=active and (not quoted),
-                    split_active=active and (not quoted),
+                    split_active=False,
                     source_kind=source_kind,
                 )
             )
