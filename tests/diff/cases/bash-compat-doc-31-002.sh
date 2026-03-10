@@ -4,6 +4,7 @@ set -euo pipefail
 
 # BCOMPAT.31.002: quoted RHS of [[ =~ ]] behavior.
 s='ab'
+BASH_COMPAT=31
 set +e
 [[ $s =~ a. ]]; rc_unq=$?
 [[ $s =~ "a." ]]; rc_q=$?
