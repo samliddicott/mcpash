@@ -909,6 +909,7 @@ class Runtime:
         self.source_stack: List[str] = []
         self.traps: Dict[str, str] = {}
         self._pending_signals: List[str] = []
+        self._trap_inline_handled: List[str] = []
         self._running_trap: bool = False
         self._trap_entry_status: int | None = None
         self.c_string_mode: bool = False
@@ -994,6 +995,12 @@ class Runtime:
         self.env.setdefault("IFS", " \t\n")
         self.env.setdefault("OPTIND", "1")
         mode = self.env.get("MCTASH_MODE", "").strip().lower()
+        if mode == "posix" and self._bash_compat_level is None:
+            self.options.pop("h", None)
+            self.options.pop("B", None)
+        else:
+            self.options.setdefault("h", True)
+            self.options.setdefault("B", True)
         if mode == "bash" or self.env.get("BASH_COMPAT", "").strip():
             self._seed_bash_special_vars()
             self._shopts["sourcepath"] = True
@@ -1391,6 +1398,11 @@ class Runtime:
     def _run_pending_traps(self) -> None:
         if self._get_subshell_depth() > 0 or self._running_trap:
             return
+        if self._trap_inline_handled:
+            for sig_name in list(self._trap_inline_handled):
+                if sig_name in self._pending_signals:
+                    self._pending_signals.remove(sig_name)
+                self._trap_inline_handled.remove(sig_name)
         while self._pending_signals:
             sig = self._pending_signals.pop(0)
             action = self.traps.get(sig)
@@ -7145,6 +7157,33 @@ class Runtime:
                         time.sleep(min_age - age)
             try:
                 os.kill(pid, sig_num)
+                if pid == os.getpid():
+                    sig_name = None
+                    try:
+                        sig_name = signal.Signals(sig_num).name.replace("SIG", "")
+                    except Exception:
+                        sig_name = None
+                    if sig_name is not None:
+                        action = self.traps.get(sig_name)
+                        if action:
+                            while sig_name in self._pending_signals:
+                                self._pending_signals.remove(sig_name)
+                            if self._running_trap:
+                                saved = self._trap_entry_status
+                                self._trap_entry_status = self.last_status
+                                try:
+                                    with self._push_frame(kind="trap", funcname="trap"):
+                                        self._eval_source(action, propagate_exit=True, propagate_return=True)
+                                finally:
+                                    self._trap_entry_status = saved
+                            else:
+                                entry_status = self.last_status
+                                if entry_status == 0 and self.last_nonzero_status != 0:
+                                    entry_status = self.last_nonzero_status
+                                self._run_trap_action(action, entry_status)
+                            while sig_name in self._pending_signals:
+                                self._pending_signals.remove(sig_name)
+                            self._trap_inline_handled.append(sig_name)
                 if job_id_for_target is not None:
                     if sig_num in {
                         getattr(signal, "SIGSTOP", -1),
@@ -7556,7 +7595,15 @@ class Runtime:
                 break
             seen.add(word)
             trailing = value.endswith(" ")
-            raw_parts = shlex.split(value)
+            raw_parts: List[str] = []
+            reader = TokenReader(value)
+            lex_ctx = LexContext(reserved_words=set(), allow_reserved=False, allow_newline=False)
+            while True:
+                tok = reader.next(lex_ctx)
+                if tok is None:
+                    break
+                if tok.kind == "WORD":
+                    raw_parts.append(tok.value)
             parts: List[str] = []
             for raw in raw_parts:
                 parts.append(self._expand_word(raw))
@@ -10330,6 +10377,13 @@ class Runtime:
         return 0
 
     def _quote_set_value(self, value: str) -> str:
+        # Ash lane prints set(1) values in single-quoted form.
+        if self._bash_compat_level is None and self.env.get("MCTASH_MODE", "").strip().lower() == "posix":
+            if value == "":
+                return "''"
+            if value == "'":
+                return "''\"'\""
+            return "'" + value.replace("'", "'\"'\"'") + "'"
         if value == "":
             return "''"
         if value == "'":
@@ -13046,23 +13100,20 @@ class Runtime:
                 hits = self._classify_command_name(name, include_nonexec=False)
                 if not hits:
                     self._report_error(self._diag_msg(DiagnosticKey.TYPE_NOT_FOUND, name=name), line=self.current_line)
-                    status = 1
+                    status = 127
                     continue
                 kind, data = hits[0]
                 if kind == "alias":
                     print(f"{name} is an alias for {data}", flush=True)
                 elif kind == "function":
                     print(f"{name} is a function", flush=True)
-                    body = self.functions_asdl.get(name)
-                    if isinstance(body, dict):
-                        print(self._format_asdl_function(name, body), flush=True)
                 elif kind == "builtin":
                     print(f"{name} is a shell builtin", flush=True)
                 elif kind == "file":
                     print(f"{name} is {data}", flush=True)
                 else:
                     self._report_error(self._diag_msg(DiagnosticKey.TYPE_NOT_FOUND, name=name), line=self.current_line)
-                    status = 1
+                    status = 127
             return status
         mode_t = False
         mode_a = False

@@ -152,6 +152,9 @@ for case in "${CASE_FILES[@]}"; do
     if [[ "${compare_name}" == "bash" && -n "${PARITY_BASH_COMPAT}" ]]; then
       mctash_mode="bash"
       mctash_prefix="BASH_COMPAT=${PARITY_BASH_COMPAT} "
+    else
+      # Keep ash/posix lane deterministic even if caller env exports BASH_COMPAT.
+      mctash_prefix="BASH_COMPAT= "
     fi
     mctash_prefix="MCTASH_BACKEND=${MCTASH_BACKEND} MCTASH_MODE=${mctash_mode} ${mctash_prefix}"
     if [[ "${PARITY_MIRROR_POSIX}" == "1" ]]; then
