@@ -1283,11 +1283,12 @@ class Runtime:
     def _preexec_reset_signals() -> None:
         # External commands should not inherit mctash/Python signal handlers
         # or ignored dispositions.
-        for sig in signal.Signals:
-            if sig in (signal.SIGKILL, signal.SIGSTOP):
+        max_sig = int(getattr(signal, "NSIG", 128))
+        for num in range(1, max_sig):
+            if num in (int(signal.SIGKILL), int(signal.SIGSTOP)):
                 continue
             try:
-                signal.signal(sig, signal.SIG_DFL)
+                signal.signal(num, signal.SIG_DFL)
             except Exception:
                 pass
 
@@ -2009,9 +2010,12 @@ class Runtime:
         if not self._procsub_threads:
             return
         pending = self._procsub_threads
-        self._procsub_threads = []
+        still_running: list[threading.Thread] = []
         for th in pending:
             th.join(timeout=2.0)
+            if th.is_alive():
+                still_running.append(th)
+        self._procsub_threads = still_running
 
     def _exec_asdl_and_or(self, node: dict[str, Any], track_status: bool = True) -> int:
         pipes = node.get("children") or []
@@ -4447,7 +4451,7 @@ class Runtime:
         has_active_glob = False
         pat: list[str] = []
 
-        def _append_literal_glob_char(ch: str) -> None:
+        def _append_literal_glob_char(ch: str, *, in_class: bool = False) -> None:
             if ch == "*":
                 pat.append("[*]")
             elif ch == "?":
@@ -4456,7 +4460,9 @@ class Runtime:
                 pat.append("[[]")
             elif ch == "]":
                 pat.append("[]]")
-            elif ch == "-":
+            elif ch == "-" and in_class:
+                # Keep literal '-' from quoted/escaped class content from
+                # becoming a range operator (e.g. [0"$((-9))"]).
                 pat.append("\\-")
             elif ch == "\\":
                 pat.append("[\\\\]")
@@ -4469,6 +4475,8 @@ class Runtime:
                 chars.append((ch, bool(seg.glob_active)))
 
         i = 0
+        in_class = False
+        class_can_close = False
         while i < len(chars):
             ch, active = chars[i]
             if active:
@@ -4476,7 +4484,9 @@ class Runtime:
                 # char (special or not), so it should not itself match.
                 if ch == "\\" and i + 1 < len(chars):
                     nxt, _ = chars[i + 1]
-                    _append_literal_glob_char(nxt)
+                    _append_literal_glob_char(nxt, in_class=in_class)
+                    if in_class:
+                        class_can_close = True
                     i += 2
                     continue
                 if ch in {"*", "?", "["}:
@@ -4484,9 +4494,19 @@ class Runtime:
                 # Preserve active glob pattern bytes verbatim, including `]`
                 # and other class syntax characters.
                 pat.append(ch)
+                if ch == "[":
+                    in_class = True
+                    class_can_close = False
+                elif in_class:
+                    if ch == "]" and class_can_close:
+                        in_class = False
+                    else:
+                        class_can_close = True
                 i += 1
                 continue
-            _append_literal_glob_char(ch)
+            _append_literal_glob_char(ch, in_class=in_class)
+            if in_class:
+                class_can_close = True
             i += 1
         if not has_active_glob:
             return [text]

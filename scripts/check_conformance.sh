@@ -65,17 +65,16 @@ busy_ok="$(printf '%s\n' "$busy_summary" | sed -n 's/.*ok=\([0-9][0-9]*\).*/\1/p
 busy_fail="$(printf '%s\n' "$busy_summary" | sed -n 's/.*fail=\([0-9][0-9]*\).*/\1/p')"
 busy_skip="$(printf '%s\n' "$busy_summary" | sed -n 's/.*skip=\([0-9][0-9]*\).*/\1/p')"
 info "BusyBox summary: ok=${busy_ok} fail=${busy_fail} skip=${busy_skip} rc=${busy_rc}"
-busy_timeout_modules="$(grep '^Timeout modules:' "$busy_log" | tail -n1 | sed 's/^Timeout modules: //')"
+busy_timeout_modules="$(
+  grep '^Timeout modules:' "$busy_log" | tail -n1 | sed 's/^Timeout modules: //' || true
+)"
 if [[ -n "${busy_timeout_modules:-}" ]]; then
   info "BusyBox timeout modules: ${busy_timeout_modules}"
 fi
 [[ "${busy_ok:-}" =~ ^[0-9]+$ ]] || fail "Could not parse BusyBox ok count"
 [[ "${busy_fail:-}" =~ ^[0-9]+$ ]] || fail "Could not parse BusyBox fail count"
-if (( busy_rc != 0 )); then
-  if [[ -n "${busy_timeout_modules:-}" ]]; then
-    fail "BusyBox run exited non-zero (${busy_rc}); timeout modules: ${busy_timeout_modules}. See $busy_log"
-  fi
-  fail "BusyBox run exited non-zero (${busy_rc}). See $busy_log"
+if (( busy_rc != 0 )) && [[ -n "${busy_timeout_modules:-}" ]]; then
+  fail "BusyBox run exited non-zero (${busy_rc}); timeout modules: ${busy_timeout_modules}. See $busy_log"
 fi
 allowed_hits=0
 unexpected_busy=()
@@ -111,6 +110,9 @@ if (( effective_busy_fail < 0 )); then
 fi
 if (( effective_busy_fail > BUSYBOX_MAX_FAIL )); then
   fail "BusyBox fail count ${busy_fail} (effective ${effective_busy_fail}) exceeded threshold ${BUSYBOX_MAX_FAIL}"
+fi
+if (( busy_rc != 0 )) && (( busy_fail == 0 )); then
+  fail "BusyBox run exited non-zero (${busy_rc}) without fail files. See $busy_log"
 fi
 effective_busy_min_ok=$((BUSYBOX_MIN_OK - allowed_hits))
 if (( effective_busy_min_ok < 0 )); then
