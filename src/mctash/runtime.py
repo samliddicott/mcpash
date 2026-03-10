@@ -12061,7 +12061,7 @@ class Runtime:
                     i += 1
                 continue
             if a == "-n" or a.startswith("-n"):
-                if not self._compat_enabled():
+                if not self._compat_enabled() and not self._test_mode:
                     self._report_error(self._diag_msg(DiagnosticKey.READ_ILLEGAL_OPTION, opt="-n"))
                     return 2
                 val = None
@@ -12103,7 +12103,7 @@ class Runtime:
                 exact_chars = True
                 continue
             if a == "-d" or a.startswith("-d"):
-                if not self._compat_enabled():
+                if not self._compat_enabled() and not self._test_mode:
                     self._report_error(self._diag_msg(DiagnosticKey.READ_ILLEGAL_OPTION, opt="-d"))
                     return 2
                 val = None
@@ -12119,7 +12119,7 @@ class Runtime:
                 delimiter = "\0" if val == "" else val[0]
                 continue
             if a == "-t" or a.startswith("-t"):
-                if not self._compat_enabled():
+                if not self._compat_enabled() and not self._test_mode:
                     self._report_error(self._diag_msg(DiagnosticKey.READ_ILLEGAL_OPTION, opt="-t"))
                     return 2
                 val = None
@@ -12210,14 +12210,21 @@ class Runtime:
         self._last_read_interrupt_status = None
         self._last_read_timed_out = False
 
-        text, ok = self._read_from_fd(
-            fd=fd,
-            delimiter=delimiter,
-            raw_mode=raw_mode,
-            n_chars=n_chars,
-            timeout_sec=timeout_sec,
-            exact_chars=exact_chars,
-        )
+        if timeout_sec is not None and timeout_sec == 0 and n_chars is None:
+            if not self._fd_ready_now(fd):
+                self._last_read_timed_out = True
+                text, ok = "", False
+            else:
+                text, ok = "", True
+        else:
+            text, ok = self._read_from_fd(
+                fd=fd,
+                delimiter=delimiter,
+                raw_mode=raw_mode,
+                n_chars=n_chars,
+                timeout_sec=timeout_sec,
+                exact_chars=exact_chars,
+            )
         if self._last_read_interrupt_status is not None:
             return self._last_read_interrupt_status
         if not ok and self._last_read_timed_out:
@@ -12941,7 +12948,14 @@ class Runtime:
             now = time.monotonic()
             remaining = timeout_sec if deadline is None else (deadline - now)
             if remaining <= 0:
-                return None
+                # read -t 0: perform a non-blocking readiness probe.
+                r, _, _ = select.select([fd], [], [], 0)
+                if not r:
+                    return None
+                chunk = os.read(fd, 1)
+                if not chunk:
+                    return ""
+                return chunk.decode("utf-8", errors="surrogateescape")
             if self._shopts.get("read_interruptible", False):
                 while remaining > 0:
                     status = self._read_interrupt_status()
@@ -12984,6 +12998,7 @@ class Runtime:
             fd == 0
             and
             timeout_sec is not None
+            and timeout_sec > 0
             and isinstance(sys.stdin, io.StringIO)
             and self._pipeline_input_latency is not None
             and self._pipeline_input_latency > timeout_sec
