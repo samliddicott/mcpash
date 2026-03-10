@@ -4555,9 +4555,9 @@ class Runtime:
             val = self._expand_param(str(node.get("name", "")), quoted_context)
             if isinstance(val, PresplitFields):
                 vals = [str(v) for v in val]
-                if val.lead_boundary and len(vals) > 1:
+                if val.lead_boundary:
                     vals = [""] + vals
-                if val.trail_boundary and len(vals) > 1:
+                if val.trail_boundary:
                     vals = vals + [""]
                 return vals, quoted_context, True
             return self._normalize_asdl_expanded_values(val), quoted_context, False
@@ -4574,9 +4574,9 @@ class Runtime:
             )
             if isinstance(val, PresplitFields):
                 vals = [str(v) for v in val]
-                if val.lead_boundary and len(vals) > 1:
+                if val.lead_boundary:
                     vals = [""] + vals
-                if val.trail_boundary and len(vals) > 1:
+                if val.trail_boundary:
                     vals = vals + [""]
                 return vals, quoted_context, True
             return self._normalize_asdl_expanded_values(val), quoted_context, False
