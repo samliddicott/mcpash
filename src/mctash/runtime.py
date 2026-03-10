@@ -4331,26 +4331,46 @@ class Runtime:
             return [text]
         has_active_glob = False
         pat: list[str] = []
+
+        def _append_literal_glob_char(ch: str) -> None:
+            if ch == "*":
+                pat.append("[*]")
+            elif ch == "?":
+                pat.append("[?]")
+            elif ch == "[":
+                pat.append("[[]")
+            elif ch == "]":
+                pat.append("[]]")
+            elif ch == "\\":
+                pat.append("[\\\\]")
+            else:
+                pat.append(ch)
+
+        chars: list[tuple[str, bool]] = []
         for seg in field.segments:
             for ch in seg.text:
-                if seg.glob_active:
-                    if ch in {"*", "?", "["}:
-                        has_active_glob = True
-                    # Preserve full unquoted glob pattern text (including ']').
-                    pat.append(ch)
+                chars.append((ch, bool(seg.glob_active)))
+
+        i = 0
+        while i < len(chars):
+            ch, active = chars[i]
+            if active:
+                # Unquoted glob context: backslash escapes the next pattern
+                # char (special or not), so it should not itself match.
+                if ch == "\\" and i + 1 < len(chars):
+                    nxt, _ = chars[i + 1]
+                    _append_literal_glob_char(nxt)
+                    i += 2
                     continue
-                if ch == "*":
-                    pat.append("[*]")
-                elif ch == "?":
-                    pat.append("[?]")
-                elif ch == "[":
-                    pat.append("[[]")
-                elif ch == "]":
-                    pat.append("[]]")
-                elif ch == "\\":
-                    pat.append("[\\\\]")
-                else:
-                    pat.append(ch)
+                if ch in {"*", "?", "["}:
+                    has_active_glob = True
+                # Preserve active glob pattern bytes verbatim, including `]`
+                # and other class syntax characters.
+                pat.append(ch)
+                i += 1
+                continue
+            _append_literal_glob_char(ch)
+            i += 1
         if not has_active_glob:
             return [text]
         pat_text = "".join(pat)
