@@ -996,7 +996,13 @@ class Runtime:
         self.env.setdefault("IFS", " \t\n")
         self.env.setdefault("OPTIND", "1")
         mode = self.env.get("MCTASH_MODE", "").strip().lower()
-        if mode == "posix" and self._bash_compat_level is None:
+        diag_style = self.env.get("MCTASH_DIAG_STYLE", "").strip().lower()
+        if diag_style not in {"ash", "bash"}:
+            diag_style = "bash" if (mode == "bash" or self._bash_compat_level is not None) else "ash"
+        # Option-surface defaults differ by comparator lane:
+        # - ash lane in posix mode: no -h/-B defaults
+        # - bash lane (including --posix): keep bash defaults
+        if mode == "posix" and diag_style == "ash" and self._bash_compat_level is None:
             self.options.pop("h", None)
             self.options.pop("B", None)
         else:
@@ -1005,9 +1011,6 @@ class Runtime:
         if mode == "bash" or self.env.get("BASH_COMPAT", "").strip():
             self._seed_bash_special_vars()
             self._shopts["sourcepath"] = True
-        diag_style = self.env.get("MCTASH_DIAG_STYLE", "").strip().lower()
-        if diag_style not in {"ash", "bash"}:
-            diag_style = "bash" if (mode == "bash" or self._bash_compat_level is not None) else "ash"
         self._diag = DiagnosticCatalog(style=diag_style, gettext=get_translator())
         shared_path = self.env.get(
             "MCTASH_SHARED_FILE",
@@ -1195,14 +1198,23 @@ class Runtime:
     def set_positional_args(self, args: List[str]) -> None:
         self.positional = list(args)
         if self._bash_compat_level is not None:
-            # Minimal bash-call-stack exposure used by compatibility probes.
-            argc = str(len(self.positional))
-            argv_vals = list(reversed(self.positional))
-            self._typed_vars["BASH_ARGC"] = [argc]
+            # In bash compat without extdebug, expose root-frame style values.
+            if not self._shopts.get("extdebug", False):
+                if len(self.source_stack) > 1:
+                    script_ref = self.source_stack[-1]
+                    argc_vals = ["1", "0"]
+                    argv_vals = [script_ref] if script_ref else []
+                else:
+                    argc_vals = [str(len(self.positional))]
+                    argv_vals = list(reversed(self.positional))
+            else:
+                argc_vals = [str(len(self.positional))]
+                argv_vals = list(reversed(self.positional))
+            self._typed_vars["BASH_ARGC"] = argc_vals
             self._typed_vars["BASH_ARGV"] = argv_vals
             self._set_var_attrs("BASH_ARGC", array=True)
             self._set_var_attrs("BASH_ARGV", array=True)
-            self._set_subscript_projection("BASH_ARGC", argc)
+            self._set_subscript_projection("BASH_ARGC", argc_vals[0] if argc_vals else "")
             self._set_subscript_projection("BASH_ARGV", argv_vals[0] if argv_vals else "")
 
     def set_script_name(self, name: str) -> None:
@@ -1496,7 +1508,7 @@ class Runtime:
             self._mark_job_done(job_id, status)
             if job_id not in self._bg_notifications:
                 self._bg_notifications.append(job_id)
-            if self.traps.get("CHLD") and not self._running_trap:
+            if self.traps.get("CHLD") and not self._running_trap and job_id not in self._bg_pids:
                 # Queue one CHLD trap dispatch per completed child so wait/trap
                 # behavior tracks bash/POSIX expectations.
                 self._pending_signals.append("CHLD")
@@ -1612,10 +1624,9 @@ class Runtime:
             return None
         if cmd.assignments:
             return None
-        argv = self._expand_aliases(self._expand_argv(cmd.argv))
-        if len(argv) != 1:
+        if len(cmd.argv) != 1:
             return None
-        token = argv[0]
+        token = cmd.argv[0].text
         if not token.startswith("%"):
             return None
         return token, list(cmd.redirects)
@@ -1640,15 +1651,13 @@ class Runtime:
             return None
         if cmd.get("more_env") or []:
             return None
-        try:
-            argv = self._expand_aliases(self._expand_asdl_simple_argv(cmd))
-        except (RuntimeError, CommandSubstFailure, ArithExpansionFailure):
-            # Preflight jobspec detection should not surface expansion errors.
-            # Fall back to normal execution path for proper diagnostics/exit.
+        words = cmd.get("words") or []
+        if len(words) != 1:
             return None
-        if len(argv) != 1:
+        word0 = words[0]
+        if not isinstance(word0, dict):
             return None
-        token = argv[0]
+        token = self._asdl_word_to_text(word0)
         if not token.startswith("%"):
             return None
         redirects = [self._asdl_to_redirect(r) for r in (cmd.get("redirects") or [])]
@@ -3544,7 +3553,7 @@ class Runtime:
                 # operators with literal-only arg words.
                 name = str(p.get("name", ""))
                 op = p.get("op")
-                if self._is_valid_param_ref_name(name) and (op is None or op == "" or op == "__len__"):
+                if self._is_valid_param_ref_name(name) and (op is None or op == "" or op in {"__len__", "__indirect__"}):
                     continue
                 if self._is_valid_param_ref_name(name) and op in {
                     "-",
@@ -3870,6 +3879,8 @@ class Runtime:
         if assignment:
             return self._expand_asdl_assignment_fields(asdl_word)
         raw_fields = self._asdl_word_to_expansion_fields(asdl_word)
+        if self.options.get("B", True):
+            raw_fields = self._brace_expand_structured_fields(raw_fields)
         split_fields: list[ExpansionField] = []
         for field in raw_fields:
             split_fields.extend(self._split_structured_field(field))
@@ -4143,7 +4154,7 @@ class Runtime:
         i = 0
         n = len(chars)
         while i < n:
-            ch, quoted, _, _, _ = chars[i]
+            ch, _, _, quoted, _ = chars[i]
             if quoted or ch != "{":
                 i += 1
                 continue
@@ -4494,6 +4505,8 @@ class Runtime:
             op = node.get("op")
             if op == "__len__":
                 return "${#" + name + "}"
+            if op == "__indirect__":
+                return "${!" + name + "}"
             if op == "__keys__":
                 arg = node.get("arg")
                 suffix = ""
@@ -6255,7 +6268,10 @@ class Runtime:
         if token.isdigit():
             n = int(token)
             idx = n - 1
-            return idx if 0 <= idx < len(self._history) else None
+            if 0 <= idx < len(self._history):
+                return idx
+            # Bash falls back to prefix lookup when a numeric event reference
+            # does not resolve to an existing history number.
         for i in range(len(self._history) - 1, -1, -1):
             if self._history[i].startswith(token):
                 return i
@@ -8622,6 +8638,20 @@ class Runtime:
 
         if op == "__invalid__":
             raise RuntimeError(self._format_error("syntax error: bad substitution", line=self.current_line))
+        if op == "__indirect__":
+            if (
+                name == "#"
+                and self.options.get("posix", False)
+                and self._bash_compat_level is not None
+                and self._bash_compat_level <= 50
+            ):
+                # Bash-compat <=5.0 in --posix mode keeps ${!#} legacy behavior.
+                return ""
+            ref_value, ref_set = self._get_param_state(name)
+            if not ref_set:
+                return ""
+            value, _ = self._get_param_state(ref_value)
+            return value
         special_params = {"@", "*", "#", "?", "$", "!", "-", "LINENO", "PPID"}
         parsed_sub = self._parse_subscripted_name(name)
         subscript_ok = parsed_sub is not None
@@ -9673,6 +9703,11 @@ class Runtime:
                 label = name or key or "array"
                 raise RuntimeError(f"{label}: bad array subscript")
             return None
+        m_name = re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", text)
+        if m_name is not None and self.options.get("u", False):
+            _, is_set = self._get_var_with_state(m_name.group(0))
+            if not is_set:
+                raise RuntimeError(f"unbound variable: {m_name.group(0)}")
         # Minimal bash-compat side-effect support for common indexed patterns
         # used by compatibility probes (e.g. arr[i++] in [[ -v ... ]]).
         m_post_inc = re.fullmatch(r"([A-Za-z_][A-Za-z0-9_]*)\\+\\+", text)
@@ -10248,6 +10283,7 @@ class Runtime:
                 )
                 return 2
 
+        status = 0
         for spec in names:
             if "=" in spec:
                 name, value = spec.split("=", 1)
@@ -10261,6 +10297,23 @@ class Runtime:
                         line=self.current_line,
                     )
                     return 1
+                existing_attrs = set(self._var_attrs.get(name, set()))
+                if declare_assoc and "array" in existing_attrs and "assoc" not in existing_attrs:
+                    self._report_error(
+                        f"{name}: cannot convert indexed to associative array",
+                        line=self.current_line,
+                    )
+                    if self._bash_compat_level is None:
+                        status = 1
+                    continue
+                if declare_array and "assoc" in existing_attrs and "array" not in existing_attrs:
+                    self._report_error(
+                        f"{name}: cannot convert associative to indexed array",
+                        line=self.current_line,
+                    )
+                    if self._bash_compat_level is None:
+                        status = 1
+                    continue
                 target_attrs = set(self._var_attrs.get(name, set()))
                 target_attrs.update(attr_flags.keys())
                 is_assoc_target = "assoc" in target_attrs
@@ -10325,12 +10378,29 @@ class Runtime:
                         line=self.current_line,
                     )
                     return 1
+                existing_attrs = set(self._var_attrs.get(name, set()))
+                if declare_assoc and "array" in existing_attrs and "assoc" not in existing_attrs:
+                    self._report_error(
+                        f"{name}: cannot convert indexed to associative array",
+                        line=self.current_line,
+                    )
+                    if self._bash_compat_level is None:
+                        status = 1
+                    continue
+                if declare_array and "assoc" in existing_attrs and "array" not in existing_attrs:
+                    self._report_error(
+                        f"{name}: cannot convert associative to indexed array",
+                        line=self.current_line,
+                    )
+                    if self._bash_compat_level is None:
+                        status = 1
+                    continue
                 base_value = self._get_var(name)
                 if effective_local_scope and name not in self.local_stack[-1]:
                     base_value = ""
                 self._declare_var(name, base_value, local_scope=effective_local_scope, **attr_flags)
 
-        return 0
+        return status
 
     def _run_set(self, args: List[str]) -> int:
         def _set_option(opt: str, enabled: bool) -> int:
@@ -10416,7 +10486,7 @@ class Runtime:
 
     def _quote_set_value(self, value: str) -> str:
         # Ash lane prints set(1) values in single-quoted form.
-        if self._bash_compat_level is None and self.env.get("MCTASH_MODE", "").strip().lower() == "posix":
+        if self._diag.style == "ash":
             if value == "":
                 return "''"
             if value == "'":
@@ -10560,9 +10630,9 @@ class Runtime:
                 self._report_error(msg, line=self.current_line, context="unset")
                 # ash-style lane keeps historical special-builtin fatal behavior;
                 # bash-style lane reports status and continues script execution.
-                if self._bash_compat_level is None and self._is_noninteractive() and not self.options.get("posix", False):
+                if self._diag.style != "bash" and self._is_noninteractive() and not self.options.get("posix", False):
                     raise SystemExit(2)
-                status = 1 if self._bash_compat_level is not None else 2
+                status = 1 if self._diag.style == "bash" else 2
                 continue
             if not mode_vars:
                 self.functions.pop(name, None)
@@ -10592,6 +10662,12 @@ class Runtime:
                             typed[i] = None
                         self._set_subscript_projection(base, "")
                         continue
+                    m_name = re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", key)
+                    if m_name is not None and self.options.get("u", False):
+                        _, is_set = self._get_var_with_state(m_name.group(0))
+                        if not is_set:
+                            self._report_error(f"{m_name.group(0)}: unbound variable", line=self.current_line)
+                            raise SystemExit(1)
                     i_key = self._eval_index_subscript(key, typed, strict=True, name=base)
                     if i_key is None:
                         continue
@@ -13130,7 +13206,7 @@ class Runtime:
     def _run_type(self, args: List[str]) -> int:
         if not args:
             return 1
-        if self._bash_compat_level is None:
+        if self._bash_compat_level is None and self._diag.style != "bash":
             if any(a.startswith("-") and a != "-" for a in args):
                 return 127
             status = 0
@@ -13545,7 +13621,7 @@ class Runtime:
                     i += 1
                 return val
             # Unary primaries.
-            if i + 1 < len(tokens) and t in {"-e", "-v", "-n", "-z", "-f", "-d", "-x", "-t"}:
+            if i + 1 < len(tokens) and t in {"-e", "-v", "-n", "-z", "-f", "-d", "-x", "-t", "-s"}:
                 op = t
                 arg = tokens[i + 1]
                 i += 2
@@ -13563,6 +13639,11 @@ class Runtime:
                     return os.path.isdir(arg)
                 if op == "-x":
                     return os.access(arg, os.X_OK)
+                if op == "-s":
+                    try:
+                        return os.path.getsize(arg) > 0
+                    except OSError:
+                        return False
                 if op == "-t":
                     fd = _int_or_zero(arg)
                     try:
