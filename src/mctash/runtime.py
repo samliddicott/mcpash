@@ -761,6 +761,7 @@ class Runtime:
     }
     BUILTINS = {
         "cd",
+        "pwd",
         "exit",
         ":",
         "return",
@@ -1006,7 +1007,7 @@ class Runtime:
             self._shopts["sourcepath"] = True
         diag_style = self.env.get("MCTASH_DIAG_STYLE", "").strip().lower()
         if diag_style not in {"ash", "bash"}:
-            diag_style = "bash" if mode == "bash" else "ash"
+            diag_style = "bash" if (mode == "bash" or self._bash_compat_level is not None) else "ash"
         self._diag = DiagnosticCatalog(style=diag_style, gettext=get_translator())
         shared_path = self.env.get(
             "MCTASH_SHARED_FILE",
@@ -1349,7 +1350,10 @@ class Runtime:
 
     def _format_error(self, msg: str, line: int | None = None, context: str | None = None) -> str:
         if self.source_stack:
-            prefix = ": ".join(self.source_stack)
+            if self._diag.style == "bash":
+                prefix = self.source_stack[-1]
+            else:
+                prefix = ": ".join(self.source_stack)
         elif self.script_name:
             prefix = self.script_name
         else:
@@ -5681,6 +5685,40 @@ class Runtime:
                 return 0
             except OSError:
                 return 1
+        if name == "pwd":
+            physical = False
+            i = 1
+            while i < len(argv):
+                a = argv[i]
+                if a == "--":
+                    i += 1
+                    break
+                if a == "-P":
+                    physical = True
+                    i += 1
+                    continue
+                if a == "-L":
+                    physical = False
+                    i += 1
+                    continue
+                if a.startswith("-") and a != "-":
+                    self._report_error(
+                        self._diag_msg(DiagnosticKey.ILLEGAL_OPTION, opt=a),
+                        line=self.current_line,
+                        context="pwd",
+                    )
+                    return 2
+                break
+            if i < len(argv):
+                return 1
+            if physical:
+                try:
+                    print(os.getcwd(), flush=True)
+                except OSError:
+                    return 1
+                return 0
+            print(self.env.get("PWD", os.getcwd()), flush=True)
+            return 0
         if name in [".", "source"]:
             if len(argv) < 2:
                 return 2
@@ -7157,7 +7195,7 @@ class Runtime:
                         time.sleep(min_age - age)
             try:
                 os.kill(pid, sig_num)
-                if pid == os.getpid():
+                if pid == os.getpid() and self._get_subshell_depth() == 0 and self._running_trap:
                     sig_name = None
                     try:
                         sig_name = signal.Signals(sig_num).name.replace("SIG", "")
@@ -10309,7 +10347,7 @@ class Runtime:
                 # Ash lane keeps legacy "can't access tty" behavior and
                 # disables monitor when job-control handoff is unavailable.
                 # Bash lane keeps monitor enabled for non-interactive probes.
-                if self._diag.style != "bash":
+                if self._bash_compat_level is None:
                     self._ensure_job_control_ready()
                     if not self._job_control_ready:
                         self._print_stderr(
@@ -10522,9 +10560,9 @@ class Runtime:
                 self._report_error(msg, line=self.current_line, context="unset")
                 # ash-style lane keeps historical special-builtin fatal behavior;
                 # bash-style lane reports status and continues script execution.
-                if self._diag.style != "bash" and self._is_noninteractive() and not self.options.get("posix", False):
+                if self._bash_compat_level is None and self._is_noninteractive() and not self.options.get("posix", False):
                     raise SystemExit(2)
-                status = 1 if self._diag.style == "bash" else 2
+                status = 1 if self._bash_compat_level is not None else 2
                 continue
             if not mode_vars:
                 self.functions.pop(name, None)
