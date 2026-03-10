@@ -1,0 +1,38 @@
+[2026-03-10] gate run sequence
+
+make regressions
+  rc=0
+
+make bridge-conformance
+  rc=0
+
+make diff-parity-matrix
+  rc=2
+  ash mismatches=1
+  bash mismatches=8
+  report=docs/reports/bash-gap-latest.md
+
+make compat-posix-bash-strict
+  rc=0
+
+make bash-builtin-matrix
+  rc=0
+  report=docs/reports/bash-builtin-matrix-latest.md
+
+make bash-posix-man-matrix
+  rc=0
+  report=docs/reports/bash-posix-man-matrix-latest.md
+
+make bash-posix-upstream-matrix
+  rc=2
+  core parity=6/9
+  report=docs/reports/bash-posix-upstream-gap-latest.md
+
+make compliance-truth-check
+  rc=2
+  reason=inconsistent reports: failing gates but remaining-work says 0
+
+make conformance-full
+  rc=0
+  BusyBox: ok=356 fail=1 skip=0 rc=1 (effective_fail=0 via allowlist)
+  Oil: total=372 pass=245 fail=0 skip=127 rc=0
