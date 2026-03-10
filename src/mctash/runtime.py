@@ -13851,7 +13851,14 @@ class Runtime:
             text, line_hint = self._normalize_parse_error(str(e))
             if line_hint is not None:
                 report_line = line_hint + line_offset
-                self._report_error(text, line=report_line, context=parse_context)
+                err_context = parse_context
+                if self._diag.style != "bash" and parse_context == "command substitution":
+                    # ash-style diagnostics for parse failures in command substitutions
+                    # don't include the explicit context label, and line numbers are
+                    # reported relative to the nested snippet start.
+                    err_context = None
+                    report_line -= 1
+                self._report_error(text, line=report_line, context=err_context)
                 if self._diag.style == "bash" and parse_context in {"eval", "command substitution"}:
                     src_for_diag = source
                     if (
