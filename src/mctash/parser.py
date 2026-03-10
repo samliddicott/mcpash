@@ -491,6 +491,7 @@ class Parser:
             and tok1
             and ((tok.kind == "OP" and tok.value == "(") or (self._is_word(tok) and tok.value == "("))
             and ((tok1.kind == "OP" and tok1.value == "(") or (self._is_word(tok1) and tok1.value == "("))
+            and self._token_adjacent(tok, tok1)
         ):
             if self._looks_like_arith_command():
                 return self.parse_arith_command()
