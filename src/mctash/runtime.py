@@ -11301,8 +11301,6 @@ class Runtime:
             os.write(1, data)
             return 0
         except OSError as e:
-            if getattr(e, "errno", None) == 32:
-                return 1
             self._print_stderr(self._diag_msg(DiagnosticKey.WRITE_ERROR, error=str(e.strerror)))
             return 1
 
@@ -11998,6 +11996,7 @@ class Runtime:
         if newline:
             data += "\n"
         if self._force_broken_pipe and self._fd_redirect_depth == 0:
+            self._print_stderr(self._diag_msg(DiagnosticKey.WRITE_ERROR, error="Broken pipe"))
             return 1
         if isinstance(sys.stdout, io.StringIO) and self._fd_redirect_depth == 0:
             sys.stdout.write(data)
@@ -12006,8 +12005,6 @@ class Runtime:
             os.write(1, data.encode("utf-8", errors="surrogateescape"))
             return 0
         except OSError as e:
-            if getattr(e, "errno", None) == 32:
-                return 1
             self._print_stderr(self._diag_msg(DiagnosticKey.WRITE_ERROR, error=str(e.strerror)))
             return 1
 
