@@ -109,7 +109,7 @@ def _parse_parts(text: str, in_double: bool) -> list[LstWordPart]:
             if end == -1:
                 parts.append(LstLiteralPart(text[i:]))
                 return parts
-            inner = text[i + 1 : end]
+            inner = _decode_backtick_inner(text[i + 1 : end], in_double=in_double)
             parts.append(LstCommandSubPart(inner, style="backtick"))
             i = end + 1
             continue
@@ -272,6 +272,32 @@ def _find_backtick(text: str, start: int) -> int:
             return i
         i += 1
     return -1
+
+
+def _decode_backtick_inner(text: str, *, in_double: bool) -> str:
+    out: list[str] = []
+    i = 0
+    specials = {"\\", "`", "$"}
+    if in_double:
+        specials.add('"')
+    while i < len(text):
+        ch = text[i]
+        if ch == "\\" and i + 1 < len(text):
+            nxt = text[i + 1]
+            if nxt == "\n":
+                i += 2
+                continue
+            if nxt in specials:
+                out.append(nxt)
+                i += 2
+                continue
+            out.append("\\")
+            out.append(nxt)
+            i += 2
+            continue
+        out.append(ch)
+        i += 1
+    return "".join(out)
 
 
 def _parse_command_sub(text: str, start: int) -> tuple[str | None, int]:
