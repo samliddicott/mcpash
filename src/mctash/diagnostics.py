@@ -39,6 +39,7 @@ class DiagnosticKey(str, Enum):
     READ_ILLEGAL_FD = "read_illegal_fd"
     READ_UNKNOWN_OPTION = "read_unknown_option"
     SHIFT_ILLEGAL_NUMBER = "shift_illegal_number"
+    SHIFT_COUNT_OUT_OF_RANGE = "shift_count_out_of_range"
     GETOPTS_ILLEGAL_OPTION = "getopts_illegal_option"
     GETOPTS_NO_ARG = "getopts_no_arg"
     BUILTIN_NOT_SHELL_BUILTIN = "builtin_not_shell_builtin"
@@ -100,6 +101,7 @@ _TEMPLATES: dict[str, dict[DiagnosticKey, str]] = {
         DiagnosticKey.READ_ILLEGAL_FD: "read: Illegal file descriptor",
         DiagnosticKey.READ_UNKNOWN_OPTION: "read: unknown option {opt}",
         DiagnosticKey.SHIFT_ILLEGAL_NUMBER: "Illegal number: {value}",
+        DiagnosticKey.SHIFT_COUNT_OUT_OF_RANGE: "can't shift that many",
         DiagnosticKey.GETOPTS_ILLEGAL_OPTION: "Illegal option -{opt}",
         DiagnosticKey.GETOPTS_NO_ARG: "No arg for -{opt} option",
         DiagnosticKey.BUILTIN_NOT_SHELL_BUILTIN: "builtin: {name}: not a shell builtin",
@@ -157,6 +159,7 @@ _TEMPLATES: dict[str, dict[DiagnosticKey, str]] = {
         DiagnosticKey.READ_ILLEGAL_FD: "read: Illegal file descriptor",
         DiagnosticKey.READ_UNKNOWN_OPTION: "read: unknown option {opt}",
         DiagnosticKey.SHIFT_ILLEGAL_NUMBER: "Illegal number: {value}",
+        DiagnosticKey.SHIFT_COUNT_OUT_OF_RANGE: "{value}: shift count out of range",
         DiagnosticKey.GETOPTS_ILLEGAL_OPTION: "Illegal option -{opt}",
         DiagnosticKey.GETOPTS_NO_ARG: "No arg for -{opt} option",
         DiagnosticKey.BUILTIN_NOT_SHELL_BUILTIN: "builtin: {name}: not a shell builtin",

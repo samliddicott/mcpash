@@ -10555,7 +10555,14 @@ class Runtime:
             )
             raise SystemExit(2)
         if n > len(self.positional):
-            return 1
+            self._report_error(
+                self._diag_msg(DiagnosticKey.SHIFT_COUNT_OUT_OF_RANGE, value=str(n)),
+                line=self.current_line,
+                context="shift",
+            )
+            if self._bash_compat_level is not None:
+                return 1
+            raise SystemExit(2)
         self.positional = self.positional[n:]
         return 0
 
