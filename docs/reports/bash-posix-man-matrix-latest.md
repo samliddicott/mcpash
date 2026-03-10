@@ -1,6 +1,6 @@
 # Bash POSIX Man-Page Matrix
 
-Generated: 2026-03-10 07:46:33Z
+Generated: 2026-03-10 07:53:06Z
 
 ## Summary
 

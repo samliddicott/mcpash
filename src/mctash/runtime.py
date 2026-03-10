@@ -739,6 +739,7 @@ class Runtime:
         "shopt",
         "pushd",
         "popd",
+        "[[",
     }
     SPECIAL_BUILTINS = {
         ":",
@@ -9560,6 +9561,28 @@ class Runtime:
                 label = name or key or "array"
                 raise RuntimeError(f"{label}: bad array subscript")
             return None
+        # Minimal bash-compat side-effect support for common indexed patterns
+        # used by compatibility probes (e.g. arr[i++] in [[ -v ... ]]).
+        m_post_inc = re.fullmatch(r"([A-Za-z_][A-Za-z0-9_]*)\\+\\+", text)
+        if m_post_inc is not None:
+            var = m_post_inc.group(1)
+            cur_raw = self._get_var(var)
+            try:
+                cur = int(cur_raw, 10) if cur_raw != "" else 0
+            except Exception:
+                cur = 0
+            self._assign_shell_var(var, str(cur + 1))
+            return cur
+        m_post_dec = re.fullmatch(r"([A-Za-z_][A-Za-z0-9_]*)--", text)
+        if m_post_dec is not None:
+            var = m_post_dec.group(1)
+            cur_raw = self._get_var(var)
+            try:
+                cur = int(cur_raw, 10) if cur_raw != "" else 0
+            except Exception:
+                cur = 0
+            self._assign_shell_var(var, str(cur - 1))
+            return cur
         try:
             idx = int(self._expand_arith(text, context="subscript"))
         except ArithExpansionFailure:
