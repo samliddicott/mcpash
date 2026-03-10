@@ -1,12 +1,13 @@
 RUN_TIMEOUT ?= 1200
 RUN_MODULE_TIMEOUT ?= 120
+BUSYBOX_SCAN_TIMEOUT ?= 25
 BUSYBOX_MIN_OK ?= 357
 BUSYBOX_MAX_FAIL ?= 0
 OIL_MIN_PASS ?= 245
 OIL_MAX_FAIL ?= 0
 SUMMARY_FILE ?= docs/reports/parity-summary.json
 
-.PHONY: regressions bridge-conformance diff-conformance diff-parity-matrix backend-self-parity read-matrix semantic-matrix jobs-interactive-matrix job-notify-matrix job-exitwarn-matrix job-tty-stop-matrix job-suspend-ctrl-matrix trap-noninteractive-matrix trap-interactive-matrix trap-variant-matrix completion-interactive-matrix interactive-ux-matrix interactive-sigint-matrix interactive-tmout-matrix man-detail-audit startup-mode-matrix bash-invocation-option-matrix category-buckets-matrix bash-builtin-matrix busybox-conformance parity-summary parity-summary-validate perf-baseline perf-compare perf-variation stress-race stress-bridge compat-posix-bash compat-posix-bash-strict bash-posix-man-matrix bash-posix-upstream-matrix bash-tests-fetch spec-cycle-check compliance-truth-check compliance-truth-gate conformance conformance-full conformance-quick test-all
+.PHONY: regressions bridge-conformance diff-conformance diff-parity-matrix backend-self-parity read-matrix semantic-matrix jobs-interactive-matrix job-notify-matrix job-exitwarn-matrix job-tty-stop-matrix job-suspend-ctrl-matrix trap-noninteractive-matrix trap-interactive-matrix trap-variant-matrix completion-interactive-matrix interactive-ux-matrix interactive-sigint-matrix interactive-tmout-matrix man-detail-audit startup-mode-matrix bash-invocation-option-matrix category-buckets-matrix bash-builtin-matrix busybox-conformance busybox-timeout-scan parity-summary parity-summary-validate perf-baseline perf-compare perf-variation stress-race stress-bridge compat-posix-bash compat-posix-bash-strict bash-posix-man-matrix bash-posix-upstream-matrix bash-tests-fetch spec-cycle-check compliance-truth-check compliance-truth-gate conformance conformance-full conformance-quick test-all
 
 regressions:
 	@./tests/regressions/run.sh
@@ -85,6 +86,9 @@ bash-builtin-matrix:
 
 busybox-conformance:
 	@RUN_TIMEOUT=$(RUN_TIMEOUT) RUN_MODULE_TIMEOUT=$(RUN_MODULE_TIMEOUT) ./src/tests/run_busybox_ash.sh run
+
+busybox-timeout-scan:
+	@RUN_TIMEOUT=$(BUSYBOX_SCAN_TIMEOUT) RUN_MODULE_TIMEOUT=$(BUSYBOX_SCAN_TIMEOUT) BUSYBOX_FAIL_FAST_ON_TIMEOUT=1 ./scripts/scan_busybox_timeouts.sh
 
 parity-summary:
 	@RUN_TIMEOUT=$(RUN_TIMEOUT) RUN_MODULE_TIMEOUT=$(RUN_TIMEOUT) ./scripts/run_parity_summary.sh "$(SUMMARY_FILE)"
