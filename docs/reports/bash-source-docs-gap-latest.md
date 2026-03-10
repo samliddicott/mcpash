@@ -1,6 +1,6 @@
 # Bash Source-Docs Gap Report
 
-Generated: 2026-03-07 20:33:33Z
+Generated: 2026-03-10 12:18:51Z
 
 Sources:
 - https://tiswww.case.edu/php/chet/bash/POSIX
@@ -9,10 +9,10 @@ Sources:
 ## Summary
 
 - total rows: 107
-- pass: 7
+- pass: 76
 - fail: 0
-- inconclusive (grouped-case mismatch): 0
-- partial (from matrix): 100
+- inconclusive (grouped-case mismatch): 2
+- partial (from matrix): 29
 - unprobed (missing case files): 0
 - unmapped (no test IDs): 0
 
@@ -21,80 +21,11 @@ Sources:
 
 ## Inconclusive Rows
 
+- `BPOSIX.CORE.022` (bash/POSIX): matrix covered but mapped grouped case mismatched (needs row-split case): bash-posix-doc-022.sh
+- `BPOSIX.CORE.023` (bash/POSIX): matrix covered but mapped grouped case mismatched (needs row-split case): bash-posix-doc-023.sh
 
 ## Partial Rows
 
-- `BPOSIX.CORE.001` (bash/POSIX): matrix partial; case mismatch present: bash-posix-doc-001.sh
-- `BPOSIX.CORE.002` (bash/POSIX): matrix partial; case mismatch present: bash-posix-doc-002.sh
-- `BPOSIX.CORE.007` (bash/POSIX): matrix partial; case mismatch present: bash-posix-doc-007.sh
-- `BPOSIX.CORE.011` (bash/POSIX): matrix partial; case mismatch present: bash-posix-doc-011.sh
-- `BPOSIX.CORE.012` (bash/POSIX): matrix partial; case mismatch present: bash-posix-doc-012.sh
-- `BPOSIX.CORE.013` (bash/POSIX): matrix partial; mapped case execution present
-- `BPOSIX.CORE.014` (bash/POSIX): matrix partial; mapped case execution present
-- `BPOSIX.CORE.015` (bash/POSIX): matrix partial; mapped case execution present
-- `BPOSIX.CORE.016` (bash/POSIX): matrix partial; case mismatch present: bash-posix-doc-016.sh
-- `BPOSIX.CORE.017` (bash/POSIX): matrix partial; mapped case execution present
-- `BPOSIX.CORE.018` (bash/POSIX): matrix partial; case mismatch present: bash-posix-doc-018.sh
-- `BPOSIX.CORE.019` (bash/POSIX): matrix partial; case mismatch present: bash-posix-doc-019.sh
-- `BPOSIX.CORE.020` (bash/POSIX): matrix partial; mapped case execution present
-- `BPOSIX.CORE.021` (bash/POSIX): matrix partial; mapped case execution present
-- `BPOSIX.CORE.022` (bash/POSIX): matrix partial; mapped case execution present
-- `BPOSIX.CORE.023` (bash/POSIX): matrix partial; mapped case execution present
-- `BPOSIX.CORE.024` (bash/POSIX): matrix partial; mapped case execution present
-- `BPOSIX.CORE.025` (bash/POSIX): matrix partial; mapped case execution present
-- `BPOSIX.CORE.026` (bash/POSIX): matrix partial; mapped case execution present
-- `BPOSIX.CORE.027` (bash/POSIX): matrix partial; mapped case execution present
-- `BPOSIX.CORE.028` (bash/POSIX): matrix partial; mapped case execution present
-- `BPOSIX.CORE.029` (bash/POSIX): matrix partial; mapped case execution present
-- `BPOSIX.CORE.030` (bash/POSIX): matrix partial; mapped case execution present
-- `BPOSIX.CORE.031` (bash/POSIX): matrix partial; mapped case execution present
-- `BPOSIX.CORE.032` (bash/POSIX): matrix partial; case mismatch present: bash-posix-doc-032.sh
-- `BPOSIX.CORE.033` (bash/POSIX): matrix partial; case mismatch present: bash-posix-doc-033.sh
-- `BPOSIX.CORE.034` (bash/POSIX): matrix partial; case mismatch present: bash-posix-doc-034.sh
-- `BPOSIX.CORE.035` (bash/POSIX): matrix partial; case mismatch present: bash-posix-doc-035.sh
-- `BPOSIX.CORE.036` (bash/POSIX): matrix partial; case mismatch present: bash-posix-doc-036.sh
-- `BPOSIX.CORE.037` (bash/POSIX): matrix partial; case mismatch present: bash-posix-doc-037.sh
-- `BPOSIX.CORE.038` (bash/POSIX): matrix partial; case mismatch present: bash-posix-doc-038.sh
-- `BPOSIX.CORE.039` (bash/POSIX): matrix partial; case mismatch present: bash-posix-doc-039.sh
-- `BPOSIX.CORE.040` (bash/POSIX): matrix partial; case mismatch present: bash-posix-doc-040.sh
-- `BPOSIX.CORE.041` (bash/POSIX): matrix partial; mapped case execution present
-- `BPOSIX.CORE.042` (bash/POSIX): matrix partial; case mismatch present: bash-posix-doc-042.sh
-- `BPOSIX.CORE.043` (bash/POSIX): matrix partial; mapped case execution present
-- `BPOSIX.CORE.044` (bash/POSIX): matrix partial; case mismatch present: bash-posix-doc-044.sh
-- `BPOSIX.CORE.045` (bash/POSIX): matrix partial; mapped case execution present
-- `BPOSIX.CORE.046` (bash/POSIX): matrix partial; case mismatch present: bash-posix-doc-046.sh
-- `BPOSIX.CORE.047` (bash/POSIX): matrix partial; case mismatch present: bash-posix-doc-047.sh
-- `BPOSIX.CORE.048` (bash/POSIX): matrix partial; mapped case execution present
-- `BPOSIX.CORE.049` (bash/POSIX): matrix partial; mapped case execution present
-- `BPOSIX.CORE.050` (bash/POSIX): matrix partial; mapped case execution present
-- `BPOSIX.CORE.051` (bash/POSIX): matrix partial; mapped case execution present
-- `BPOSIX.CORE.052` (bash/POSIX): matrix partial; mapped case execution present
-- `BPOSIX.CORE.053` (bash/POSIX): matrix partial; mapped case execution present
-- `BPOSIX.CORE.054` (bash/POSIX): matrix partial; mapped case execution present
-- `BPOSIX.CORE.055` (bash/POSIX): matrix partial; mapped case execution present
-- `BPOSIX.CORE.056` (bash/POSIX): matrix partial; mapped case execution present
-- `BPOSIX.CORE.057` (bash/POSIX): matrix partial; mapped case execution present
-- `BPOSIX.CORE.058` (bash/POSIX): matrix partial; mapped case execution present
-- `BPOSIX.CORE.059` (bash/POSIX): matrix partial; mapped case execution present
-- `BPOSIX.CORE.060` (bash/POSIX): matrix partial; mapped case execution present
-- `BPOSIX.CORE.061` (bash/POSIX): matrix partial; mapped case execution present
-- `BPOSIX.CORE.062` (bash/POSIX): matrix partial; mapped case execution present
-- `BPOSIX.CORE.063` (bash/POSIX): matrix partial; mapped case execution present
-- `BPOSIX.CORE.064` (bash/POSIX): matrix partial; mapped case execution present
-- `BPOSIX.CORE.065` (bash/POSIX): matrix partial; mapped case execution present
-- `BPOSIX.CORE.066` (bash/POSIX): matrix partial; mapped case execution present
-- `BPOSIX.CORE.067` (bash/POSIX): matrix partial; mapped case execution present
-- `BPOSIX.CORE.068` (bash/POSIX): matrix partial; mapped case execution present
-- `BPOSIX.CORE.069` (bash/POSIX): matrix partial; mapped case execution present
-- `BPOSIX.CORE.070` (bash/POSIX): matrix partial; mapped case execution present
-- `BPOSIX.CORE.071` (bash/POSIX): matrix partial; mapped case execution present
-- `BPOSIX.CORE.072` (bash/POSIX): matrix partial; mapped case execution present
-- `BPOSIX.CORE.073` (bash/POSIX): matrix partial; mapped case execution present
-- `BPOSIX.CORE.074` (bash/POSIX): matrix partial; mapped case execution present
-- `BPOSIX.CORE.075` (bash/POSIX): matrix partial; mapped case execution present
-- `BPOSIX.EXTRA.001` (bash/POSIX): matrix partial; mapped case execution present
-- `BPOSIX.EXTRA.002` (bash/POSIX): matrix partial; mapped case execution present
-- `BPOSIX.EXTRA.003` (bash/POSIX): matrix partial; mapped case execution present
 - `BCOMPAT.31.001` (bash/COMPAT): matrix partial; mapped case execution present
 - `BCOMPAT.31.002` (bash/COMPAT): matrix partial; mapped case execution present
 - `BCOMPAT.32.001` (bash/COMPAT): matrix partial; mapped case execution present

@@ -65,16 +65,25 @@ def load_rows(path: Path, source_name: str) -> list[Row]:
 rows = load_rows(POSIX_MATRIX, "bash/POSIX") + load_rows(COMPAT_MATRIX, "bash/COMPAT")
 
 cases_to_run: set[str] = set()
+case_sources: dict[str, set[str]] = defaultdict(set)
 for row in rows:
     for t in row.tests:
         p = ROOT / "tests" / "diff" / "cases" / t
         if p.exists():
             cases_to_run.add(t)
+            case_sources[t].add(row.source)
 
 case_status: dict[str, tuple[bool, str]] = {}
 for case in sorted(cases_to_run):
     out = LOGDIR / f"{case}.runner.out"
-    cmd = ["bash", "-lc", f"PARITY_MIRROR_POSIX=1 {DIFF_RUNNER} --logdir {LOGDIR / case} --case {case[:-3]}"]
+    sources = case_sources.get(case, set())
+    # POSIX document rows should compare in mirrored --posix mode.
+    # COMPAT rows should compare in bash mode with explicit BASH_COMPAT.
+    if "bash/COMPAT" in sources:
+        env_prefix = "PARITY_BASH_COMPAT=50 PARITY_MIRROR_POSIX=1 MCTASH_MODE_DEFAULT=bash"
+    else:
+        env_prefix = "PARITY_MIRROR_POSIX=1 MCTASH_MODE_DEFAULT=posix"
+    cmd = ["bash", "-lc", f"{env_prefix} {DIFF_RUNNER} --logdir {LOGDIR / case} --case {case[:-3]}"]
     p = subprocess.run(cmd, capture_output=True, text=True)
     out.write_text((p.stdout or "") + ("\n" + p.stderr if p.stderr else ""), encoding="utf-8")
     case_status[case] = (p.returncode == 0, str(out))
