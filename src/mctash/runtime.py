@@ -1491,7 +1491,9 @@ class Runtime:
 
     def _watch_job_process(self, job_id: int, proc: subprocess.Popen) -> None:
         try:
-            monitor = bool(self.options.get("i", False) and self.options.get("m", False))
+            # Bash allows monitor-mode job state tracking for `set -m` in
+            # non-interactive `-c` probes; do not gate on interactive here.
+            monitor = bool(self.options.get("m", False))
             wuntraced = int(getattr(os, "WUNTRACED", 0))
             wcontinued = int(getattr(os, "WCONTINUED", 0))
             flags = (wuntraced | wcontinued) if monitor else 0
@@ -10254,15 +10256,16 @@ class Runtime:
                     return 0
             self.options[opt] = enabled
             if opt == "m" and enabled:
-                self._ensure_job_control_ready()
-                if not self._job_control_ready:
-                    # Match ash/bash behavior in non-interactive or no-tty
-                    # contexts: accept `set -m`, emit diagnostic, and keep
-                    # monitor mode effectively disabled.
-                    self._print_stderr(
-                        self._diag_msg(DiagnosticKey.SET_CANT_ACCESS_TTY)
-                    )
-                    self.options[opt] = False
+                # Ash lane keeps legacy "can't access tty" behavior and
+                # disables monitor when job-control handoff is unavailable.
+                # Bash lane keeps monitor enabled for non-interactive probes.
+                if self._diag.style != "bash":
+                    self._ensure_job_control_ready()
+                    if not self._job_control_ready:
+                        self._print_stderr(
+                            self._diag_msg(DiagnosticKey.SET_CANT_ACCESS_TTY)
+                        )
+                        self.options[opt] = False
             return 0
 
         if not args:

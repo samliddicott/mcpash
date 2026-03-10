@@ -17,25 +17,18 @@ Interpretation: matrix labeling is complete, but this does not by itself prove l
 
 ## Effective Gaps (Evidence-Backed)
 
-### EGB-000: Source-doc integration nearly strict (2 grouped inconclusives remain)
+### EGB-000: Source-doc integration is fully strict (closed)
 
 - Source: `docs/reports/bash-source-docs-gap-latest.md` (regenerated 2026-03-10)
 - Current evidence:
   - total rows: `107`
-  - pass: `105`
-  - inconclusive: `2`
+  - pass: `107`
+  - inconclusive: `0`
   - partial: `0`
   - fail: `0`
-- Notable rows:
-  - inconclusive grouped rows:
-    - `BPOSIX.CORE.022`
-    - `BPOSIX.CORE.023`
-  - all `BCOMPAT.*` rows are now matrix-covered with strict comparator evidence.
-- Gap to close:
-  - convert grouped probes to row-strict assertions where possible
-  - resolve/row-split remaining grouped inconclusive probes:
-    - `BPOSIX.CORE.022`
-    - `BPOSIX.CORE.023`
+- Closure status:
+  - all source-doc rows now pass strict comparator evidence.
+  - all `BCOMPAT.*` rows are matrix-covered with strict comparator evidence.
 
 ### EGB-001: Diff parity matrix still non-green
 

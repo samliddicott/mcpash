@@ -80,9 +80,10 @@ for case in sorted(cases_to_run):
     # POSIX document rows should compare in mirrored --posix mode.
     # COMPAT rows should compare in bash mode with explicit BASH_COMPAT.
     if "bash/COMPAT" in sources:
-        env_prefix = "PARITY_BASH_COMPAT=50 PARITY_MIRROR_POSIX=1 MCTASH_MODE_DEFAULT=bash"
+        env_prefix = "PARITY_BASH_COMPAT=50 PARITY_MIRROR_POSIX=1 MCTASH_MODE_DEFAULT=bash MCTASH_DIAG_STYLE=bash"
     else:
-        env_prefix = "PARITY_MIRROR_POSIX=1 MCTASH_MODE_DEFAULT=posix"
+        # bash/POSIX doc rows should run the bash lane with --posix mirrored.
+        env_prefix = "PARITY_MIRROR_POSIX=1 MCTASH_MODE_DEFAULT=bash MCTASH_DIAG_STYLE=bash"
     cmd = ["bash", "-lc", f"{env_prefix} {DIFF_RUNNER} --logdir {LOGDIR / case} --case {case[:-3]}"]
     p = subprocess.run(cmd, capture_output=True, text=True)
     out.write_text((p.stdout or "") + ("\n" + p.stderr if p.stderr else ""), encoding="utf-8")

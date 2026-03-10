@@ -1,6 +1,6 @@
 # Bash Source-Docs Gap Report
 
-Generated: 2026-03-10 12:23:44Z
+Generated: 2026-03-10 12:47:31Z
 
 Sources:
 - https://tiswww.case.edu/php/chet/bash/POSIX
@@ -9,9 +9,9 @@ Sources:
 ## Summary
 
 - total rows: 107
-- pass: 105
+- pass: 107
 - fail: 0
-- inconclusive (grouped-case mismatch): 2
+- inconclusive (grouped-case mismatch): 0
 - partial (from matrix): 0
 - unprobed (missing case files): 0
 - unmapped (no test IDs): 0
@@ -21,8 +21,6 @@ Sources:
 
 ## Inconclusive Rows
 
-- `BPOSIX.CORE.022` (bash/POSIX): matrix covered but mapped grouped case mismatched (needs row-split case): bash-posix-doc-022.sh
-- `BPOSIX.CORE.023` (bash/POSIX): matrix covered but mapped grouped case mismatched (needs row-split case): bash-posix-doc-023.sh
 
 ## Partial Rows
 
