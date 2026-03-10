@@ -8809,8 +8809,23 @@ class Runtime:
                 # carry field-count semantics.
                 if any(mark in text for mark in ["'", '"', "`", "$(", "${"]):
                     return _expand_alt_fields(text)
+                if any(ch in text for ch in [" ", "\t", "\n"]):
+                    # When operator-arg fields are all literal, the adapter can
+                    # carry them with split_active=False; fall back to token
+                    # parsing so ${x:+b c d} still yields 3 fields.
+                    has_split_active = any(
+                        getattr(seg, "split_active", False)
+                        for f in arg_fields
+                        for seg in getattr(f, "segments", [])
+                    )
+                    if not has_split_active:
+                        return _expand_alt_fields(text)
                 return _expand_alt_fields(text, arg_fields)
             if any(mark in text for mark in ["'", '"', "`", "$(", "${"]):
+                return _expand_alt_fields(text)
+            if any(ch in text for ch in [" ", "\t", "\n"]):
+                # Unquoted alternate-word text with IFS whitespace must split
+                # into separate fields (e.g. ${x:+b c d} -> b c d).
                 return _expand_alt_fields(text)
             return _expand_alt_word(text)
 
