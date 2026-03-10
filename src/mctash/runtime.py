@@ -6054,7 +6054,10 @@ class Runtime:
                 and self.options.get("posix", False)
                 and builtin_name in {".", "source"}
             ):
-                self._report_error(f"{orig_path}: No such file or directory", line=self.current_line)
+                if self._diag.style == "bash":
+                    self._report_error(f".: {orig_path}: file not found", line=self.current_line)
+                else:
+                    self._report_error(f"{orig_path}: No such file or directory", line=self.current_line)
                 return 1
         try:
             with open(path, "r", encoding="utf-8", errors="surrogateescape") as f:

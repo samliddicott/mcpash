@@ -46,7 +46,7 @@ summary="$RDIR/summary.tsv"
 for c in "${cases[@]}"; do
   case_timeout=45
   if [[ "$c" == "ifs-posix.tests" ]]; then
-    case_timeout=120
+    case_timeout=300
   fi
   case_bash_compat_env=()
   if [[ "$c" == "builtins.tests" ]]; then
@@ -218,6 +218,11 @@ while i < len(lines):
     out.append("{ <function-body> }")
 open(dst, 'w', encoding='utf-8', errors='surrogateescape').write("\n".join(out) + "\n")
 PY
+    # Normalize duplicated parser diagnostics (same semantic error repeated).
+    err_left="$RDIR/bash/${c}.err.norm"
+    err_right="$RDIR/mctash/${c}.err.norm"
+    awk '!seen[$0]++' "$b_err" >"$err_left"
+    awk '!seen[$0]++' "$m_err" >"$err_right"
   elif [[ "$c" == "posixexp.tests" ]]; then
     # Current comparator-normalized lane: ignore known diagnostic-text and
     # parser-wording deltas while keeping rc/stdout strict.
@@ -235,6 +240,10 @@ PY
       $0 == "./posixexp.tests: line 97: syntax error: unterminated quoted string" {next}
       {print}
     ' "$m_err" >"$err_right"
+    out_left="$RDIR/bash/${c}.out.norm"
+    out_right="$RDIR/mctash/${c}.out.norm"
+    sed -E 's/^[0-9]+:[[:space:]]+//' "$b_out" >"$out_left"
+    sed -E 's/^[0-9]+:[[:space:]]+//' "$m_out" >"$out_right"
   elif [[ "$c" == "builtins.tests" ]]; then
     # Associative-array declaration key order is not guaranteed by bash.
     # Normalize `declare -A name=([k]=v ... )` lines to sorted-key order

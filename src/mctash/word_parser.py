@@ -460,7 +460,10 @@ def _split_braced_var(inner: str) -> tuple[str | None, str | None, str | None]:
         if text[0] in "@*#?$!-":
             return text[0], 1
         if text[0].isdigit():
-            return text[0], 1
+            j = 1
+            while j < len(text) and text[j].isdigit():
+                j += 1
+            return text[:j], j
         if text[0].isalpha() or text[0] == "_":
             j = 1
             while j < len(text) and (text[j].isalnum() or text[j] == "_"):
@@ -500,8 +503,11 @@ def _split_braced_var(inner: str) -> tuple[str | None, str | None, str | None]:
             return name, op, inner[i + 1 :]
         return name, "__invalid__", None
     if inner[0].isdigit():
-        name = inner[0]
-        i = 1
+        j = 1
+        while j < len(inner) and inner[j].isdigit():
+            j += 1
+        name = inner[:j]
+        i = j
         if i >= len(inner):
             return name, None, None
         if inner[i] == "@":
