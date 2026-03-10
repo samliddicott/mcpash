@@ -6240,10 +6240,9 @@ class Runtime:
             status = 2
         finally:
             if saved_positional is not None:
-                # `.`/`source` with arguments restores caller positional params
-                # only when the sourced script leaves `$@` unchanged.
-                if self.positional == source_args:
-                    self.set_positional_args(saved_positional)
+                # `.`/`source` with explicit arguments always uses a temporary
+                # positional-parameter scope and restores caller state on exit.
+                self.set_positional_args(saved_positional)
             if self.source_stack:
                 self.source_stack.pop()
             self._sync_root_frame()
