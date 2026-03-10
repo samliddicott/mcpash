@@ -2113,15 +2113,10 @@ class Runtime:
                 for k, v in scope.items():
                     if k in self.env and "exported" in self._var_attrs.get(k, set()):
                         cmd_env[k] = v
-            saved_env = self.env
-            try:
-                self.env = cmd_env
-                for assign in (cmd.get("more_env") or []):
-                    name = str(assign.get("name") or "")
-                    value = self._expand_asdl_rhs_assignment(assign.get("val") or {})
-                    cmd_env[name] = value
-            finally:
-                self.env = saved_env
+            for assign in (cmd.get("more_env") or []):
+                name = str(assign.get("name") or "")
+                value = self._expand_asdl_rhs_assignment(assign.get("val") or {})
+                cmd_env[name] = value
             argv = self._expand_asdl_simple_argv(cmd)
             stdin = prev.stdout if prev is not None else None
             stdout = subprocess.PIPE if i < len(commands) - 1 else None
@@ -4107,6 +4102,9 @@ class Runtime:
         raw_text = self._asdl_word_to_text(node)
         if self._is_process_subst(raw_text):
             return [self._process_substitute(raw_text)]
+        has_qat, only_qat = self._asdl_word_has_quoted_at(node)
+        if self._diag.style == "ash" and has_qat and not self.positional and not only_qat:
+            return [""]
         fields = self._asdl_word_to_expansion_fields(node)
         if self.options.get("B", True):
             fields = self._brace_expand_structured_fields(fields)
@@ -4120,6 +4118,8 @@ class Runtime:
         out: list[str] = []
         for field in split_fields:
             out.extend(self._glob_structured_field(field))
+        if self._diag.style == "ash" and has_qat and self.positional and len(out) < len(self.positional):
+            out.extend([""] * (len(self.positional) - len(out)))
         return out
 
     def _brace_expand_structured_fields(self, fields: list[ExpansionField]) -> list[ExpansionField]:
@@ -4371,6 +4371,37 @@ class Runtime:
             if any(ch in lit for ch in ("*", "?", "[")):
                 return True
         return False
+
+    def _asdl_word_has_quoted_at(self, node: dict[str, Any]) -> tuple[bool, bool]:
+        if not isinstance(node, dict) or node.get("type") != "word.Compound":
+            return False, False
+        parts = node.get("parts") or []
+        has_qat = False
+        only_qat = True
+        for part in parts:
+            if not isinstance(part, dict):
+                only_qat = False
+                continue
+            if part.get("type") != "word_part.DoubleQuoted":
+                only_qat = False
+                continue
+            inner = part.get("parts") or []
+            if len(inner) != 1:
+                only_qat = False
+            for p in inner:
+                if not isinstance(p, dict):
+                    only_qat = False
+                    continue
+                p_type = p.get("type")
+                is_qat = (
+                    (p_type == "word_part.SimpleVarSub" and p.get("name") == "@")
+                    or (p_type == "word_part.BracedVarSub" and p.get("name") == "@" and p.get("op") is None)
+                )
+                if is_qat:
+                    has_qat = True
+                else:
+                    only_qat = False
+        return has_qat, (has_qat and only_qat)
 
     def _expand_asdl_word_part_values(self, node: dict[str, Any], quoted_context: bool) -> tuple[list[str], bool]:
         t = node.get("type")
