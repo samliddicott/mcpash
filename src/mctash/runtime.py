@@ -4151,21 +4151,26 @@ class Runtime:
     def _find_brace_candidate(
         self, chars: list[tuple[str, bool, bool, bool, str]]
     ) -> tuple[int, int, list[int]]:
+        def _literal_kind(kind: str) -> bool:
+            return kind in {"word_part.Literal"}
+
         i = 0
         n = len(chars)
         while i < n:
-            ch, _, _, quoted, _ = chars[i]
-            if quoted or ch != "{":
+            ch, _, _, quoted, kind = chars[i]
+            if quoted or ch != "{" or not _literal_kind(kind):
                 i += 1
                 continue
             depth = 0
             comma_pos: list[int] = []
             j = i
             while j < n:
-                c, _, _, c_quoted, _ = chars[j]
+                c, _, _, c_quoted, c_kind = chars[j]
                 if c_quoted:
                     j += 1
                     continue
+                if c in {"{", "}", ","} and not _literal_kind(c_kind):
+                    break
                 if c == "{":
                     depth += 1
                 elif c == "}":
