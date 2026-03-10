@@ -2733,8 +2733,12 @@ class Runtime:
                     msg = str(e)
                     print(msg, file=sys.stderr)
                     status = self._runtime_error_status(msg)
+            sig_num: int | None = None
             if status < 0:
                 sig_num = -status
+            elif status >= 128:
+                sig_num = status - 128
+            if sig_num is not None and sig_num > 0:
                 sig_name = None
                 try:
                     sig_name = signal.Signals(sig_num).name.replace("SIG", "")
@@ -5575,8 +5579,12 @@ class Runtime:
                 except RuntimeError as e:
                     print(str(e), file=sys.stderr)
                     status = 1
+            sig_num: int | None = None
             if status < 0:
                 sig_num = -status
+            elif status >= 128:
+                sig_num = status - 128
+            if sig_num is not None and sig_num > 0:
                 sig_name = None
                 try:
                     sig_name = signal.Signals(sig_num).name.replace("SIG", "")
