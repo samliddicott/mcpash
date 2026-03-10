@@ -9438,7 +9438,14 @@ class Runtime:
                         raise RuntimeError(
                             self._format_error("syntax error: bad substitution", line=self.current_line)
                         )
-                    val = self._expand_braced_param(name, op, arg, False)
+                    arg_fields: list[ExpansionField] | None = None
+                    if arg is not None:
+                        try:
+                            arg_asdl = lst_word_to_asdl_word(parse_legacy_word(arg))
+                            arg_fields = self._asdl_word_to_expansion_fields(arg_asdl)
+                        except Exception:
+                            arg_fields = None
+                    val = self._expand_braced_param(name, op, arg, False, arg_fields=arg_fields)
                     out.append(self._scalarize_assignment_expansion(val))
                     i = end + 1
                     continue
