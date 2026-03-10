@@ -10255,6 +10255,14 @@ class Runtime:
             self.options[opt] = enabled
             if opt == "m" and enabled:
                 self._ensure_job_control_ready()
+                if not self._job_control_ready:
+                    # Match ash/bash behavior in non-interactive or no-tty
+                    # contexts: accept `set -m`, emit diagnostic, and keep
+                    # monitor mode effectively disabled.
+                    self._print_stderr(
+                        self._diag_msg(DiagnosticKey.SET_CANT_ACCESS_TTY)
+                    )
+                    self.options[opt] = False
             return 0
 
         if not args:

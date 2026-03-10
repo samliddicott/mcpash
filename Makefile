@@ -1,4 +1,5 @@
 RUN_TIMEOUT ?= 1200
+RUN_MODULE_TIMEOUT ?= 120
 BUSYBOX_MIN_OK ?= 357
 BUSYBOX_MAX_FAIL ?= 0
 OIL_MIN_PASS ?= 245
@@ -83,7 +84,7 @@ bash-builtin-matrix:
 	@./tests/compat/run_bash_builtin_matrix.sh
 
 busybox-conformance:
-	@RUN_TIMEOUT=$(RUN_TIMEOUT) RUN_MODULE_TIMEOUT=$(RUN_TIMEOUT) ./src/tests/run_busybox_ash.sh run
+	@RUN_TIMEOUT=$(RUN_TIMEOUT) RUN_MODULE_TIMEOUT=$(RUN_MODULE_TIMEOUT) ./src/tests/run_busybox_ash.sh run
 
 parity-summary:
 	@RUN_TIMEOUT=$(RUN_TIMEOUT) RUN_MODULE_TIMEOUT=$(RUN_TIMEOUT) ./scripts/run_parity_summary.sh "$(SUMMARY_FILE)"
@@ -139,7 +140,7 @@ conformance: conformance-full
 
 conformance-full:
 	@RUN_TIMEOUT=$(RUN_TIMEOUT) \
-	RUN_MODULE_TIMEOUT=$(RUN_TIMEOUT) \
+	RUN_MODULE_TIMEOUT=$(RUN_MODULE_TIMEOUT) \
 	BUSYBOX_MIN_OK=$(BUSYBOX_MIN_OK) \
 	BUSYBOX_MAX_FAIL=$(BUSYBOX_MAX_FAIL) \
 	OIL_MIN_PASS=$(OIL_MIN_PASS) \

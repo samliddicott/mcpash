@@ -1111,6 +1111,7 @@ def _emit_dump_strings(source: str, source_name: str, mode: str) -> int:
 
 
 def _source_startup_files(rt: Runtime, *, mode: str, login_shell: bool, interactive: bool) -> None:
+    test_mode = os.environ.get("MCTASH_TEST_MODE", "") == "1"
     if login_shell:
         login_files: list[str]
         if mode == "bash":
@@ -1124,6 +1125,9 @@ def _source_startup_files(rt: Runtime, *, mode: str, login_shell: bool, interact
             login_files = ["/etc/profile", os.path.expanduser("~/.profile")]
         loaded_user = False
         for path in login_files:
+            if test_mode and path == "/etc/profile":
+                # Keep startup tests deterministic across host environments.
+                continue
             if loaded_user and path.startswith(os.path.expanduser("~/")):
                 continue
             if os.path.exists(path):

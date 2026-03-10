@@ -7,7 +7,7 @@ BUSYBOX_MIN_OK="${BUSYBOX_MIN_OK:-357}"
 BUSYBOX_MAX_FAIL="${BUSYBOX_MAX_FAIL:-0}"
 BUSYBOX_ALLOWED_FAIL_FILES="${BUSYBOX_ALLOWED_FAIL_FILES:-ash-signals-sigquit_exec.tests.fail}"
 RUN_TIMEOUT="${RUN_TIMEOUT:-1200}"
-RUN_MODULE_TIMEOUT="${RUN_MODULE_TIMEOUT:-${RUN_TIMEOUT}}"
+RUN_MODULE_TIMEOUT="${RUN_MODULE_TIMEOUT:-120}"
 
 OIL_MIN_PASS="${OIL_MIN_PASS:-245}"
 OIL_MAX_FAIL="${OIL_MAX_FAIL:-0}"
@@ -55,19 +55,26 @@ pass "Targeted regressions"
 
 info "Running BusyBox ash corpus (timeout=${RUN_TIMEOUT}s)"
 busy_log="$tmpdir/busybox.log"
-busy_rc=0
-if ! RUN_TIMEOUT="$RUN_TIMEOUT" RUN_MODULE_TIMEOUT="$RUN_MODULE_TIMEOUT" "$ROOT/src/tests/run_busybox_ash.sh" run >"$busy_log" 2>&1; then
-  busy_rc=$?
-fi
+set +e
+RUN_TIMEOUT="$RUN_TIMEOUT" RUN_MODULE_TIMEOUT="$RUN_MODULE_TIMEOUT" "$ROOT/src/tests/run_busybox_ash.sh" run >"$busy_log" 2>&1
+busy_rc=$?
+set -e
 busy_summary="$(grep 'Summary:' "$busy_log" | tail -n1 || true)"
 [[ -n "$busy_summary" ]] || fail "BusyBox run produced no summary. See $busy_log"
 busy_ok="$(printf '%s\n' "$busy_summary" | sed -n 's/.*ok=\([0-9][0-9]*\).*/\1/p')"
 busy_fail="$(printf '%s\n' "$busy_summary" | sed -n 's/.*fail=\([0-9][0-9]*\).*/\1/p')"
 busy_skip="$(printf '%s\n' "$busy_summary" | sed -n 's/.*skip=\([0-9][0-9]*\).*/\1/p')"
 info "BusyBox summary: ok=${busy_ok} fail=${busy_fail} skip=${busy_skip} rc=${busy_rc}"
+busy_timeout_modules="$(grep '^Timeout modules:' "$busy_log" | tail -n1 | sed 's/^Timeout modules: //')"
+if [[ -n "${busy_timeout_modules:-}" ]]; then
+  info "BusyBox timeout modules: ${busy_timeout_modules}"
+fi
 [[ "${busy_ok:-}" =~ ^[0-9]+$ ]] || fail "Could not parse BusyBox ok count"
 [[ "${busy_fail:-}" =~ ^[0-9]+$ ]] || fail "Could not parse BusyBox fail count"
 if (( busy_rc != 0 )); then
+  if [[ -n "${busy_timeout_modules:-}" ]]; then
+    fail "BusyBox run exited non-zero (${busy_rc}); timeout modules: ${busy_timeout_modules}. See $busy_log"
+  fi
   fail "BusyBox run exited non-zero (${busy_rc}). See $busy_log"
 fi
 allowed_hits=0
@@ -116,10 +123,10 @@ pass "BusyBox conformance gate (effective_fail=${effective_busy_fail})"
 
 info "Running Oil subset corpus"
 oil_log="$tmpdir/oil.log"
-oil_rc=0
-if ! "$ROOT/src/tests/run_oil_subset.sh" run "${OIL_SPECS[@]}" >"$oil_log" 2>&1; then
-  oil_rc=$?
-fi
+set +e
+"$ROOT/src/tests/run_oil_subset.sh" run "${OIL_SPECS[@]}" >"$oil_log" 2>&1
+oil_rc=$?
+set -e
 oil_summary="$(grep '^SUMMARY ' "$oil_log" | tail -n1 || true)"
 [[ -n "$oil_summary" ]] || fail "Oil run produced no SUMMARY line. See $oil_log"
 oil_total="$(printf '%s\n' "$oil_summary" | sed -n 's/.*total=\([0-9][0-9]*\).*/\1/p')"
