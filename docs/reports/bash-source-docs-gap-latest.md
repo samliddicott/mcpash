@@ -1,6 +1,6 @@
 # Bash Source-Docs Gap Report
 
-Generated: 2026-03-10 12:18:51Z
+Generated: 2026-03-10 12:23:44Z
 
 Sources:
 - https://tiswww.case.edu/php/chet/bash/POSIX
@@ -9,10 +9,10 @@ Sources:
 ## Summary
 
 - total rows: 107
-- pass: 76
+- pass: 105
 - fail: 0
 - inconclusive (grouped-case mismatch): 2
-- partial (from matrix): 29
+- partial (from matrix): 0
 - unprobed (missing case files): 0
 - unmapped (no test IDs): 0
 
@@ -26,35 +26,6 @@ Sources:
 
 ## Partial Rows
 
-- `BCOMPAT.31.001` (bash/COMPAT): matrix partial; mapped case execution present
-- `BCOMPAT.31.002` (bash/COMPAT): matrix partial; mapped case execution present
-- `BCOMPAT.32.001` (bash/COMPAT): matrix partial; mapped case execution present
-- `BCOMPAT.40.001` (bash/COMPAT): matrix partial; mapped case execution present
-- `BCOMPAT.41.001` (bash/COMPAT): matrix partial; mapped case execution present
-- `BCOMPAT.41.002` (bash/COMPAT): matrix partial; mapped case execution present
-- `BCOMPAT.42.001` (bash/COMPAT): matrix partial; mapped case execution present
-- `BCOMPAT.42.002` (bash/COMPAT): matrix partial; mapped case execution present
-- `BCOMPAT.43.001` (bash/COMPAT): matrix partial; mapped case execution present
-- `BCOMPAT.43.002` (bash/COMPAT): matrix partial; mapped case execution present
-- `BCOMPAT.44.001` (bash/COMPAT): matrix partial; mapped case execution present
-- `BCOMPAT.44.002` (bash/COMPAT): matrix partial; mapped case execution present
-- `BCOMPAT.44.003` (bash/COMPAT): matrix partial; mapped case execution present
-- `BCOMPAT.50.001` (bash/COMPAT): matrix partial; mapped case execution present
-- `BCOMPAT.50.002` (bash/COMPAT): matrix partial; mapped case execution present
-- `BCOMPAT.50.003` (bash/COMPAT): matrix partial; mapped case execution present
-- `BCOMPAT.51.001` (bash/COMPAT): matrix partial; mapped case execution present
-- `BCOMPAT.51.002` (bash/COMPAT): matrix partial; mapped case execution present
-- `BCOMPAT.51.003` (bash/COMPAT): matrix partial; mapped case execution present
-- `BCOMPAT.51.004` (bash/COMPAT): matrix partial; mapped case execution present
-- `BCOMPAT.51.005` (bash/COMPAT): matrix partial; mapped case execution present
-- `BCOMPAT.51.006` (bash/COMPAT): matrix partial; mapped case execution present
-- `BCOMPAT.51.007` (bash/COMPAT): matrix partial; mapped case execution present
-- `BCOMPAT.51.008` (bash/COMPAT): matrix partial; mapped case execution present
-- `BCOMPAT.51.009` (bash/COMPAT): matrix partial; mapped case execution present
-- `BCOMPAT.51.010` (bash/COMPAT): matrix partial; mapped case execution present
-- `BCOMPAT.52.001` (bash/COMPAT): matrix partial; mapped case execution present
-- `BCOMPAT.52.002` (bash/COMPAT): matrix partial; mapped case execution present
-- `BCOMPAT.52.003` (bash/COMPAT): matrix partial; mapped case execution present
 
 ## Unprobed Rows
 
