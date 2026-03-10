@@ -8804,6 +8804,10 @@ class Runtime:
             if assignment_context:
                 return _expand_alt_word(text)
             if arg_fields is not None:
+                if text == "":
+                    # ${name+} / ${name:+} with an empty operator word should
+                    # remain an empty string value, not disappear as 0 fields.
+                    return _expand_alt_word(text)
                 # Keep legacy token-boundary behavior for quote-sensitive
                 # alternate words (e.g. ${x:+'' ''}) where empty quoted atoms
                 # carry field-count semantics.
