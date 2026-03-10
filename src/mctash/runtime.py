@@ -971,6 +971,7 @@ class Runtime:
         self._is_login_shell: bool = False
         self._last_read_interrupt_status: int | None = None
         self._last_read_timed_out: bool = False
+        self._random_state: int = ((int(time.time() * 1000) ^ os.getpid()) & 0x7FFFFFFF) or 1
         backend = self.env.get("MCTASH_BACKEND", "interpreter").strip().lower()
         self._compiled_backend_enabled: bool = self.env.get("MCTASH_ENABLE_COMPILED", "1").strip().lower() not in {
             "0",
@@ -1019,6 +1020,23 @@ class Runtime:
             except OSError:
                 pass
         self._install_signal_handlers()
+
+    def _seed_random(self, text: str) -> None:
+        try:
+            seed = int(str(text).strip() or "0", 10)
+        except Exception:
+            seed = 0
+        self._random_state = seed & 0x7FFFFFFF
+        if self._random_state == 0:
+            self._random_state = 1
+
+    def _next_random(self) -> str:
+        # LCG-based 15-bit RANDOM surface; deterministic under assignment.
+        self._random_state = (1103515245 * self._random_state + 12345) & 0x7FFFFFFF
+        out = (self._random_state >> 16) & 0x7FFF
+        s = str(out)
+        self.env["RANDOM"] = s
+        return s
 
     def _seed_bash_special_vars(self) -> None:
         # Provide bash-mode variable surface expected by comparator tests.
@@ -3074,6 +3092,8 @@ class Runtime:
                     continue
                 self._typed_vars.pop(n, None)
             self.env.update(local_env)
+            if "RANDOM" in assigned_names and "RANDOM" in local_env:
+                self._seed_random(local_env["RANDOM"])
             for tied_name in self._py_ties:
                 self.env[tied_name] = self._get_var(tied_name)
             if self._cmd_sub_used:
@@ -9326,6 +9346,8 @@ class Runtime:
             raise RuntimeError(self._format_error(f"{target}: {e.strerror}", line=self.current_line))
 
     def _get_var(self, name: str) -> str:
+        if name == "RANDOM":
+            return self._next_random()
         parsed = self._parse_subscripted_name(name)
         if parsed is not None:
             v, is_set = self._get_var_with_state(name)
@@ -9611,6 +9633,8 @@ class Runtime:
         return idx
 
     def _get_var_with_state(self, name: str) -> tuple[str, bool]:
+        if name == "RANDOM":
+            return self._next_random(), True
         parsed = self._parse_subscripted_name(name)
         if parsed is not None:
             if self._bash_compat_level is None:
@@ -9868,6 +9892,10 @@ class Runtime:
             return
         if name in self.readonly_vars:
             raise RuntimeError(self._diag_msg(DiagnosticKey.READONLY_VAR, name=name))
+        if name == "RANDOM":
+            self._seed_random(value)
+            self.env["RANDOM"] = str(value)
+            return
         value = self._coerce_var_value(name, value)
         attrs = self._var_attrs.get(name, set())
         if "assoc" in attrs:
@@ -10522,6 +10550,10 @@ class Runtime:
             return
         if name in self.readonly_vars:
             raise RuntimeError(self._diag_msg(DiagnosticKey.READONLY_VAR, name=name))
+        if name == "RANDOM":
+            self._seed_random(value)
+            self.env["RANDOM"] = str(value)
+            return
         value = self._coerce_var_value(name, value)
         attrs = self._var_attrs.get(name, set())
         if "assoc" in attrs:
