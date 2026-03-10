@@ -9273,10 +9273,6 @@ class Runtime:
             raise
 
     def _expand_arith_with_bash(self, expr: str, context: str | None = None) -> str:
-        pre_err = self._arith_precheck(expr)
-        if pre_err is not None:
-            self._report_error(pre_err, line=self.current_line, context=context)
-            raise ArithExpansionFailure(2)
         merged_env = dict(self.env)
         for scope in self.local_stack:
             merged_env.update(scope)
@@ -9327,28 +9323,6 @@ class Runtime:
                 )
             raise ArithExpansionFailure(2)
         return result
-
-    def _arith_precheck(self, expr: str) -> str | None:
-        # ash rejects `1 ? 20 : x+=2` as arithmetic syntax error
-        # (assignment cannot appear as the selected ternary operand here).
-        depth = 0
-        qpos = -1
-        cpos = -1
-        for i, ch in enumerate(expr):
-            if ch == "(":
-                depth += 1
-            elif ch == ")":
-                depth = max(0, depth - 1)
-            elif ch == "?" and depth == 0 and qpos < 0:
-                qpos = i
-            elif ch == ":" and depth == 0 and qpos >= 0:
-                cpos = i
-                break
-        if qpos >= 0 and cpos > qpos:
-            false_arm = expr[cpos + 1 :].strip()
-            if re.match(r"^[A-Za-z_][A-Za-z0-9_]*\s*(\+=|-=|\*=|/=|%=|&=|\|=|\^=|=)", false_arm):
-                return "arithmetic syntax error"
-        return None
 
     def _arith_capture_names(self, expr: str, env: Dict[str, str]) -> List[str]:
         seen: set[str] = set()
@@ -9634,7 +9608,12 @@ class Runtime:
             name = m.group(1)
             op = m.group(2)
             value = m.group(3)
-            if not (self._is_valid_name(name) or self._parse_subscripted_name(name) is not None):
+            parsed_sub = self._parse_subscripted_name(name)
+            if not (self._is_valid_name(name) or parsed_sub is not None):
+                return None
+            if parsed_sub is not None and self._bash_compat_level is None:
+                # In ash/POSIX lane, token forms like `a[0]=x` are not assignment
+                # words; they should be treated as command names.
                 return None
             out.append((name, op, value, False))
             i += 1

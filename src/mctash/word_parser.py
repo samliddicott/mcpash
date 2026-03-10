@@ -436,17 +436,65 @@ def _parse_arith_sub(text: str, start: int) -> tuple[str | None, int]:
         return None, 1
     i = start + 3
     depth = 1
+    paren_depth = 0
+    in_single = False
+    in_double = False
     while i < len(text):
+        ch = text[i]
+        if in_single:
+            if ch == "'":
+                in_single = False
+            i += 1
+            continue
+        if in_double:
+            if ch == "\\" and i + 1 < len(text):
+                i += 2
+                continue
+            if ch == '"':
+                in_double = False
+            i += 1
+            continue
+        if ch == "'":
+            in_single = True
+            i += 1
+            continue
+        if ch == '"':
+            in_double = True
+            i += 1
+            continue
+        if ch == "\\" and i + 1 < len(text):
+            i += 2
+            continue
+        if text.startswith("$((", i):
+            depth += 1
+            i += 3
+            continue
         if text.startswith("((", i):
             depth += 1
             i += 2
             continue
+        if ch == "(":
+            paren_depth += 1
+            i += 1
+            continue
         if text.startswith("))", i):
+            if depth > 1:
+                depth -= 1
+                i += 2
+                continue
+            if paren_depth > 0:
+                paren_depth -= 1
+                i += 1
+                continue
             depth -= 1
             i += 2
             if depth == 0:
                 inner = text[start + 3 : i - 2]
                 return inner, i - start
+            continue
+        if ch == ")" and paren_depth > 0:
+            paren_depth -= 1
+            i += 1
             continue
         i += 1
     return None, 1
