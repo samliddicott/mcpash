@@ -2650,7 +2650,7 @@ class Runtime:
             value_word = to_match.get("word") if isinstance(to_match, dict) else {}
             if isinstance(value_word, dict):
                 self._validate_asdl_word_bad_subst(value_word)
-            value = self._expand_asdl_word_scalar(value_word or {}, split_glob=False)
+            value = self._expand_asdl_assignment_scalar(value_word or {})
             mode = "match"
             for arm in (node.get("arms") or []):
                 pat = arm.get("pattern") or {}
@@ -3880,7 +3880,81 @@ class Runtime:
         if not isinstance(node, dict) or node.get("type") != "word.Compound":
             return []
         out: list[ExpansionSegment] = []
-        for part in (node.get("parts") or []):
+        parts = node.get("parts") or []
+        i = 0
+        while i < len(parts):
+            part = parts[i]
+            if (
+                isinstance(part, dict)
+                and part.get("type") == "word_part.Literal"
+                and i + 1 < len(parts)
+                and isinstance(parts[i + 1], dict)
+                and parts[i + 1].get("type") == "word_part.SingleQuoted"
+            ):
+                lit = str(part.get("tval", ""))
+                if lit.endswith("$"):
+                    prefix = lit[:-1]
+                    parsed = self._decode_ansi_c_quoted_literal_at(
+                        "$'" + str(parts[i + 1].get("sval", "")) + "'",
+                        0,
+                    )
+                    if parsed is not None:
+                        decoded, _ = parsed
+                        if prefix:
+                            out.append(
+                                ExpansionSegment(
+                                    text=self._decode_asdl_literal(prefix, quoted_context=False),
+                                    quoted=False,
+                                    glob_active=False,
+                                    split_active=False,
+                                    source_kind="word_part.Literal",
+                                )
+                            )
+                        out.append(
+                            ExpansionSegment(
+                                text=decoded,
+                                quoted=True,
+                                glob_active=False,
+                                split_active=False,
+                                source_kind="word_part.AnsiCQuoted",
+                            )
+                        )
+                        i += 2
+                        continue
+            # Parse locale $"..." form represented as literal '$' + double-quoted part.
+            if (
+                isinstance(part, dict)
+                and part.get("type") == "word_part.Literal"
+                and i + 1 < len(parts)
+                and isinstance(parts[i + 1], dict)
+                and parts[i + 1].get("type") == "word_part.DoubleQuoted"
+            ):
+                lit = str(part.get("tval", ""))
+                if lit.endswith("$"):
+                    prefix = lit[:-1]
+                    if prefix:
+                        out.append(
+                            ExpansionSegment(
+                                text=self._decode_asdl_literal(prefix, quoted_context=False),
+                                quoted=False,
+                                glob_active=False,
+                                split_active=False,
+                                source_kind="word_part.Literal",
+                            )
+                        )
+                    inner = parts[i + 1].get("parts") or []
+                    decoded = "".join(self._expand_asdl_assignment_part_scalar(p, quoted_context=True) for p in inner)
+                    out.append(
+                        ExpansionSegment(
+                            text=decoded,
+                            quoted=True,
+                            glob_active=False,
+                            split_active=False,
+                            source_kind="word_part.LocaleQuoted",
+                        )
+                    )
+                    i += 2
+                    continue
             text = self._expand_asdl_assignment_part_scalar(part, quoted_context=False)
             part_type = str(part.get("type", "word_part.Unknown")) if isinstance(part, dict) else "word_part.Unknown"
             out.append(
@@ -3892,6 +3966,7 @@ class Runtime:
                     source_kind=part_type,
                 )
             )
+            i += 1
         return [ExpansionField(out, preserve_boundary=True)]
 
     def _expand_asdl_assignment_part_scalar(self, node: dict[str, Any], quoted_context: bool) -> str:
@@ -4980,7 +5055,7 @@ class Runtime:
         if not isinstance(node, dict) or node.get("type") != "word.Compound":
             return ""
         return self._pattern_from_structured_fields(
-            self._asdl_word_to_expansion_fields(node),
+            self._expand_asdl_assignment_fields(node),
             for_case=True,
         )
 
