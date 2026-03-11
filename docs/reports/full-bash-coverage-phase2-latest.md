@@ -38,6 +38,10 @@ Result:
    - option-surface rows not yet decomposed in invocation matrix,
    - meta matrix-requirement rows (`C12.MATRIX.*`) that are inherently
      runner/meta-gate assertions.
+4. Probe runs against currently undecomposed invocation options indicate real
+   implementation gaps still to close before those rows can move to strict
+   scenario IDs (for example `--help`, `--version`, `-O/+O`, `--login`,
+   `--noprofile`, `--norc`, `--restricted`, `--noediting`).
 4. Interactive control-character rows retain deterministic strict lanes while
    keeping literal control-char PTY behavior informational where terminal
    translation is environment-dependent.

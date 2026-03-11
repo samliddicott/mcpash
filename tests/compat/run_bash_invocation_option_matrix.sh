@@ -59,6 +59,23 @@ compare_case() {
   return $((ok ? 0 : 1))
 }
 
+compare_case_status_only() {
+  local name=$1
+  local mode=$2
+  local stdin_text=$3
+  shift 3
+  run_cmd "$name" "$mode" bash "$stdin_text" "$@"
+  run_cmd "$name" "$mode" mctash "$stdin_text" "$@"
+  local brc mrc
+  brc=$(cat "$tmpdir/${name}.${mode}.bash.rc")
+  mrc=$(cat "$tmpdir/${name}.${mode}.mctash.rc")
+  if [[ "$brc" != "$mrc" ]]; then
+    echo "[MISMATCH] $name/$mode rc bash=$brc mctash=$mrc"
+    return 1
+  fi
+  return 0
+}
+
 fail=0
 for mode in bash posix; do
   compare_case short-c "$mode" '' -c 'echo c:ok' || fail=1
@@ -69,6 +86,9 @@ for mode in bash posix; do
   compare_case short-D "$mode" '' -D -c 'echo $"hello"' || fail=1
   compare_case long-dump-strings "$mode" '' --dump-strings -c 'echo $"hello"' || fail=1
   compare_case long-dump-po "$mode" '' --dump-po-strings -c 'echo $"hello"' || fail=1
+  compare_case_status_only short-i "$mode" '' -i -c 'echo i:ok' || fail=1
+  compare_case_status_only short-r "$mode" '' -r -c 'echo r:ok' || fail=1
+  compare_case_status_only long-posix "$mode" '' --posix -c 'echo posix:ok' || fail=1
 done
 
 if [[ $fail -ne 0 ]]; then
