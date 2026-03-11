@@ -84,6 +84,12 @@ Exit criteria:
 - Fresh upstream differential gap report committed.
 - Every mismatch mapped to a matrix row or new requirement row.
 
+Progress (2026-03-11):
+
+- Ran `tests/compat/run_bash_posix_upstream_matrix.sh`.
+- Current upstream POSIX-focused core lane is green (`9/9`), with refreshed
+  report in `docs/reports/bash-posix-upstream-gap-latest.md`.
+
 ### Phase 4: Implementation Clusters (Feature-First)
 
 Prioritize by impact:
