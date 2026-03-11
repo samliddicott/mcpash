@@ -107,6 +107,7 @@ for mode in bash posix; do
   compare_case short-D "$mode" '' -D -c 'echo $"hello"' || fail=1
   compare_case long-dump-strings "$mode" '' --dump-strings -c 'echo $"hello"' || fail=1
   compare_case long-dump-po "$mode" '' --dump-po-strings -c 'echo $"hello"' || fail=1
+  compare_case_status_only long-debugger "$mode" '' --debugger -c 'echo debugger:ok' || fail=1
   compare_case_status_only long-help "$mode" '' --help || fail=1
   compare_case_status_only long-version "$mode" '' --version || fail=1
   compare_case_status_only long-login "$mode" '' --login --noprofile -c 'echo login:ok' || fail=1

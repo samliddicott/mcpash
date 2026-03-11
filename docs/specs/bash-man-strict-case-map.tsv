@@ -1,5 +1,5 @@
 req_id	strict_case_id	runner	notes
-C1.OPT.LONG.DEBUGGER	runner:run_bash_invocation_option_matrix.sh#C1.OPT.LONG.DEBUGGER	run_bash_invocation_option_matrix.sh	runner asserts req-specific checks in strict mode when available
+C1.OPT.LONG.DEBUGGER	case:invocation.long-debugger		runner decomposed to concrete strict scenario id
 C1.OPT.LONG.DUMP_PO_STRINGS	case:invocation.long-dump-po		runner decomposed to concrete strict scenario id
 C1.OPT.LONG.DUMP_STRINGS	case:invocation.long-dump-strings		runner decomposed to concrete strict scenario id
 C1.OPT.LONG.HELP	case:invocation.long-help		runner decomposed to concrete strict scenario id

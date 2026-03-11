@@ -25,8 +25,8 @@ Result:
 
 - pass
 - total requirement rows: `422`
-- mapped via explicit case/scenario IDs: `414`
-- mapped via strict runner rows: `8`
+- mapped via explicit case/scenario IDs: `415`
+- mapped via strict runner rows: `7`
 
 ## Notes
 
@@ -45,11 +45,13 @@ Result:
 5. Added strict scenario decomposition for:
    - `--` (end of options marker)
    - `-` (single dash as option-termination equivalent)
-6. Remaining runner rows are concentrated in:
+6. Added strict scenario decomposition for:
+   - `--debugger` (invocation compatibility lane; status-based parity check).
+7. Remaining runner rows are concentrated in:
    - rows intentionally validated by higher-level matrix runners, and
    - meta matrix-requirement rows (`C12.MATRIX.*`) that are inherently
      runner/meta-gate assertions.
-7. Interactive control-character rows retain deterministic strict lanes while
+8. Interactive control-character rows retain deterministic strict lanes while
    keeping literal control-char PTY behavior informational where terminal
    translation is environment-dependent.
 

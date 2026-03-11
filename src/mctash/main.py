@@ -1054,6 +1054,12 @@ def _parse_startup_options(argv: List[str]) -> Tuple[Dict[str, bool], List[str],
             changes["v"] = True
             i += 1
             continue
+        if arg == "--debugger":
+            # Bash treats this as invocation-only and may attempt debugger init.
+            # We currently accept it as a compatibility no-op.
+            changes["__debugger__"] = True
+            i += 1
+            continue
         if arg == "--dump-strings":
             changes["D"] = True
             changes["__dump_mode__"] = "strings"
