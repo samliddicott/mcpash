@@ -1962,22 +1962,19 @@ class Runtime:
             return self._asdl_item_compile_eligible(child)
         if t != "command.AndOr":
             return False, f"unsupported-list-item:{t}"
-        ops = item.get("ops") or []
         children = item.get("children") or []
-        if ops:
-            return False, "andor-has-ops"
-        if len(children) != 1:
+        if not children:
             return False, "andor-child-count"
-        pipeline = children[0]
-        if not isinstance(pipeline, dict) or pipeline.get("type") != "command.Pipeline":
-            return False, "pipeline-invalid"
-        if pipeline.get("negated"):
-            return False, "pipeline-negated"
-        p_children = pipeline.get("children") or []
-        if len(p_children) != 1:
-            return False, "pipeline-child-count"
-        if not self._asdl_simple_command_compile_eligible(p_children[0]):
-            return False, "simple-not-eligible"
+        for pipeline in children:
+            if not isinstance(pipeline, dict) or pipeline.get("type") != "command.Pipeline":
+                return False, "pipeline-invalid"
+            p_children = pipeline.get("children") or []
+            if not p_children:
+                return False, "pipeline-child-count"
+            for cmd in p_children:
+                ok, reason = self._asdl_command_compile_eligible(cmd)
+                if not ok:
+                    return False, reason
         return True, "ok"
 
     def _compile_asdl_list_item(self, item: dict[str, Any]) -> Callable[["Runtime"], int] | None:
@@ -1995,7 +1992,7 @@ class Runtime:
         try:
             src = (
                 "def __mctash_compiled(rt, __node):\n"
-                "    return rt._exec_asdl_list_item_impl(__node)\n"
+                "    return rt._exec_compiled_list_item(__node)\n"
             )
             glb: dict[str, object] = {}
             code = compile(src, "<mctash-compiled>", "exec")
@@ -2010,6 +2007,190 @@ class Runtime:
         except Exception:
             self._compile_note("compile-failed")
             return None
+
+    def _exec_compiled_list_item(self, item: dict[str, Any]) -> int:
+        t = item.get("type")
+        if t == "command.Sentence":
+            term = self._asdl_token_text(item.get("terminator"))
+            child = item.get("child")
+            if not isinstance(child, dict):
+                raise RuntimeError("invalid ASDL sentence node")
+            if term == "&":
+                # guarded by eligibility, but keep semantics safe.
+                return self._exec_asdl_background(child)
+            status = self._exec_compiled_list_item(child)
+            self._drain_process_subst()
+            return status
+        if t != "command.AndOr":
+            return self._exec_asdl_list_item_impl(item)
+        return self._exec_compiled_and_or(item)
+
+    def _exec_compiled_and_or(self, node: dict[str, Any], track_status: bool = True) -> int:
+        pipes = node.get("children") or []
+        if not pipes:
+            return 0
+        if len(pipes) > 1:
+            with self._suppress_errexit():
+                status = self._exec_compiled_pipeline(pipes[0])
+        else:
+            status = self._exec_compiled_pipeline(pipes[0])
+        last_exec_idx = 0
+        if track_status:
+            self.last_status = status
+            if status != 0:
+                self.last_nonzero_status = status
+            self._trap_status_hint = status
+        ops = node.get("ops") or []
+        for i, (op, pipeline) in enumerate(zip(ops, pipes[1:]), start=1):
+            op_s = self._asdl_token_text(op)
+            if op_s == "&&":
+                if status == 0:
+                    if i < (len(pipes) - 1):
+                        with self._suppress_errexit():
+                            status = self._exec_compiled_pipeline(pipeline)
+                    else:
+                        status = self._exec_compiled_pipeline(pipeline)
+                    last_exec_idx = i
+            elif op_s == "||":
+                if status != 0:
+                    if i < (len(pipes) - 1):
+                        with self._suppress_errexit():
+                            status = self._exec_compiled_pipeline(pipeline)
+                    else:
+                        status = self._exec_compiled_pipeline(pipeline)
+                    last_exec_idx = i
+            if track_status:
+                self.last_status = status
+                if status != 0:
+                    self.last_nonzero_status = status
+                self._trap_status_hint = status
+        neg_exempt = False
+        if status != 0 and 0 <= last_exec_idx < len(pipes):
+            last_pipe = pipes[last_exec_idx]
+            if isinstance(last_pipe, dict):
+                neg_exempt = bool(last_pipe.get("negated", False))
+        self._errexit_item_exempt = status != 0 and (last_exec_idx < (len(pipes) - 1) or neg_exempt)
+        return status
+
+    def _exec_compiled_pipeline(self, node: dict[str, Any]) -> int:
+        commands = node.get("children") or []
+        negate = bool(node.get("negated", False))
+        if negate:
+            with self._suppress_errexit():
+                status = self._exec_compiled_pipeline_body(commands)
+            return 0 if status != 0 else 1
+        return self._exec_compiled_pipeline_body(commands)
+
+    def _exec_compiled_pipeline_body(self, commands: list[dict[str, Any]]) -> int:
+        if not commands:
+            return 0
+        if len(commands) == 1:
+            return self._exec_compiled_command(commands[0])
+        # Phase 3: delegate multi-stage orchestration to existing pipeline
+        # adapters while keeping compiled list/command dispatch around it.
+        node = {"type": "command.Pipeline", "negated": False, "children": commands}
+        if self._asdl_pipeline_can_run_external(commands):
+            return self._exec_asdl_pipeline_external(commands)
+        return self._exec_asdl_pipeline_inprocess(node)
+
+    def _exec_compiled_command(self, node: dict[str, Any]) -> int:
+        t = node.get("type")
+        if t == "command.Simple":
+            return self._exec_asdl_simple_command(node)
+        if t == "command.Redirect":
+            child = node.get("child") or {}
+            self._validate_asdl_redirect_words(node.get("redirects") or [])
+            redirects = [self._asdl_to_redirect(r) for r in (node.get("redirects") or [])]
+            with self._redirected_fds(redirects):
+                if isinstance(child, dict):
+                    return self._exec_compiled_command(child)
+                return self._exec_asdl_command(child)
+        if t == "command.BraceGroup":
+            return self._exec_compiled_command_list(node.get("children") or [])
+        if t == "command.If":
+            arms = node.get("arms") or []
+            if not arms:
+                return 0
+            for arm in arms:
+                cond = arm.get("cond") or {}
+                with self._suppress_errexit():
+                    cond_status = self._exec_compiled_command_list(cond.get("children") or [])
+                if cond_status == 0:
+                    action = arm.get("action") or {}
+                    return self._exec_compiled_command_list(action.get("children") or [])
+            else_action = node.get("else_action") or {}
+            return self._exec_compiled_command_list(else_action.get("children") or [])
+        if t == "command.WhileUntil":
+            kw = self._asdl_token_text(node.get("keyword"))
+            until = kw == "until"
+            cond_node = node.get("cond") or {}
+            body_children = self._asdl_do_group_children(node.get("body") or {})
+            self._loop_depth += 1
+            try:
+                last = 0
+                while True:
+                    try:
+                        with self._suppress_errexit():
+                            cond_status = self._exec_compiled_command_list(cond_node.get("children") or [])
+                    except ContinueLoop as e:
+                        if e.count > 1:
+                            raise ContinueLoop(e.count - 1)
+                        self._run_pending_traps()
+                        continue
+                    except BreakLoop as e:
+                        if e.count > 1:
+                            raise BreakLoop(e.count - 1)
+                        last = 0
+                        break
+                    should_run = cond_status != 0 if until else cond_status == 0
+                    if not should_run:
+                        break
+                    try:
+                        last = self._exec_compiled_command_list(body_children)
+                    except ContinueLoop as e:
+                        if e.count > 1:
+                            raise ContinueLoop(e.count - 1)
+                        self._run_pending_traps()
+                        continue
+                    except BreakLoop as e:
+                        if e.count > 1:
+                            raise BreakLoop(e.count - 1)
+                        last = 0
+                        break
+                return last
+            finally:
+                self._loop_depth -= 1
+        if t in {"command.ControlFlow", "command.ShAssignment"}:
+            # Phase 3: reuse existing command-specific evaluators for these
+            # semantics-sensitive nodes.
+            return self._exec_asdl_command(node)
+        return self._exec_asdl_command(node)
+
+    def _exec_compiled_command_list(self, children: list[dict[str, Any]]) -> int:
+        status = 0
+        for child in children:
+            status = self._exec_compiled_list_item(child)
+            errexit_item_exempt = self._take_errexit_item_exempt()
+            self.last_status = status
+            if status != 0:
+                self.last_nonzero_status = status
+            self._trap_status_hint = status
+            is_bg = (
+                isinstance(child, dict)
+                and child.get("type") == "command.Sentence"
+                and self._asdl_token_text(child.get("terminator")) == "&"
+            )
+            if not is_bg:
+                self._run_pending_traps()
+            if (
+                status != 0
+                and self.options.get("e", False)
+                and self._errexit_suppressed == 0
+                and not errexit_item_exempt
+            ):
+                raise SystemExit(status)
+        self._run_pending_traps()
+        return status
 
     def _exec_asdl_list_item(self, item: dict[str, Any]) -> int:
         if self._exec_backend_requested == "compiled" and not self._compiled_backend_enabled:
