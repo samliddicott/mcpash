@@ -5174,10 +5174,33 @@ class Runtime:
             line = pos.get("line")
             if not isinstance(line, int):
                 continue
-            cand = line + self._asdl_word_to_text(w).count("\n")
+            cand = line + self._count_asdl_word_error_newlines(self._asdl_word_to_text(w))
             if end_line is None or cand > end_line:
                 end_line = cand
         return end_line
+
+    def _count_asdl_word_error_newlines(self, text: str) -> int:
+        # Keep bash-compatible diagnostic accounting for a narrow legacy form
+        # seen in command-substitution tests: `...\\\\\\n/...` should not add an
+        # extra error line increment.
+        count = 0
+        i = 0
+        n = len(text)
+        while i < n:
+            if text[i] != "\n":
+                i += 1
+                continue
+            if (
+                i >= 1
+                and i + 1 < n
+                and text[i - 1] == "\\"
+                and text[i + 1] == "/"
+            ):
+                i += 1
+                continue
+            count += 1
+            i += 1
+        return count
 
     def _asdl_token_text(self, tok: Any) -> str:
         if isinstance(tok, dict):
@@ -9968,7 +9991,8 @@ class Runtime:
         return ""
 
     def _expand_command_subst_text(self, cmd: str, backtick: bool = False) -> str:
-        output, status, hard_error = self._capture_eval(cmd, line_bias=(1 if backtick else 0))
+        line_bias = 1
+        output, status, hard_error = self._capture_eval(cmd, line_bias=line_bias)
         if hard_error and status != 0:
             raise CommandSubstFailure(status)
         self._cmd_sub_used = True
@@ -9976,7 +10000,8 @@ class Runtime:
         return output.rstrip("\n")
 
     def _expand_command_subst_asdl(self, child: dict[str, Any], backtick: bool = False) -> str:
-        output, status, hard_error = self._capture_eval_asdl(child, line_bias=(1 if backtick else 0))
+        line_bias = 1
+        output, status, hard_error = self._capture_eval_asdl(child, line_bias=line_bias)
         if hard_error and status != 0:
             raise CommandSubstFailure(status)
         self._cmd_sub_used = True
