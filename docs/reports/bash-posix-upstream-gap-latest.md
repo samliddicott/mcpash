@@ -1,6 +1,6 @@
 # Bash POSIX Upstream Gap Report
 
-Generated: 2026-03-11 09:58:20Z
+Generated: 2026-03-11 12:16:19Z
 Comparator baseline: GNU bash `--posix` (baserock mirror corpus, `bash-5.1-testing`)
 Target: `mctash --posix`
 
