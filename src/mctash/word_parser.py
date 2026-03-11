@@ -353,7 +353,7 @@ def _parse_command_sub(text: str, start: int) -> tuple[str | None, int]:
             if new_i > i:
                 i = new_i
                 continue
-        if text[i] == "#" and (i == 0 or text[i - 1] in " \t\r\n;("):
+        if text[i] == "#" and _is_command_sub_comment_start(text, i, start + 2):
             while i < len(text) and text[i] != "\n":
                 i += 1
             continue
@@ -408,6 +408,20 @@ def _parse_command_sub(text: str, start: int) -> tuple[str | None, int]:
     return None, 1
 
 
+def _is_command_sub_comment_start(text: str, idx: int, body_start: int) -> bool:
+    if idx < body_start:
+        return False
+    if idx == body_start:
+        return True
+    prev = text[idx - 1]
+    if prev not in " \t\r\n;(":
+        return False
+    # If the separating byte before `#` is itself escaped, `#` remains in-word.
+    if idx >= 2 and text[idx - 2] == "\\":
+        return False
+    return True
+
+
 def _looks_like_arith_expr(expr: str) -> bool:
     # Disambiguate `$(( ... ))` vs `$( ( ... ) )` command-substitution forms.
     # A semicolon is valid in shell command lists but not in arithmetic terms.
@@ -428,6 +442,16 @@ def _skip_heredoc_in_command_sub(text: str, op_idx: int) -> int:
     while i < len(text) and text[i] not in " \t\r\n":
         i += 1
     dtoken = text[dstart:i]
+    # Support delimiter line-continuation forms like `<<\\EOT\\` + newline + `4`.
+    while _has_unescaped_trailing_backslash(dtoken):
+        if i >= len(text) or text[i] != "\n":
+            break
+        dtoken = dtoken[:-1]
+        i += 1
+        cont_start = i
+        while i < len(text) and text[i] not in " \t\r\n":
+            i += 1
+        dtoken += text[cont_start:i]
     delim = _normalize_heredoc_delim(dtoken)
     if not delim:
         return op_idx
@@ -465,6 +489,17 @@ def _normalize_heredoc_delim(token: str) -> str:
         out.append(ch)
         i += 1
     return "".join(out)
+
+
+def _has_unescaped_trailing_backslash(token: str) -> bool:
+    if not token.endswith("\\"):
+        return False
+    n = 0
+    i = len(token) - 1
+    while i >= 0 and token[i] == "\\":
+        n += 1
+        i -= 1
+    return (n % 2) == 1
 
 
 

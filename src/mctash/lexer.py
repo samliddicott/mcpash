@@ -550,7 +550,7 @@ def _scan_command_sub(source: str, start: int) -> tuple[str, int]:
             chunk, new_i = _scan_backtick_sub(source, i)
             i = new_i
             continue
-        if ch == "#" and (i == start + 2 or source[i - 1] in " \t\r\n;("):
+        if ch == "#" and _is_command_sub_comment_start(source, i, start + 2):
             while i < len(source) and source[i] != "\n":
                 i += 1
             continue
@@ -634,7 +634,7 @@ def _scan_command_sub_from_lparen(source: str, lparen_idx: int) -> tuple[str, in
             _, new_i = _scan_backtick_sub(source, i)
             i = new_i
             continue
-        if ch == "#" and (i == lparen_idx + 1 or source[i - 1] in " \t\r\n;("):
+        if ch == "#" and _is_command_sub_comment_start(source, i, lparen_idx + 1):
             while i < len(source) and source[i] != "\n":
                 i += 1
             continue
@@ -685,6 +685,20 @@ def _looks_like_arith_after_lparen(source: str, lparen_idx: int) -> bool:
     while i + 1 < len(source) and source[i] == "\\" and source[i + 1] == "\n":
         i += 2
     return i < len(source) and source[i] == "("
+
+
+def _is_command_sub_comment_start(source: str, idx: int, body_start: int) -> bool:
+    if idx < body_start:
+        return False
+    if idx == body_start:
+        return True
+    prev = source[idx - 1]
+    if prev not in " \t\r\n;(":
+        return False
+    # If the separating byte before `#` is itself escaped, `#` remains in-word.
+    if idx >= 2 and source[idx - 2] == "\\":
+        return False
+    return True
 
 
 def _scan_arith_sub_from_lparen(source: str, lparen_idx: int) -> tuple[str, int]:
@@ -813,6 +827,16 @@ def _skip_heredoc_in_command_sub(source: str, op_idx: int) -> int:
     while i < len(source) and source[i] not in " \t\r\n":
         i += 1
     dtoken = source[dstart:i]
+    # Support delimiter line-continuation forms like `<<\\EOT\\` + newline + `4`.
+    while _has_unescaped_trailing_backslash(dtoken):
+        if i >= len(source) or source[i] != "\n":
+            break
+        dtoken = dtoken[:-1]
+        i += 1
+        cont_start = i
+        while i < len(source) and source[i] not in " \t\r\n":
+            i += 1
+        dtoken += source[cont_start:i]
     delim = _normalize_heredoc_delim(dtoken)
     if not delim:
         return op_idx

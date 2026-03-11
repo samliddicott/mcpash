@@ -9487,7 +9487,7 @@ class Runtime:
                     )
                     vals = [self._remove_suffix(v, pattern, longest=(op == "%%")) for v in vals]
                 elif op == "/":
-                    use_struct = arg_fields is not None and not self._replace_spec_pattern_is_dynamic(arg_text)
+                    use_struct = arg_fields is not None
                     spec_struct = self._split_replace_spec_structured(arg_fields) if use_struct else None
                     if spec_struct is None:
                         vals = [self._replace_pattern(v, arg_text) for v in vals]
@@ -9649,7 +9649,7 @@ class Runtime:
         if op == "/":
             if not is_set:
                 return ""
-            use_struct = arg_fields is not None and not self._replace_spec_pattern_is_dynamic(arg_text)
+            use_struct = arg_fields is not None
             spec_struct = self._split_replace_spec_structured(arg_fields) if use_struct else None
             if spec_struct is None:
                 return self._replace_pattern(value, arg_text)
@@ -9968,7 +9968,7 @@ class Runtime:
         return ""
 
     def _expand_command_subst_text(self, cmd: str, backtick: bool = False) -> str:
-        output, status, hard_error = self._capture_eval(cmd, line_bias=(-1 if backtick else 0))
+        output, status, hard_error = self._capture_eval(cmd, line_bias=(1 if backtick else 0))
         if hard_error and status != 0:
             raise CommandSubstFailure(status)
         self._cmd_sub_used = True
@@ -9976,7 +9976,7 @@ class Runtime:
         return output.rstrip("\n")
 
     def _expand_command_subst_asdl(self, child: dict[str, Any], backtick: bool = False) -> str:
-        output, status, hard_error = self._capture_eval_asdl(child, line_bias=(-1 if backtick else 0))
+        output, status, hard_error = self._capture_eval_asdl(child, line_bias=(1 if backtick else 0))
         if hard_error and status != 0:
             raise CommandSubstFailure(status)
         self._cmd_sub_used = True
