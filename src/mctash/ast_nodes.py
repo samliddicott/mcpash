@@ -97,6 +97,7 @@ class SelectCommand:
 class CaseItem:
     patterns: List[str]
     body: "ListNode"
+    op: str = ";;"
 
 
 @dataclass

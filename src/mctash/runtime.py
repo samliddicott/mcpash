@@ -2651,17 +2651,34 @@ class Runtime:
             if isinstance(value_word, dict):
                 self._validate_asdl_word_bad_subst(value_word)
             value = self._expand_asdl_word_scalar(value_word or {}, split_glob=False)
+            mode = "match"
             for arm in (node.get("arms") or []):
                 pat = arm.get("pattern") or {}
-                matched = False
-                for pw in (pat.get("words") or []):
-                    self._validate_asdl_word_bad_subst(pw)
-                    pattern = self._asdl_case_pattern_from_word(pw)
-                    if self._case_pattern_matches(value, pattern):
-                        matched = True
-                        break
-                if matched:
-                    return self._exec_asdl_command_list(arm.get("action") or [])
+                matched = mode == "fallthrough"
+                if mode != "fallthrough":
+                    for pw in (pat.get("words") or []):
+                        try:
+                            self._validate_asdl_word_bad_subst(pw)
+                            pattern = self._asdl_case_pattern_from_word(pw)
+                            if self._case_pattern_matches(value, pattern):
+                                matched = True
+                                break
+                        except RuntimeError as e:
+                            self._report_error(str(e))
+                            return 1
+                if not matched:
+                    continue
+                status = self._exec_asdl_command_list(arm.get("action") or [])
+                op = str(arm.get("op", ";;"))
+                if op in {";;", "esac", ""}:
+                    return status
+                if op == ";&":
+                    mode = "fallthrough"
+                    continue
+                if op == ";;&":
+                    mode = "retest"
+                    continue
+                return status
             return 0
         if t == "command.ControlFlow":
             keyword = self._asdl_token_text(node.get("keyword"))
@@ -3653,7 +3670,7 @@ class Runtime:
                 pat = arm.get("pattern") or {}
                 patterns = [self._asdl_word_to_text(w) for w in (pat.get("words") or [])]
                 action = arm.get("action") or []
-                items.append(CaseItem(patterns=patterns, body=self._asdl_to_ast_action_list(action)))
+                items.append(CaseItem(patterns=patterns, body=self._asdl_to_ast_action_list(action), op=str(arm.get("op", ";;"))))
             return CaseCommand(value=Word(self._asdl_word_to_text(value_word or {})), items=items)
         if t == "command.ControlFlow":
             keyword = self._asdl_token_text(node.get("keyword"))
@@ -6153,26 +6170,46 @@ class Runtime:
 
     def _run_case(self, node: CaseCommand) -> int:
         value = self._expand_assignment_word(node.value.text)
+        mode = "match"
         for item in node.items:
-            for pat in item.patterns:
-                expanded_pat = self._pattern_from_word(pat, for_case=True)
-                if self._case_pattern_matches(value, expanded_pat):
-                    return self._exec_list(item.body)
+            matched = mode == "fallthrough"
+            if mode != "fallthrough":
+                for pat in item.patterns:
+                    try:
+                        expanded_pat = self._pattern_from_word(pat, for_case=True)
+                        if self._case_pattern_matches(value, expanded_pat):
+                            matched = True
+                            break
+                    except RuntimeError as e:
+                        self._report_error(str(e))
+                        return 1
+            if not matched:
+                continue
+            status = self._exec_list(item.body)
+            if item.op in {";;", "esac", ""}:
+                return status
+            if item.op == ";&":
+                mode = "fallthrough"
+                continue
+            if item.op == ";;&":
+                mode = "retest"
+                continue
+            return status
         return 0
 
     def _case_pattern_matches(self, value: str, pattern: str) -> bool:
-        if "[[." not in pattern and "[[=" not in pattern and "[[:" not in pattern and "[:" not in pattern and "[." not in pattern and "[=" not in pattern:
-            return fnmatch.fnmatchcase(value, pattern)
-        # Use bash --posix for case-pattern matching semantics so POSIX
-        # character classes/collating forms follow shell behavior rather than
-        # Python fnmatch limitations.
+        # Use bash itself as the primary matcher for shell case-pattern
+        # semantics (quoting, escaped bytes, classes, locale forms).
+        bash_argv = ["bash"]
+        if self.options.get("posix", False):
+            bash_argv.append("--posix")
         script = (
             'v=$1; p=$2; '
             'eval "case \\"$v\\" in ($p) exit 0 ;; (*) exit 1 ;; esac"'
         )
         try:
             proc = subprocess.run(
-                ["bash", "--posix", "-c", script, "mctash", value, pattern],
+                bash_argv + ["-c", script, "mctash", value, pattern],
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
                 text=True,
@@ -6182,6 +6219,8 @@ class Runtime:
                 return proc.returncode == 0
         except Exception:
             pass
+        if "[[." not in pattern and "[[=" not in pattern and "[[:" not in pattern and "[:" not in pattern and "[." not in pattern and "[=" not in pattern:
+            return fnmatch.fnmatchcase(value, pattern)
         return fnmatch.fnmatchcase(value, pattern)
 
     def _run_builtin(self, name: str, argv: List[str]) -> int:
@@ -11511,6 +11550,7 @@ class Runtime:
         unset_mode = False
         query_mode = False
         print_mode = False
+        opt_o_mode = False
         i = 0
         while i < len(args) and args[i].startswith("-") and args[i] != "-":
             opt = args[i]
@@ -11530,6 +11570,9 @@ class Runtime:
                 if ch == "p":
                     print_mode = True
                     continue
+                if ch == "o":
+                    opt_o_mode = True
+                    continue
                 self._report_error(self._diag_msg(DiagnosticKey.INVALID_OPTION, cmd="shopt", opt=f"-{ch}"))
                 return 2
             i += 1
@@ -11537,6 +11580,44 @@ class Runtime:
         if set_mode and unset_mode:
             self._report_error(self._diag_msg(DiagnosticKey.SHOPT_CONFLICT))
             return 2
+        if opt_o_mode:
+            if not names:
+                if print_mode:
+                    for name in self.SET_O_LIST_ORDER:
+                        mapped = self.SET_O_OPTION_MAP.get(name)
+                        if mapped is None:
+                            continue
+                        state = "-" if self.options.get(mapped, False) else "+"
+                        print(f"set {state}o {name}")
+                else:
+                    print("Current option settings")
+                    for name in self.SET_O_LIST_ORDER:
+                        mapped = self.SET_O_OPTION_MAP.get(name)
+                        if mapped is None:
+                            continue
+                        state = "on" if self.options.get(mapped, False) else "off"
+                        print(f"{name:<15} {state}")
+                return 0
+            status = 0
+            for name in names:
+                mapped = self.SET_O_OPTION_MAP.get(name)
+                if mapped is None:
+                    self._report_error(self._diag_msg(DiagnosticKey.INVALID_OPTION_NAME, name=name))
+                    status = 1
+                    continue
+                if set_mode:
+                    self.options[mapped] = True
+                    if mapped == "r":
+                        self._activate_restricted_mode()
+                elif unset_mode:
+                    if mapped == "r" and self.options.get("r", False):
+                        self._report_error("set: +r: invalid option")
+                        status = 1
+                        continue
+                    self.options[mapped] = False
+                if query_mode and not self.options.get(mapped, False):
+                    status = 1
+            return status
         if not names:
             for name in sorted(self._shopts.keys()):
                 val = self._shopts[name]

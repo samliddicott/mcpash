@@ -1365,26 +1365,30 @@ class Parser:
                 break
             if self._looks_like_case_pattern_start():
                 raise ParseError(f"syntax error: empty case action at {self._where(self._peek())}")
-            body, lst_body = self.parse_compound_list({";;", "esac"})
+            body, lst_body = self.parse_compound_list({";;", ";&", ";;&", "esac"})
             tok = self._peek()
             if (
                 (tok is None or (tok.kind == "OP" and tok.value == "\n"))
                 and self._case_body_ends_with_bare_esac(body)
             ):
-                raise ParseError("syntax error: expected ';;' before esac")
+                raise ParseError("syntax error: expected clause terminator before esac")
             if (
                 tok
                 and self._is_word(tok)
                 and tok.value == "esac"
                 and self._last_token is not None
                 and self._last_token.line == tok.line
-                and not (self._last_token.kind == "OP" and self._last_token.value in [";", ";;"])
+                and not (self._last_token.kind == "OP" and self._last_token.value in [";", ";;", ";&", ";;&"])
             ):
-                raise ParseError(f"syntax error: expected ';;' before esac at {self._where(tok)}")
-            if tok and tok.kind == "OP" and tok.value == ";;":
+                raise ParseError(f"syntax error: expected clause terminator before esac at {self._where(tok)}")
+            op = ";;"
+            if tok and tok.kind == "OP" and tok.value in {";;", ";&", ";;&"}:
+                op = tok.value
                 self._advance()
-            items.append(CaseItem(patterns=patterns, body=body))
-            lst_items.append(LstCaseItem(patterns=lst_patterns, body=lst_body))
+            elif tok and self._is_word(tok) and tok.value == "esac":
+                op = "esac"
+            items.append(CaseItem(patterns=patterns, body=body, op=op))
+            lst_items.append(LstCaseItem(patterns=lst_patterns, body=lst_body, op=op))
         return (
             CaseCommand(value=Word(word_tok.value), items=items),
             LstCaseCommand(

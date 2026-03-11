@@ -293,6 +293,7 @@ def _case_arm(item: LstCaseItem) -> Dict[str, Any]:
         "type": "CaseArm",
         "pattern": {"type": "pat.Words", "words": [word(p) for p in item.patterns]},
         "action": [_lst_list_item_to_command(n) for n in item.body.items],
+        "op": item.op,
     }
 
 

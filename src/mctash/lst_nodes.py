@@ -153,6 +153,7 @@ class LstDoGroup:
 class LstCaseItem:
     patterns: List[LstWord]
     body: "LstListNode"
+    op: str = ";;"
 
 
 @dataclass
