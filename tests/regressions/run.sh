@@ -114,6 +114,30 @@ run_case \
   $'ab\n'
 
 run_case \
+  "compiled_andor_ops" \
+  'false || echo ok; true && echo yes' \
+  0 \
+  $'ok\nyes\n' \
+  "" \
+  "MCTASH_BACKEND=compiled"
+
+run_case \
+  "compiled_if_while_loop" \
+  'i=0; while [ $i -lt 2 ]; do if [ $i -eq 0 ]; then echo a; else echo b; fi; i=$((i+1)); done' \
+  0 \
+  $'a\nb\n' \
+  "" \
+  "MCTASH_BACKEND=compiled"
+
+run_case \
+  "compiled_redirect_pipeline" \
+  'echo hi | wc -c' \
+  0 \
+  $'3\n' \
+  "" \
+  "MCTASH_BACKEND=compiled"
+
+run_case \
   "fc_list_last_two" \
   "py 'sh._rt._history=[\"echo one\",\"echo two\",\"echo three\"]'; fc -l -n 1 2" \
   0 \

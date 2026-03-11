@@ -1,38 +1,56 @@
-# Compile Backend Eligibility (Phase 1)
+# Compile Backend Eligibility (Phases 1-3)
 
-This file is the maintained list of phase-1 compile eligibility rules and
+This file is the maintained list of compile eligibility rules and
 fallback criteria.
 
-## Eligible ASDL shape
+## Phase 1 baseline
 
-Phase 1 compiles only ASDL list items that are:
+Phase 1 introduced:
 
-1. `command.AndOr` list items with no logical operators.
-2. A single pipeline.
-3. Non-negated pipeline.
-4. Single-stage pipeline.
-5. Single simple command.
-6. No command-local assignments (`more_env`) and no redirections.
-7. Word list present and every word part literal/single-quoted only.
+- backend selection and conservative fallback (`interpreter` vs `compiled`)
+- compile cache keyed by parsed node content
+- debug fallback reason reporting
 
-Anything outside that shape falls back to interpreter mode.
+## Eligible ASDL shape (current)
+
+Compiled mode currently accepts list items with:
+
+1. `command.Sentence` list items that are not background (`&`).
+2. `command.AndOr` with one or more pipeline children.
+3. Pipeline nodes with one or more command stages.
+4. Command stages in this supported set:
+   - `command.Simple`
+   - `command.Redirect`
+   - `command.BraceGroup`
+   - `command.If`
+   - `command.WhileUntil`
+   - `command.ControlFlow`
+   - `command.ShAssignment`
+
+Notes:
+
+- Multi-stage pipelines are supported by delegating orchestration to existing
+  runtime adapters from compiled dispatch.
+- Redirect handling in compiled dispatch reuses existing fd-redirection helpers.
+- Any unsupported node shape or active unsafe runtime context falls back to
+  interpreter execution.
 
 ## Fallback reason catalog
 
-These reason keys are emitted under `MCTASH_COMPILE_DEBUG=1` and are treated
-as stable diagnostics for phase-1 scope:
+These reason keys are emitted under `MCTASH_COMPILE_DEBUG=1`:
 
 - `compile-disabled-by-config`
+- `trap-active`
+- `interactive-monitor-active`
 - `item-not-dict`
 - `sentence-background`
 - `sentence-child-invalid`
 - `unsupported-list-item:<type>`
-- `andor-has-ops`
 - `andor-child-count`
 - `pipeline-invalid`
-- `pipeline-negated`
 - `pipeline-child-count`
-- `simple-not-eligible`
+- `pipeline-stage-invalid`
+- `unsupported-command:<type>`
 - `json-key-failed`
 - `compiled-not-callable`
 - `compile-failed`
@@ -43,6 +61,7 @@ as stable diagnostics for phase-1 scope:
 - `MCTASH_BACKEND=compiled|interpreter`
 - `MCTASH_ENABLE_COMPILED=1|0`
 - `MCTASH_COMPILE_DEBUG=1|0`
+- `MCTASH_NAMESPACE=<name>` (optional cache-key namespace override)
 
 If `MCTASH_BACKEND=compiled` and `MCTASH_ENABLE_COMPILED=0`, runtime forces
 interpreter execution and logs `compile-disabled-by-config` when debug is on.
