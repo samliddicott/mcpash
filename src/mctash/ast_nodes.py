@@ -94,6 +94,14 @@ class SelectCommand:
 
 
 @dataclass
+class ArithForCommand:
+    init: str
+    cond: str
+    update: str
+    body: "ListNode"
+
+
+@dataclass
 class CaseItem:
     patterns: List[str]
     body: "ListNode"
@@ -121,6 +129,7 @@ Command = Union[
     FunctionDef,
     SubshellCommand,
     ForCommand,
+    ArithForCommand,
     SelectCommand,
     CaseCommand,
     CoprocCommand,

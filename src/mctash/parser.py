@@ -4,6 +4,7 @@ from typing import List, Optional
 from .ast_nodes import (
     AndOr,
     Assignment,
+    ArithForCommand,
     CaseCommand,
     CaseItem,
     CoprocCommand,
@@ -27,6 +28,7 @@ from .ast_nodes import (
 from .lexer import LexContext, LexError, Token, TokenReader
 from .lst_nodes import (
     LstAndOr,
+    LstArithForCommand,
     LstArithSubPart,
     LstAssignment,
     LstCaseCommand,
@@ -1154,10 +1156,37 @@ class Parser:
         self._expect_group_token(")")
         return SubshellCommand(body=body), LstSubshellCommand(body=lst_body)
 
-    def parse_for(self) -> tuple[ForCommand, LstForCommand]:
+    def parse_for(self) -> tuple[ForCommand | ArithForCommand, LstForCommand | LstArithForCommand]:
         tok = self._advance()
         if tok is None or not self._is_word(tok) or tok.value != "for":
             raise ParseError(f"expected for at {self._where(tok)}")
+        while True:
+            tok = self._peek()
+            if tok and tok.kind == "OP" and tok.value == "\n":
+                self._advance()
+                continue
+            break
+        if self._looks_like_arith_for_header():
+            init_expr, cond_expr, update_expr = self._parse_arith_for_header()
+            while True:
+                tok = self._peek()
+                if tok and tok.kind == "OP" and tok.value in ["\n", ";"]:
+                    self._advance()
+                    if tok.value == "\n":
+                        self._consume_pending_heredocs()
+                    continue
+                break
+            do_tok = self._advance()
+            if do_tok is None or not self._is_word(do_tok) or do_tok.value != "do":
+                raise ParseError(f"expected do at {self._where(do_tok)}")
+            body, lst_body = self.parse_compound_list({"done"})
+            done_tok = self._advance()
+            if done_tok is None or not self._is_word(done_tok) or done_tok.value != "done":
+                raise ParseError(f"expected done at {self._where(done_tok)}")
+            return (
+                ArithForCommand(init=init_expr, cond=cond_expr, update=update_expr, body=body),
+                LstArithForCommand(init=init_expr, cond=cond_expr, update=update_expr, body=LstDoGroup(body=lst_body)),
+            )
         name_tok = self._advance()
         if name_tok is None or not self._is_word(name_tok):
             raise ParseError(f"expected name at {self._where(name_tok)}")
@@ -1218,6 +1247,99 @@ class Parser:
                 explicit_in=explicit_in,
             ),
         )
+
+    def _looks_like_arith_for_header(self) -> bool:
+        tok0 = self._peek()
+        if tok0 is None:
+            return False
+        if tok0.kind == "OP" and tok0.value == "((":
+            return True
+        tok1 = self._peek_n(1)
+        return (
+            ((tok0.kind == "OP" and tok0.value == "(") or (self._is_word(tok0) and tok0.value == "("))
+            and tok1 is not None
+            and ((tok1.kind == "OP" and tok1.value == "(") or (self._is_word(tok1) and tok1.value == "("))
+        )
+
+    def _parse_arith_for_header(self) -> tuple[str, str, str]:
+        open_tok = self._peek()
+        if open_tok is not None and open_tok.kind == "OP" and open_tok.value == "((":
+            self._advance()
+        else:
+            self._expect_group_token("(")
+            self._expect_group_token("(")
+        clauses: list[list[str]] = [[]]
+        depth = 1
+        arith_paren = 0
+        while True:
+            tok = self._peek()
+            if tok is None:
+                raise ParseError("syntax error: expected '))'")
+            tok1 = self._peek_n(1)
+            if (tok.kind == "OP" and tok.value == "(") or (self._is_word(tok) and tok.value == "("):
+                arith_paren += 1
+                self._advance()
+                clauses[-1].append(tok.value)
+                continue
+            if tok.kind == "OP" and tok.value == "((":
+                depth += 1
+                clauses[-1].append("((")
+                self._advance()
+                continue
+            if (
+                tok1
+                and ((tok.kind == "OP" and tok.value == "(") or (self._is_word(tok) and tok.value == "("))
+                and ((tok1.kind == "OP" and tok1.value == "(") or (self._is_word(tok1) and tok1.value == "("))
+            ):
+                depth += 1
+                clauses[-1].append("((")
+                self._advance()
+                self._advance()
+                continue
+            if (
+                tok1
+                and ((tok.kind == "OP" and tok.value == ")") or (self._is_word(tok) and tok.value == ")"))
+                and ((tok1.kind == "OP" and tok1.value == ")") or (self._is_word(tok1) and tok1.value == ")"))
+            ):
+                if arith_paren > 0:
+                    arith_paren -= 1
+                    self._advance()
+                    clauses[-1].append(tok.value)
+                    continue
+                depth -= 1
+                self._advance()
+                self._advance()
+                if depth == 0:
+                    break
+                clauses[-1].append("))")
+                continue
+            if tok.kind == "OP" and tok.value == "))":
+                if arith_paren > 0:
+                    arith_paren -= 1
+                    self._advance()
+                    clauses[-1].append(")")
+                    continue
+                depth -= 1
+                self._advance()
+                if depth == 0:
+                    break
+                clauses[-1].append("))")
+                continue
+            if (tok.kind == "OP" and tok.value == ")") or (self._is_word(tok) and tok.value == ")"):
+                if arith_paren > 0:
+                    arith_paren -= 1
+            if depth == 1 and arith_paren == 0 and tok.kind == "OP" and tok.value == ";" and len(clauses) < 3:
+                self._advance()
+                clauses.append([])
+                continue
+            self._advance()
+            clauses[-1].append(tok.value)
+        while len(clauses) < 3:
+            clauses.append([])
+        init_expr = "".join(clauses[0]).strip()
+        cond_expr = "".join(clauses[1]).strip()
+        update_expr = "".join(clauses[2]).strip()
+        return init_expr, cond_expr, update_expr
 
     def parse_select(self) -> tuple[SelectCommand, LstSelectCommand]:
         tok = self._advance()

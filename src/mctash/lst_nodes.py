@@ -145,6 +145,14 @@ class LstSelectCommand:
 
 
 @dataclass
+class LstArithForCommand:
+    init: str
+    cond: str
+    update: str
+    body: "LstDoGroup"
+
+
+@dataclass
 class LstDoGroup:
     body: "LstListNode"
 
@@ -189,6 +197,7 @@ LstCommand = Union[
     LstFunctionDef,
     LstSubshellCommand,
     LstForCommand,
+    LstArithForCommand,
     LstSelectCommand,
     LstCaseCommand,
     LstCoprocCommand,

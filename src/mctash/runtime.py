@@ -33,6 +33,7 @@ from typing import Any, Callable, Dict, Iterable, Iterator, List, Optional, Tupl
 
 from .ast_nodes import (
     AndOr,
+    ArithForCommand,
     Assignment,
     CaseCommand,
     CaseItem,
@@ -2551,6 +2552,13 @@ class Runtime:
                 return status
             finally:
                 self._loop_depth -= 1
+        if t == "command.ForExpr":
+            raw = node.get("raw") or {}
+            init = str(raw.get("init") or "")
+            cond = str(raw.get("cond") or "")
+            update = str(raw.get("update") or "")
+            body = self._asdl_do_group_children(node.get("body") or {})
+            return self._run_arith_for(init, cond, update, lambda: self._exec_asdl_command_list(body))
         if t == "command.Select":
             var_name = str(node.get("iter_name") or "")
             iterable = node.get("iterable") or {}
@@ -3661,6 +3669,14 @@ class Runtime:
                 items=words,
                 body=self._asdl_to_ast_do_group(node.get("body") or {}),
                 explicit_in=bool(node.get("explicit_in", False)),
+            )
+        if t == "command.ForExpr":
+            raw = node.get("raw") or {}
+            return ArithForCommand(
+                init=str(raw.get("init") or ""),
+                cond=str(raw.get("cond") or ""),
+                update=str(raw.get("update") or ""),
+                body=self._asdl_to_ast_do_group(node.get("body") or {}),
             )
         if t == "command.Case":
             to_match = node.get("to_match") or {}
@@ -5694,6 +5710,8 @@ class Runtime:
             return 0
         if isinstance(node, ForCommand):
             return self._run_for(node)
+        if isinstance(node, ArithForCommand):
+            return self._run_arith_for(node.init, node.cond, node.update, lambda: self._exec_list(node.body))
         if isinstance(node, CaseCommand):
             return self._run_case(node)
         if isinstance(node, IfCommand):
@@ -6239,6 +6257,55 @@ class Runtime:
                     if e.count > 1:
                         raise BreakLoop(e.count - 1)
                     break
+            return status
+        finally:
+            self._loop_depth -= 1
+
+    def _run_arith_for(
+        self,
+        init_expr: str,
+        cond_expr: str,
+        update_expr: str,
+        run_body: Callable[[], int],
+    ) -> int:
+        if init_expr:
+            try:
+                self._expand_arith(init_expr, context="for")
+            except ArithExpansionFailure as e:
+                raise SystemExit(e.code)
+        status = 0
+        self._loop_depth += 1
+        try:
+            while True:
+                try:
+                    if cond_expr:
+                        cond_val = self._expand_arith(cond_expr, context="for")
+                        should_run = int(cond_val) != 0
+                    else:
+                        should_run = True
+                except ArithExpansionFailure as e:
+                    raise SystemExit(e.code)
+                except ValueError:
+                    should_run = False
+                if not should_run:
+                    break
+                try:
+                    status = run_body()
+                    self._run_pending_traps()
+                except ContinueLoop as e:
+                    if e.count > 1:
+                        raise ContinueLoop(e.count - 1)
+                    self._run_pending_traps()
+                except BreakLoop as e:
+                    if e.count > 1:
+                        raise BreakLoop(e.count - 1)
+                    status = 0
+                    break
+                if update_expr:
+                    try:
+                        self._expand_arith(update_expr, context="for")
+                    except ArithExpansionFailure as e:
+                        raise SystemExit(e.code)
             return status
         finally:
             self._loop_depth -= 1
@@ -14267,6 +14334,16 @@ class Runtime:
             if node.get("explicit_in", True):
                 head += f" in {items}"
             lines = [pad + head + ";", pad + "do"]
+            body = node.get("body") or {}
+            lines.extend(self._format_asdl_command_list(body.get("children") or [], indent + 4))
+            lines.append(pad + "done")
+            return lines
+        if t == "command.ForExpr":
+            raw = node.get("raw") or {}
+            init = str(raw.get("init") or "")
+            cond = str(raw.get("cond") or "")
+            update = str(raw.get("update") or "")
+            lines = [pad + f"for (({init}; {cond}; {update}));", pad + "do"]
             body = node.get("body") or {}
             lines.extend(self._format_asdl_command_list(body.get("children") or [], indent + 4))
             lines.append(pad + "done")

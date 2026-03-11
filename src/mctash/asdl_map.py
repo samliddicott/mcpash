@@ -14,6 +14,7 @@ from .lst_nodes import (
     LstControlFlowCommand,
     LstDoGroup,
     LstDoubleQuotedPart,
+    LstArithForCommand,
     LstForCommand,
     LstSelectCommand,
     LstFunctionDef,
@@ -111,6 +112,8 @@ def _lst_command_to_command(node) -> Dict[str, Any]:
         }
     if isinstance(node, LstForCommand):
         return _for_command(node)
+    if isinstance(node, LstArithForCommand):
+        return _arith_for_command(node)
     if isinstance(node, LstSelectCommand):
         return _select_command(node)
     if isinstance(node, LstCaseCommand):
@@ -247,6 +250,21 @@ def _for_command(node: LstForCommand) -> Dict[str, Any]:
             "words": [word(w) for w in node.items],
         },
         "body": _do_group(node.body),
+    }
+
+
+def _arith_for_command(node: LstArithForCommand) -> Dict[str, Any]:
+    return {
+        "type": "command.ForExpr",
+        "init": arith_expr(node.init),
+        "cond": arith_expr(node.cond),
+        "update": arith_expr(node.update),
+        "body": _do_group(node.body),
+        "raw": {
+            "init": node.init,
+            "cond": node.cond,
+            "update": node.update,
+        },
     }
 
 
