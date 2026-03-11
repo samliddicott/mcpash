@@ -4,6 +4,17 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 tmpdir="$(mktemp -d)"
 trap 'rm -rf "$tmpdir"' EXIT
+home="$tmpdir/home"
+mkdir -p "$home"
+cat >"$home/.bash_profile" <<'EOF'
+: > "$HOME/profile.marker"
+EOF
+cat >"$home/.bashrc" <<'EOF'
+: > "$HOME/bashrc.marker"
+EOF
+cat >"$home/custom.rc" <<'EOF'
+: > "$HOME/customrc.marker"
+EOF
 
 run_cmd() {
   local name=$1
@@ -16,10 +27,10 @@ run_cmd() {
   local rc="$tmpdir/${name}.${mode}.${shell_kind}.rc"
   local -a cmd=()
   if [[ "$shell_kind" == "bash" ]]; then
-    cmd=(bash)
+    cmd=(env HOME="$home" bash)
     [[ "$mode" == "posix" ]] && cmd+=(--posix)
   else
-    cmd=(env PYTHONPATH="$ROOT/src" MCTASH_MODE=bash python3 -m mctash)
+    cmd=(env HOME="$home" PYTHONPATH="$ROOT/src" MCTASH_MODE=bash python3 -m mctash)
     [[ "$mode" == "posix" ]] && cmd+=(--posix)
   fi
   cmd+=("$@")
@@ -78,6 +89,7 @@ compare_case_status_only() {
 
 fail=0
 for mode in bash posix; do
+  rm -f "$home"/{profile.marker,bashrc.marker,customrc.marker}
   compare_case short-c "$mode" '' -c 'echo c:ok' || fail=1
   compare_case short-v "$mode" '' -v -c 'echo v:ok' || fail=1
   compare_case short-x "$mode" '' -x -c 'echo x:ok' || fail=1
@@ -95,6 +107,11 @@ for mode in bash posix; do
   compare_case_status_only long-restricted "$mode" '' --restricted -c 'echo restricted:ok' || fail=1
   compare_case_status_only short-O "$mode" '' -O extglob -c 'shopt -q extglob; echo rc:$?' || fail=1
   compare_case_status_only short-plusO "$mode" '' +O extglob -c 'shopt -q extglob; echo rc:$?' || fail=1
+  compare_case_status_only short-l "$mode" '' -l -c '[ -f "$HOME/profile.marker" ]' || fail=1
+  rm -f "$home/customrc.marker"
+  compare_case_status_only long-rcfile-file "$mode" '' --rcfile "$home/custom.rc" -i -c '[ -f "$HOME/customrc.marker" ]' || fail=1
+  rm -f "$home/customrc.marker"
+  compare_case_status_only long-init-file-file "$mode" '' --init-file "$home/custom.rc" -i -c '[ -f "$HOME/customrc.marker" ]' || fail=1
   compare_case_status_only short-i "$mode" '' -i -c 'echo i:ok' || fail=1
   compare_case_status_only short-r "$mode" '' -r -c 'echo r:ok' || fail=1
   compare_case_status_only long-posix "$mode" '' --posix -c 'echo posix:ok' || fail=1

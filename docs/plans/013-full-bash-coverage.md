@@ -68,11 +68,13 @@ Progress (2026-03-11):
   - `make bash-strict-case-map-check`
 - Current mapping coverage:
   - 422/422 rows mapped
-  - 409 mapped via direct case/scenario IDs
-  - 13 mapped via strict runner row IDs
+  - 412 mapped via direct case/scenario IDs
+  - 10 mapped via strict runner row IDs
 - Closed startup invocation option gaps and decomposed them to strict scenario
   IDs (`--help`, `--version`, `-O/+O`, `--login`, `--noprofile`, `--norc`,
   `--restricted`, `--noediting`).
+- Added strict scenario decomposition for `-l`, `--init-file FILE`, and
+  `--rcfile FILE`.
 
 ### Phase 3: Upstream Bash Corpus Differential
 

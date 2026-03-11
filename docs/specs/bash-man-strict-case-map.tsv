@@ -3,13 +3,13 @@ C1.OPT.LONG.DEBUGGER	runner:run_bash_invocation_option_matrix.sh#C1.OPT.LONG.DEB
 C1.OPT.LONG.DUMP_PO_STRINGS	case:invocation.long-dump-po		runner decomposed to concrete strict scenario id
 C1.OPT.LONG.DUMP_STRINGS	case:invocation.long-dump-strings		runner decomposed to concrete strict scenario id
 C1.OPT.LONG.HELP	case:invocation.long-help		runner decomposed to concrete strict scenario id
-C1.OPT.LONG.INIT_FILE_FILE	runner:run_bash_invocation_option_matrix.sh#C1.OPT.LONG.INIT_FILE_FILE	run_bash_invocation_option_matrix.sh	runner asserts req-specific checks in strict mode when available
+C1.OPT.LONG.INIT_FILE_FILE	case:invocation.long-init-file-file		runner decomposed to concrete strict scenario id
 C1.OPT.LONG.LOGIN	case:invocation.long-login		runner decomposed to concrete strict scenario id
 C1.OPT.LONG.NOEDITING	case:invocation.long-noediting		runner decomposed to concrete strict scenario id
 C1.OPT.LONG.NOPROFILE	case:invocation.long-noprofile		runner decomposed to concrete strict scenario id
 C1.OPT.LONG.NORC	case:invocation.long-norc		runner decomposed to concrete strict scenario id
 C1.OPT.LONG.POSIX	case:invocation.long-posix		runner decomposed to concrete strict scenario id
-C1.OPT.LONG.RCFILE_FILE	runner:run_bash_invocation_option_matrix.sh#C1.OPT.LONG.RCFILE_FILE	run_bash_invocation_option_matrix.sh	runner asserts req-specific checks in strict mode when available
+C1.OPT.LONG.RCFILE_FILE	case:invocation.long-rcfile-file		runner decomposed to concrete strict scenario id
 C1.OPT.LONG.RESTRICTED	case:invocation.long-restricted		runner decomposed to concrete strict scenario id
 C1.OPT.LONG.VERBOSE	case:invocation.long-verbose		runner decomposed to concrete strict scenario id
 C1.OPT.LONG.VERSION	case:invocation.long-version		runner decomposed to concrete strict scenario id
@@ -68,7 +68,7 @@ C1.OPT.SHORT.SINGLEDASH	runner:run_bash_invocation_option_matrix.sh#C1.OPT.SHORT
 C1.OPT.SHORT.SINGLEDASH	runner:run_startup_mode_matrix.sh#C1.OPT.SHORT.SINGLEDASH	run_startup_mode_matrix.sh	runner asserts req-specific checks in strict mode when available
 C1.OPT.SHORT.c	case:invocation.short-c		runner decomposed to concrete strict scenario id
 C1.OPT.SHORT.i	case:invocation.short-i		runner decomposed to concrete strict scenario id
-C1.OPT.SHORT.l	runner:run_bash_invocation_option_matrix.sh#C1.OPT.SHORT.l	run_bash_invocation_option_matrix.sh	runner asserts req-specific checks in strict mode when available
+C1.OPT.SHORT.l	case:invocation.short-l		runner decomposed to concrete strict scenario id
 C1.OPT.SHORT.r	case:invocation.short-r		runner decomposed to concrete strict scenario id
 C1.OPT.SHORT.s	case:invocation.short-s-with-args		runner decomposed to concrete strict scenario id
 C1.OPT.SHORT.v	case:invocation.short-v		runner decomposed to concrete strict scenario id

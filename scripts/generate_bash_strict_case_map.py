@@ -10,6 +10,7 @@ def scenario_cases_for_req(req_id: str) -> list[str]:
     inv = {
         "C1.OPT.SHORT.c": ["case:invocation.short-c"],
         "C1.OPT.SHORT.i": ["case:invocation.short-i"],
+        "C1.OPT.SHORT.l": ["case:invocation.short-l"],
         "C1.OPT.SHORT.r": ["case:invocation.short-r"],
         "C1.OPT.SHORT.s": ["case:invocation.short-s-with-args"],
         "C1.OPT.SHORT.v": ["case:invocation.short-v"],
@@ -28,6 +29,8 @@ def scenario_cases_for_req(req_id: str) -> list[str]:
         "C1.OPT.LONG.VERSION": ["case:invocation.long-version"],
         "C1.OPT.LONG.DUMP_STRINGS": ["case:invocation.long-dump-strings"],
         "C1.OPT.LONG.DUMP_PO_STRINGS": ["case:invocation.long-dump-po"],
+        "C1.OPT.LONG.INIT_FILE_FILE": ["case:invocation.long-init-file-file"],
+        "C1.OPT.LONG.RCFILE_FILE": ["case:invocation.long-rcfile-file"],
     }
     if req_id in inv:
         return inv[req_id]

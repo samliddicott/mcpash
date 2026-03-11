@@ -138,6 +138,7 @@ def main(argv: List[str] | None = None) -> int:
             interactive=interactive,
             noprofile=startup_changes.get("__noprofile__", False),
             norc=startup_changes.get("__norc__", False),
+            rcfile=str(startup_changes.get("__rcfile__", "")).strip(),
         )
         if startup_changes.get("D", False):
             # bash always labels `-c` input as "-c" in dump output, even when
@@ -297,6 +298,7 @@ def main(argv: List[str] | None = None) -> int:
             interactive=True,
             noprofile=startup_changes.get("__noprofile__", False),
             norc=startup_changes.get("__norc__", False),
+            rcfile=str(startup_changes.get("__rcfile__", "")).strip(),
         )
         return _run_interactive(rt, noediting=startup_changes.get("__noediting__", False))
 
@@ -307,6 +309,7 @@ def main(argv: List[str] | None = None) -> int:
         interactive=False,
         noprofile=startup_changes.get("__noprofile__", False),
         norc=startup_changes.get("__norc__", False),
+        rcfile=str(startup_changes.get("__rcfile__", "")).strip(),
     )
 
     if args.script is None:
@@ -996,6 +999,26 @@ def _parse_startup_options(argv: List[str]) -> Tuple[Dict[str, bool], List[str],
             changes["__login__"] = True
             i += 1
             continue
+        if arg == "--init-file":
+            if i + 1 >= len(argv):
+                return changes, out, "--init-file requires an argument"
+            changes["__rcfile__"] = argv[i + 1]
+            i += 2
+            continue
+        if arg.startswith("--init-file="):
+            changes["__rcfile__"] = arg.split("=", 1)[1]
+            i += 1
+            continue
+        if arg == "--rcfile":
+            if i + 1 >= len(argv):
+                return changes, out, "--rcfile requires an argument"
+            changes["__rcfile__"] = argv[i + 1]
+            i += 2
+            continue
+        if arg.startswith("--rcfile="):
+            changes["__rcfile__"] = arg.split("=", 1)[1]
+            i += 1
+            continue
         if arg == "--noprofile":
             changes["__noprofile__"] = True
             i += 1
@@ -1236,6 +1259,7 @@ def _source_startup_files(
     interactive: bool,
     noprofile: bool,
     norc: bool,
+    rcfile: str,
 ) -> None:
     test_mode = os.environ.get("MCTASH_TEST_MODE", "") == "1"
     if login_shell and not noprofile:
@@ -1262,10 +1286,12 @@ def _source_startup_files(
                     loaded_user = True
     if interactive:
         if mode == "bash":
-            if not norc:
-                bashrc = os.path.expanduser("~/.bashrc")
-                if os.path.exists(bashrc):
-                    rt._run_source(bashrc, [])
+            # bash login shells do not auto-source ~/.bashrc unless user startup
+            # files explicitly source it.
+            if not login_shell and not norc:
+                rc_path = os.path.expanduser(rcfile) if rcfile else os.path.expanduser("~/.bashrc")
+                if os.path.exists(rc_path):
+                    rt._run_source(rc_path, [])
         else:
             env_path = rt._get_var("ENV")
             if env_path:
