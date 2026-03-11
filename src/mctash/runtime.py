@@ -6,6 +6,7 @@ import importlib.util
 import ctypes
 import copy
 import errno
+import hashlib
 import io
 import json
 import os
@@ -635,20 +636,30 @@ class _PyBridge:
 class Runtime:
     COMPILE_FALLBACK_REASONS: Dict[str, str] = {
         "item-not-dict": "ASDL list item is not a dict node.",
+        "trap-active": "Compiled backend is disabled while running a trap handler.",
+        "interactive-monitor-active": "Compiled backend is disabled in interactive monitor mode.",
         "sentence-background": "Background sentence nodes are not compiled in phase 1.",
         "sentence-child-invalid": "Sentence child node is invalid.",
         "unsupported-list-item": "Unsupported ASDL list item type.",
-        "andor-has-ops": "And/or lists with logical operators are not compiled in phase 1.",
-        "andor-child-count": "And/or list shape is not a single pipeline.",
+        "andor-child-count": "And/or list shape has no pipeline children.",
         "pipeline-invalid": "Pipeline node is invalid.",
-        "pipeline-negated": "Negated pipelines are not compiled in phase 1.",
-        "pipeline-child-count": "Pipelines with multiple stages are not compiled in phase 1.",
-        "simple-not-eligible": "Simple command contains non-literal words or unsupported env/redir.",
+        "pipeline-child-count": "Pipeline has no stage commands.",
+        "pipeline-stage-invalid": "Pipeline stage is not a valid command node.",
+        "unsupported-command": "Compiled subset does not support this command type yet.",
         "json-key-failed": "Failed to key compiled cache from ASDL node.",
         "compiled-not-callable": "Compiled artifact did not produce callable entrypoint.",
         "compile-failed": "Python compile/exec of backend artifact failed.",
         "compiled-runtime-error": "Compiled artifact raised at runtime; interpreter fallback used.",
         "compile-disabled-by-config": "MCTASH_ENABLE_COMPILED disabled compiled backend; interpreter forced.",
+    }
+    COMPILED_SUPPORTED_COMMANDS: set[str] = {
+        "command.Simple",
+        "command.Redirect",
+        "command.BraceGroup",
+        "command.If",
+        "command.WhileUntil",
+        "command.ControlFlow",
+        "command.ShAssignment",
     }
     OPTION_FLAG_ORDER = "abefhikmnptuvxBCEHPT"
     _thread_diag_lock = threading.Lock()
@@ -989,7 +1000,7 @@ class Runtime:
             else "interpreter"
         )
         self._compile_debug: bool = self.env.get("MCTASH_COMPILE_DEBUG", "").strip().lower() in {"1", "true", "yes", "on"}
-        self._compiled_cache: Dict[str, Callable[["Runtime"], int]] = {}
+        self._compiled_cache: Dict[tuple[str, str], Callable[["Runtime"], int]] = {}
         self._compile_fallback_seen: set[str] = set()
         self._compiled_depth: int = 0
         # POSIX shells initialize IFS by default; many parameter-expansion
@@ -1860,30 +1871,84 @@ class Runtime:
         if reason.startswith("unsupported-list-item:"):
             self._print_stderr(f"[mctash-compile] fallback: {reason} ({self.COMPILE_FALLBACK_REASONS.get('unsupported-list-item', '')})")
             return
+        if reason.startswith("unsupported-command:"):
+            self._print_stderr(f"[mctash-compile] fallback: {reason} ({self.COMPILE_FALLBACK_REASONS.get('unsupported-command', '')})")
+            return
         self._print_stderr(f"[mctash-compile] fallback: {reason}")
 
-    def _asdl_word_is_compile_literal(self, word: Any) -> bool:
-        if not isinstance(word, dict) or word.get("type") != "word.Compound":
-            return False
-        for p in (word.get("parts") or []):
-            if not isinstance(p, dict):
-                return False
-            t = str(p.get("type", ""))
-            if t not in {"word_part.Literal", "word_part.SingleQuoted"}:
-                return False
-        return True
+    def _compile_namespace_key(self) -> str:
+        explicit = self.env.get("MCTASH_NAMESPACE", "").strip()
+        if explicit:
+            return explicit
+        mode = self.env.get("MCTASH_MODE", "").strip().lower()
+        if mode in {"ash", "posix"} and self._bash_compat_level is None:
+            return "ash"
+        if mode == "bash" or self._bash_compat_level is not None:
+            return f"bash-{self._bash_compat_level or 'default'}"
+        return "sh"
 
-    def _asdl_simple_command_compile_eligible(self, node: Any) -> bool:
-        if not isinstance(node, dict) or node.get("type") != "command.Simple":
-            return False
-        if node.get("redirects") or node.get("more_env"):
-            return False
-        words = node.get("words") or []
-        if not words:
-            return False
-        return all(self._asdl_word_is_compile_literal(w) for w in words)
+    def _compile_cache_key(self, item: dict[str, Any]) -> tuple[str, str] | None:
+        try:
+            raw = json.dumps(item, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        except Exception:
+            return None
+        digest = hashlib.sha256(raw).hexdigest()
+        return (self._compile_namespace_key(), digest)
+
+    def _asdl_command_compile_eligible(self, node: Any) -> tuple[bool, str]:
+        if not isinstance(node, dict):
+            return False, "pipeline-stage-invalid"
+        t = str(node.get("type", ""))
+        if t not in self.COMPILED_SUPPORTED_COMMANDS:
+            return False, f"unsupported-command:{t}"
+        if t == "command.Redirect":
+            child = node.get("child")
+            if not isinstance(child, dict):
+                return False, "pipeline-stage-invalid"
+            return self._asdl_command_compile_eligible(child)
+        if t == "command.BraceGroup":
+            for child in (node.get("children") or []):
+                ok, reason = self._asdl_item_compile_eligible(child)
+                if not ok:
+                    return False, reason
+            return True, "ok"
+        if t == "command.If":
+            for arm in (node.get("arms") or []):
+                cond = arm.get("cond") or {}
+                action = arm.get("action") or {}
+                for child in (cond.get("children") or []):
+                    ok, reason = self._asdl_item_compile_eligible(child)
+                    if not ok:
+                        return False, reason
+                for child in (action.get("children") or []):
+                    ok, reason = self._asdl_item_compile_eligible(child)
+                    if not ok:
+                        return False, reason
+            else_action = node.get("else_action") or {}
+            for child in (else_action.get("children") or []):
+                ok, reason = self._asdl_item_compile_eligible(child)
+                if not ok:
+                    return False, reason
+            return True, "ok"
+        if t == "command.WhileUntil":
+            cond = node.get("cond") or {}
+            body = node.get("body") or {}
+            for child in (cond.get("children") or []):
+                ok, reason = self._asdl_item_compile_eligible(child)
+                if not ok:
+                    return False, reason
+            for child in self._asdl_do_group_children(body):
+                ok, reason = self._asdl_item_compile_eligible(child)
+                if not ok:
+                    return False, reason
+            return True, "ok"
+        return True, "ok"
 
     def _asdl_item_compile_eligible(self, item: Any) -> tuple[bool, str]:
+        if self._running_trap:
+            return False, "trap-active"
+        if self.options.get("m", False) and self._is_interactive_session:
+            return False, "interactive-monitor-active"
         if not isinstance(item, dict):
             return False, "item-not-dict"
         t = str(item.get("type", ""))
@@ -1920,9 +1985,8 @@ class Runtime:
         if not eligible:
             self._compile_note(reason)
             return None
-        try:
-            key = json.dumps(item, sort_keys=True, separators=(",", ":"))
-        except Exception:
+        key = self._compile_cache_key(item)
+        if key is None:
             self._compile_note("json-key-failed")
             return None
         fn = self._compiled_cache.get(key)
