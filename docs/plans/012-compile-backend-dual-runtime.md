@@ -140,6 +140,28 @@ Exit criteria:
 
 - Mixed namespace cases deterministic and documented.
 
+## Phase 4 Policy Note (Deferred)
+
+Status: deferred until later milestone planning.
+
+Rationale for deferral:
+
+- We need a clearer product policy for what namespace separation is meant to
+  achieve in user-facing behavior.
+- Implicit per-function semantic switching (for example ash-mode `echo`
+  behavior in one function and bash-mode `echo` behavior in another) risks
+  surprising, hard-to-debug execution.
+
+Current policy direction captured for later implementation:
+
+1. Default to one active semantic lane per execution context (`ash/posix` or
+   `bash`) for predictability.
+2. Use namespace tags first for provenance, resolution, and compile-cache
+   partitioning; do not silently alter builtin semantics based only on callee
+   origin.
+3. If cross-lane execution is needed, require explicit invocation boundaries
+   (opt-in), not implicit behavior changes.
+
 ## Testing and Gates
 
 For each phase:
