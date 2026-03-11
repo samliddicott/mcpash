@@ -5,6 +5,7 @@ import importlib
 import importlib.util
 import ctypes
 import copy
+import errno
 import io
 import json
 import os
@@ -2461,20 +2462,19 @@ class Runtime:
                             self._assign_shell_var(name, self._get_var(name) + value)
                         else:
                             self._assign_shell_var(name, value)
-                        local_env[name] = self._get_var(name)
+                        self._sync_local_env_assignment(local_env, name)
                         continue
                     if comp_vals is not None:
                         self._assign_compound_var(name, op, comp_vals)
                         compound_assigned.add(name)
-                        local_env[name] = self._get_var(name)
+                        self._sync_local_env_assignment(local_env, name)
                         continue
                     if op == "+=":
                         local_env[name] = local_env.get(name, "") + value
                     else:
-                        attrs = self._var_attrs.get(name, set())
-                        if "array" in attrs or "assoc" in attrs:
+                        if self._is_structured_assignment_target(name):
                             self._assign_shell_var(name, value)
-                            local_env[name] = self._get_var(name)
+                            self._sync_local_env_assignment(local_env, name)
                         else:
                             local_env[name] = value
                 if self.options.get("x", False):
@@ -2499,7 +2499,7 @@ class Runtime:
             for n in assigned_names:
                 if n in compound_assigned:
                     continue
-                attrs = self._var_attrs.get(n, set())
+                attrs = self._structured_var_attrs(n)
                 if "array" in attrs or "assoc" in attrs:
                     continue
                 self._typed_vars.pop(n, None)
@@ -3009,18 +3009,17 @@ class Runtime:
                         if is_compound:
                             raise RuntimeError(f"{name}: cannot assign array value to tied variable")
                         self._assign_shell_var(name, value)
-                        local_env[name] = self._get_var(name)
+                        self._sync_local_env_assignment(local_env, name)
                         continue
                     op = str(assign.get("op") or "=")
                     if is_compound and comp_vals is not None:
                         self._assign_compound_var(name, op, comp_vals)
                         compound_assigned.add(name)
-                        local_env[name] = self._get_var(name)
+                        self._sync_local_env_assignment(local_env, name)
                         continue
-                    attrs = self._var_attrs.get(name, set())
-                    if "array" in attrs or "assoc" in attrs:
+                    if self._is_structured_assignment_target(name):
                         self._assign_shell_var(name, value)
-                        local_env[name] = self._get_var(name)
+                        self._sync_local_env_assignment(local_env, name)
                     else:
                         local_env[name] = value
                 should_persist_env = any(
@@ -3031,7 +3030,7 @@ class Runtime:
                     for n in assigned_names:
                         if n in compound_assigned:
                             continue
-                        attrs = self._var_attrs.get(n, set())
+                        attrs = self._structured_var_attrs(n)
                         if "array" in attrs or "assoc" in attrs:
                             continue
                         self._typed_vars.pop(n, None)
@@ -3072,19 +3071,18 @@ class Runtime:
                     if is_compound:
                         raise RuntimeError(f"{name}: cannot assign array value to tied variable")
                     self._assign_shell_var(name, value)
-                    local_env[name] = self._get_var(name)
+                    self._sync_local_env_assignment(local_env, name)
                     continue
                 op = str(assign.get("op") or "=")
                 if is_compound and comp_vals is not None:
                     self._assign_compound_var(name, op, comp_vals)
                     compound_assigned.add(name)
-                    local_env[name] = self._get_var(name)
+                    self._sync_local_env_assignment(local_env, name)
                     self.env = local_env
                     continue
-                attrs = self._var_attrs.get(name, set())
-                if "array" in attrs or "assoc" in attrs:
+                if self._is_structured_assignment_target(name):
                     self._assign_shell_var(name, value)
-                    local_env[name] = self._get_var(name)
+                    self._sync_local_env_assignment(local_env, name)
                 else:
                     local_env[name] = value
                 self.env = local_env
@@ -3117,7 +3115,7 @@ class Runtime:
             for n in assigned_names:
                 if n in compound_assigned:
                     continue
-                attrs = self._var_attrs.get(n, set())
+                attrs = self._structured_var_attrs(n)
                 if "array" in attrs or "assoc" in attrs:
                     continue
                 self._typed_vars.pop(n, None)
@@ -5465,14 +5463,20 @@ class Runtime:
                                 self._assign_shell_var(name, self._get_var(name) + value)
                             else:
                                 self._assign_shell_var(name, value)
-                            local_env[name] = self._get_var(name)
+                            self._sync_local_env_assignment(local_env, name)
                             continue
                         if comp_vals is not None:
                             self._assign_compound_var(name, op, comp_vals)
                             compound_assigned.add(name)
-                            local_env[name] = self._get_var(name)
+                            self._sync_local_env_assignment(local_env, name)
                             continue
-                        if op == "+=":
+                        if self._is_structured_assignment_target(name):
+                            if op == "+=":
+                                self._assign_shell_var(name, self._get_var(name) + value)
+                            else:
+                                self._assign_shell_var(name, value)
+                            self._sync_local_env_assignment(local_env, name)
+                        elif op == "+=":
                             self.env[name] = self.env.get(name, "") + value
                         else:
                             self.env[name] = value
@@ -5484,7 +5488,7 @@ class Runtime:
                         for n in assigned_names:
                             if n in compound_assigned:
                                 continue
-                            attrs = self._var_attrs.get(n, set())
+                            attrs = self._structured_var_attrs(n)
                             if "array" in attrs or "assoc" in attrs:
                                 continue
                             self._typed_vars.pop(n, None)
@@ -5522,23 +5526,24 @@ class Runtime:
                             self._assign_shell_var(name, self._get_var(name) + value)
                         else:
                             self._assign_shell_var(name, value)
-                        local_env[name] = self._get_var(name)
+                        self._sync_local_env_assignment(local_env, name)
                         continue
                     if comp_vals is not None:
                         self._assign_compound_var(name, op, comp_vals)
                         compound_assigned.add(name)
-                        local_env[name] = self._get_var(name)
+                        self._sync_local_env_assignment(local_env, name)
                         self.env = local_env
                         continue
-                    if op == "+=":
+                    if self._is_structured_assignment_target(name):
+                        if op == "+=":
+                            self._assign_shell_var(name, self._get_var(name) + value)
+                        else:
+                            self._assign_shell_var(name, value)
+                        self._sync_local_env_assignment(local_env, name)
+                    elif op == "+=":
                         local_env[name] = local_env.get(name, "") + value
                     else:
-                        attrs = self._var_attrs.get(name, set())
-                        if "array" in attrs or "assoc" in attrs:
-                            self._assign_shell_var(name, value)
-                            local_env[name] = self._get_var(name)
-                        else:
-                            local_env[name] = value
+                        local_env[name] = value
                     self.env = local_env
             finally:
                 self.env = saved_env
@@ -5555,7 +5560,7 @@ class Runtime:
                 for n in assigned_names:
                     if n in compound_assigned:
                         continue
-                    attrs = self._var_attrs.get(n, set())
+                    attrs = self._structured_var_attrs(n)
                     if "array" in attrs or "assoc" in attrs:
                         continue
                     self._typed_vars.pop(n, None)
@@ -6449,9 +6454,14 @@ class Runtime:
             status = 2
         finally:
             if saved_positional is not None:
-                # `.`/`source` with explicit arguments always uses a temporary
-                # positional-parameter scope and restores caller state on exit.
-                self.set_positional_args(saved_positional)
+                # Mode split:
+                # - ash/POSIX lane: always restore caller positional params for
+                #   `. file args...`.
+                # - bash lane: sourced `set -- ...` persists to caller.
+                if self._diag.style != "bash":
+                    self.set_positional_args(saved_positional)
+                elif self.positional == source_args:
+                    self.set_positional_args(saved_positional)
             if self.source_stack:
                 self.source_stack.pop()
             self._sync_root_frame()
@@ -9693,14 +9703,10 @@ class Runtime:
                         raise RuntimeError(
                             self._format_error("syntax error: bad substitution", line=self.current_line)
                         )
-                    arg_fields: list[ExpansionField] | None = None
-                    if arg is not None:
-                        try:
-                            arg_asdl = lst_word_to_asdl_word(parse_legacy_word(arg))
-                            arg_fields = self._asdl_word_to_expansion_fields(arg_asdl)
-                        except Exception:
-                            arg_fields = None
-                    val = self._expand_braced_param(name, op, arg, False, arg_fields=arg_fields)
+                    # Here-doc expansion uses a distinct quote-removal context.
+                    # Keep parameter-op WORD handling on the raw textual path
+                    # instead of pre-parsed structured fields.
+                    val = self._expand_braced_param(name, op, arg, False, arg_fields=None)
                     out.append(self._scalarize_assignment_expansion(val))
                     i = end + 1
                     continue
@@ -9813,6 +9819,26 @@ class Runtime:
         if len(key_raw) >= 2 and key_raw[0] == key_raw[-1] and key_raw[0] in {"'", '"'}:
             key_raw = key_raw[1:-1]
         return base, key_raw
+
+    def _structured_var_attrs(self, name: str) -> set[str]:
+        parsed = self._parse_subscripted_name(name)
+        base = parsed[0] if parsed is not None else name
+        return self._var_attrs.get(base, set())
+
+    def _is_structured_assignment_target(self, name: str) -> bool:
+        parsed = self._parse_subscripted_name(name)
+        if parsed is not None:
+            return True
+        attrs = self._var_attrs.get(name, set())
+        return ("array" in attrs) or ("assoc" in attrs)
+
+    def _sync_local_env_assignment(self, local_env: dict[str, str], name: str) -> None:
+        parsed = self._parse_subscripted_name(name)
+        if parsed is not None:
+            base = parsed[0]
+            local_env[base] = self._get_var(base)
+            return
+        local_env[name] = self._get_var(name)
 
     def _set_subscript_projection(self, base: str, value: str) -> None:
         for scope in reversed(self.local_stack):
@@ -11069,8 +11095,8 @@ class Runtime:
             raise SystemExit(2)
         if n > len(self.positional):
             if self._diag.style != "bash":
-                # ash behavior: out-of-range shift fails but is non-fatal and
-                # does not emit a diagnostic.
+                # ash behavior: out-of-range positive shift fails without
+                # changing positional parameters and without a diagnostic.
                 return 1
             self._report_error(
                 self._diag_msg(DiagnosticKey.SHIFT_COUNT_OUT_OF_RANGE, value=str(n)),
@@ -11583,6 +11609,13 @@ class Runtime:
             os.write(1, data)
             return 0
         except OSError as e:
+            if e.errno == errno.EPIPE:
+                if self._diag.style == "bash":
+                    # Bash-compatible behavior for broken pipelines: no
+                    # diagnostic.
+                    return 1
+                self._print_stderr(self._diag_msg(DiagnosticKey.WRITE_ERROR, error=str(e.strerror)))
+                return 1
             self._print_stderr(self._diag_msg(DiagnosticKey.WRITE_ERROR, error=str(e.strerror)))
             return 1
 
@@ -12278,7 +12311,12 @@ class Runtime:
         if newline:
             data += "\n"
         if self._force_broken_pipe and self._fd_redirect_depth == 0:
-            self._print_stderr(self._diag_msg(DiagnosticKey.WRITE_ERROR, error="Broken pipe"))
+            # Simulated broken-pipe path used by process-substitution/pipeline
+            # harnesses.
+            if self._diag.style != "bash":
+                self._print_stderr(self._diag_msg(DiagnosticKey.WRITE_ERROR, error="Broken pipe"))
+                return 1
+            # Bash-compatible behavior: fail status, no diagnostic.
             return 1
         if isinstance(sys.stdout, io.StringIO) and self._fd_redirect_depth == 0:
             sys.stdout.write(data)
@@ -12287,6 +12325,13 @@ class Runtime:
             os.write(1, data.encode("utf-8", errors="surrogateescape"))
             return 0
         except OSError as e:
+            if e.errno == errno.EPIPE:
+                if self._diag.style == "bash":
+                    # Bash behavior in pipeline tear-down paths: fail command
+                    # status without emitting a write-error diagnostic.
+                    return 1
+                self._print_stderr(self._diag_msg(DiagnosticKey.WRITE_ERROR, error=str(e.strerror)))
+                return 1
             self._print_stderr(self._diag_msg(DiagnosticKey.WRITE_ERROR, error=str(e.strerror)))
             return 1
 

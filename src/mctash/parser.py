@@ -904,19 +904,82 @@ class Parser:
     def _is_assignment(self, text: str) -> bool:
         if "=" not in text:
             return False
-        name, _ = text.split("=", 1)
-        if not name:
+        eq = text.find("=")
+        if eq <= 0:
             return False
+        lhs = text[:eq]
+        if not lhs:
+            return False
+        if lhs.endswith("+"):
+            lhs = lhs[:-1]
+            if not lhs:
+                return False
+        # Plain NAME=VALUE
+        if "[" not in lhs:
+            if not (lhs[0].isalpha() or lhs[0] == "_"):
+                return False
+            return all(ch.isalnum() or ch == "_" for ch in lhs)
+
+        # Extended bash form: NAME[SUBSCRIPT]=VALUE
+        lb = lhs.find("[")
+        rb = lhs.rfind("]")
+        if lb <= 0 or rb != len(lhs) - 1:
+            return False
+        name = lhs[:lb]
         if not (name[0].isalpha() or name[0] == "_"):
             return False
-        if name.endswith("+"):
-            name = name[:-1]
-            if not name:
-                return False
-        return all(ch.isalnum() or ch == "_" for ch in name)
+        if not all(ch.isalnum() or ch == "_" for ch in name):
+            return False
+        # Keep subscript syntax recognition conservative enough to avoid
+        # misclassifying clearly invalid shell words (e.g. nested unquoted
+        # brackets) as assignment words in ash/POSIX lanes.
+        depth = 0
+        max_depth = 0
+        i = lb
+        in_single = False
+        in_double = False
+        while i < len(lhs):
+            ch = lhs[i]
+            if in_single:
+                if ch == "'":
+                    in_single = False
+                i += 1
+                continue
+            if in_double:
+                if ch == "\\" and i + 1 < len(lhs):
+                    i += 2
+                    continue
+                if ch == '"':
+                    in_double = False
+                i += 1
+                continue
+            if ch == "'":
+                in_single = True
+                i += 1
+                continue
+            if ch == '"':
+                in_double = True
+                i += 1
+                continue
+            if ch == "[":
+                depth += 1
+                if depth > max_depth:
+                    max_depth = depth
+            elif ch == "]":
+                depth -= 1
+                if depth < 0:
+                    return False
+            i += 1
+        if depth != 0:
+            return False
+        # NAME[SUB]= is valid; nested bracket structure is not parsed as an
+        # assignment token here.
+        return max_depth <= 1
 
     def _split_assignment(self, text: str) -> tuple[str, str, str]:
-        name, value = text.split("=", 1)
+        eq = text.find("=")
+        name = text[:eq]
+        value = text[eq + 1 :]
         op = "="
         if name.endswith("+"):
             op = "+="
