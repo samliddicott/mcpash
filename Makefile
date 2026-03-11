@@ -7,7 +7,7 @@ OIL_MIN_PASS ?= 245
 OIL_MAX_FAIL ?= 0
 SUMMARY_FILE ?= docs/reports/parity-summary.json
 
-.PHONY: regressions bridge-conformance diff-conformance diff-parity-matrix backend-self-parity read-matrix semantic-matrix jobs-interactive-matrix job-notify-matrix job-exitwarn-matrix job-tty-stop-matrix job-suspend-ctrl-matrix trap-noninteractive-matrix trap-interactive-matrix trap-variant-matrix completion-interactive-matrix interactive-ux-matrix interactive-sigint-matrix interactive-tmout-matrix man-detail-audit startup-mode-matrix bash-invocation-option-matrix category-buckets-matrix bash-builtin-matrix busybox-conformance busybox-timeout-scan parity-summary parity-summary-validate perf-baseline perf-compare perf-variation stress-race stress-bridge compat-posix-bash compat-posix-bash-strict bash-posix-man-matrix bash-posix-upstream-matrix bash-tests-fetch spec-cycle-check compliance-truth-check compliance-truth-gate conformance conformance-full conformance-quick test-all
+.PHONY: regressions bridge-conformance diff-conformance diff-parity-matrix backend-self-parity read-matrix semantic-matrix jobs-interactive-matrix job-notify-matrix job-exitwarn-matrix job-tty-stop-matrix job-suspend-ctrl-matrix trap-noninteractive-matrix trap-interactive-matrix trap-variant-matrix completion-interactive-matrix interactive-ux-matrix interactive-sigint-matrix interactive-tmout-matrix man-detail-audit startup-mode-matrix bash-invocation-option-matrix category-buckets-matrix bash-builtin-matrix bash-strict-case-map-check busybox-conformance busybox-timeout-scan parity-summary parity-summary-validate perf-baseline perf-compare perf-variation stress-race stress-bridge compat-posix-bash compat-posix-bash-strict bash-posix-man-matrix bash-posix-upstream-matrix bash-tests-fetch spec-cycle-check compliance-truth-check compliance-truth-gate conformance conformance-full conformance-quick test-all
 
 regressions:
 	@./tests/regressions/run.sh
@@ -83,6 +83,9 @@ category-buckets-matrix:
 
 bash-builtin-matrix:
 	@./tests/compat/run_bash_builtin_matrix.sh
+
+bash-strict-case-map-check:
+	@python3 ./scripts/check_bash_matrix_strict_cases.py
 
 busybox-conformance:
 	@RUN_TIMEOUT=$(RUN_TIMEOUT) RUN_MODULE_TIMEOUT=$(RUN_MODULE_TIMEOUT) ./src/tests/run_busybox_ash.sh run
