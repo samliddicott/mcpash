@@ -4826,6 +4826,7 @@ class Runtime:
                 chars.append((ch, bool(seg.glob_active)))
 
         i = 0
+        has_active_extglob = False
         in_class = False
         class_can_close = False
         while i < len(chars):
@@ -4842,6 +4843,13 @@ class Runtime:
                     continue
                 if ch in {"*", "?", "["}:
                     has_active_glob = True
+                if (
+                    ch in {"@", "!", "?", "+", "*"}
+                    and i + 1 < len(chars)
+                    and chars[i + 1][0] == "("
+                    and chars[i + 1][1]
+                ):
+                    has_active_extglob = True
                 # Preserve active glob pattern bytes verbatim, including `]`
                 # and other class syntax characters.
                 pat.append(ch)
@@ -4859,14 +4867,57 @@ class Runtime:
             if in_class:
                 class_can_close = True
             i += 1
-        if not has_active_glob:
-            return [text]
         pat_text = self._normalize_class_escapes("".join(pat))
         pattern = pat_text if all_quoted else self._tilde_expand(pat_text)
-        matches = sorted(glob.glob(pattern))
+        if self._shopts.get("extglob", False) and has_active_extglob:
+            has_active_glob = True
+        if not has_active_glob:
+            return [text]
+        if self._bash_compat_level is not None:
+            matches = self._bash_compgen_glob(pattern)
+        elif self._shopts.get("extglob", False) and has_active_extglob:
+            matches = self._bash_compgen_glob(pattern)
+        else:
+            matches = sorted(glob.glob(pattern))
         if matches:
             return matches
         return [text]
+
+    def _bash_compgen_glob(self, pattern: str) -> list[str]:
+        script_lines: list[str] = []
+        if self._shopts.get("extglob", False):
+            script_lines.append("shopt -s extglob")
+        if self._shopts.get("globstar", False):
+            script_lines.append("shopt -s globstar")
+        if self._shopts.get("dotglob", False):
+            script_lines.append("shopt -s dotglob")
+        if self._shopts.get("nocaseglob", False):
+            script_lines.append("shopt -s nocaseglob")
+        script_lines.extend(
+            [
+                "pat=$1",
+                "gi=$2",
+                'if [ -n "$gi" ]; then GLOBIGNORE=$gi; fi',
+                "IFS=$'\\n'",
+                # Use shell word expansion itself so dotglob/GLOBIGNORE and
+                # other pattern semantics match bash behavior.
+                'for f in $pat; do printf "%s\\n" "$f"; done',
+            ]
+        )
+        try:
+            proc = subprocess.run(
+                ["bash", "-c", "\n".join(script_lines), "mctash", pattern, self.env.get("GLOBIGNORE", "")],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL,
+                text=True,
+                check=False,
+                env=dict(self.env),
+            )
+        except Exception:
+            return []
+        out = [line for line in proc.stdout.splitlines() if line]
+        # Keep deterministic ordering aligned with shell pathname expansion.
+        return sorted(out)
 
     def _asdl_word_has_unquoted_glob(self, parts: list[Any]) -> bool:
         for part in parts:
@@ -6364,14 +6415,14 @@ class Runtime:
 
     def _case_pattern_matches(self, value: str, pattern: str) -> bool:
         # Use bash itself as the primary matcher for shell case-pattern
-        # semantics (quoting, escaped bytes, classes, locale forms).
+        # semantics (quoting, escapes, classes, locale forms).
         bash_argv = ["bash"]
         if self.options.get("posix", False):
             bash_argv.append("--posix")
-        script = (
-            'v=$1; p=$2; '
-            'eval "case \\"$v\\" in ($p) exit 0 ;; (*) exit 1 ;; esac"'
-        )
+        shopt_prefix = ""
+        if self._shopts.get("extglob", False):
+            shopt_prefix += "shopt -s extglob; "
+        script = shopt_prefix + 'v=$1; p=$2; [[ $v == $p ]]; rc=$?; exit $rc'
         try:
             proc = subprocess.run(
                 bash_argv + ["-c", script, "mctash", value, pattern],
@@ -6387,6 +6438,28 @@ class Runtime:
         if "[[." not in pattern and "[[=" not in pattern and "[[:" not in pattern and "[:" not in pattern and "[." not in pattern and "[=" not in pattern:
             return fnmatch.fnmatchcase(value, pattern)
         return fnmatch.fnmatchcase(value, pattern)
+
+    def _has_extglob_syntax(self, pattern: str) -> bool:
+        i = 0
+        in_class = False
+        while i < len(pattern):
+            ch = pattern[i]
+            if ch == "\\" and i + 1 < len(pattern):
+                i += 2
+                continue
+            if in_class:
+                if ch == "]":
+                    in_class = False
+                i += 1
+                continue
+            if ch == "[":
+                in_class = True
+                i += 1
+                continue
+            if ch in {"@", "!", "?", "+", "*"} and i + 1 < len(pattern) and pattern[i + 1] == "(":
+                return True
+            i += 1
+        return False
 
     def _run_builtin(self, name: str, argv: List[str]) -> int:
         if name == "cd":
@@ -6417,7 +6490,9 @@ class Runtime:
                     print(self.env["PWD"])
                 self._sync_dir_stack_current()
                 return 0
-            except OSError:
+            except OSError as e:
+                msg = getattr(e, "strerror", None) or str(e)
+                self._report_error(f"{target}: {msg}", line=self.current_line, context="cd")
                 return 1
         if name == "pwd":
             physical = False
@@ -7208,7 +7283,6 @@ class Runtime:
             with self._redirected_fds(redirects):
                 if "/" in argv[0]:
                     resolved = argv[0]
-                    exec_argv = list(argv)
                 else:
                     resolved = self._resolve_external_path(argv[0], env)
                     if resolved is None:
@@ -7218,7 +7292,7 @@ class Runtime:
                             self._report_error(msg, line=self.current_line, context=context)
                             return 127
                         resolved = fallback
-                    exec_argv = [resolved] + argv[1:]
+                exec_argv = list(argv)
                 if argv0_override is not None and exec_argv:
                     exec_argv[0] = argv0_override
                 child_env = {} if clear_env else dict(env)
@@ -7255,7 +7329,7 @@ class Runtime:
 
                     proc = subprocess.Popen(
                         exec_argv,
-                        executable=resolved if argv0_override is not None else None,
+                        executable=resolved,
                         env=child_env,
                         start_new_session=bool(isinstance(job_id, int)),
                         preexec_fn=_child_preexec,
@@ -9938,7 +10012,7 @@ class Runtime:
     def _find_first_match(self, value: str, pattern: str) -> tuple[int, int] | None:
         for i in range(len(value) + 1):
             for j in range(len(value), i - 1, -1):
-                if fnmatch.fnmatchcase(value[i:j], pattern):
+                if self._shell_pattern_match(value[i:j], pattern):
                     return i, j
         return None
 
@@ -9966,13 +10040,13 @@ class Runtime:
 
     def _match_prefix_end(self, value: str, pattern: str) -> int | None:
         for j in range(len(value), -1, -1):
-            if fnmatch.fnmatchcase(value[:j], pattern):
+            if self._shell_pattern_match(value[:j], pattern):
                 return j
         return None
 
     def _match_suffix_start(self, value: str, pattern: str) -> int | None:
         for i in range(0, len(value) + 1):
-            if fnmatch.fnmatchcase(value[i:], pattern):
+            if self._shell_pattern_match(value[i:], pattern):
                 return i
         return None
 
@@ -10686,7 +10760,7 @@ class Runtime:
         indices = range(len(value), -1, -1) if longest else range(0, len(value) + 1)
         for i in indices:
             prefix = value[:i]
-            if fnmatch.fnmatchcase(prefix, pattern):
+            if self._shell_pattern_match(prefix, pattern):
                 return value[i:]
         return value
 
@@ -10696,9 +10770,14 @@ class Runtime:
         indices = range(0, len(value) + 1) if longest else range(len(value), -1, -1)
         for i in indices:
             suffix = value[i:]
-            if fnmatch.fnmatchcase(suffix, pattern):
+            if self._shell_pattern_match(suffix, pattern):
                 return value[:i]
         return value
+
+    def _shell_pattern_match(self, text: str, pattern: str) -> bool:
+        if self._shopts.get("extglob", False) and self._has_extglob_syntax(pattern):
+            return self._case_pattern_matches(text, pattern)
+        return fnmatch.fnmatchcase(text, pattern)
 
     def _pattern_from_word(self, text: str, for_case: bool = False) -> str:
         fields = self._legacy_word_to_expansion_fields(text, assignment=True)

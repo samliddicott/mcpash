@@ -1457,34 +1457,40 @@ class Parser:
                 self._advance()
             patterns: List[str] = []
             lst_patterns: List = []
+            pat_parts: List[str] = []
+            extglob_depth = 0
             while True:
                 tok = self._peek()
                 if tok is None:
                     break
-                if (tok.kind == "OP" and tok.value == ")") or (self._is_word(tok) and tok.value == ")"):
+                if self._is_word(tok) and tok.value == "esac" and not patterns and not pat_parts:
+                    raise ParseError(f"syntax error near unexpected token `esac' at {self._where(tok)}")
+
+                is_rparen = (tok.kind == "OP" and tok.value == ")") or (self._is_word(tok) and tok.value == ")")
+                if is_rparen and extglob_depth == 0:
+                    if pat_parts:
+                        pat = "".join(pat_parts)
+                        patterns.append(pat)
+                        lst_patterns.append(self._resolve_word(parse_word(pat)))
+                        pat_parts = []
                     self._advance()
                     break
-                if self._is_word(tok) and tok.value == "esac" and not patterns:
-                    raise ParseError(f"syntax error near unexpected token `esac' at {self._where(tok)}")
-                if self._is_word(tok):
-                    part = tok.value
+
+                if tok.kind == "OP" and tok.value == "|" and extglob_depth == 0:
                     self._advance()
-                    if part.endswith("|"):
-                        part = part[:-1]
-                        patterns.append(part)
-                        lst_patterns.append(self._resolve_word(parse_word(part)))
-                        continue
-                    patterns.append(part)
-                    lst_patterns.append(self._resolve_word(parse_word(part)))
-                    tok2 = self._peek()
-                    if tok2 and tok2.kind == "OP" and tok2.value == "|":
-                        self._advance()
-                        continue
+                    pat = "".join(pat_parts)
+                    patterns.append(pat)
+                    lst_patterns.append(self._resolve_word(parse_word(pat)))
+                    pat_parts = []
                     continue
-                if tok.kind == "OP" and tok.value == "|":
-                    self._advance()
-                    continue
-                break
+
+                val = tok.value
+                if val == "(" and pat_parts and self._is_extglob_prefix_part(pat_parts[-1]):
+                    extglob_depth += 1
+                elif val == ")" and extglob_depth > 0:
+                    extglob_depth -= 1
+                pat_parts.append(val)
+                self._advance()
             if self._looks_like_case_pattern_start():
                 raise ParseError(f"syntax error: empty case action at {self._where(self._peek())}")
             body, lst_body = self.parse_compound_list({";;", ";&", ";;&", "esac"})
@@ -1520,6 +1526,11 @@ class Parser:
                 items=lst_items,
             ),
         )
+
+    def _is_extglob_prefix_part(self, text: str) -> bool:
+        if not text:
+            return False
+        return text in {"@", "!", "?", "+", "*"} or text.endswith(("@", "!", "?", "+", "*"))
 
     def _looks_like_case_pattern_start(self) -> bool:
         i = 0

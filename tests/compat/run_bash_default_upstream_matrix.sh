@@ -14,6 +14,14 @@ fi
 
 mkdir -p "$RDIR/bash" "$RDIR/mctash" "$RDIR/diff"
 
+normalize_for_diff() {
+  local src="$1"
+  local dst="$2"
+  sed -E \
+    -e 's#/(extglob|eglob-test|bash-globignore)-[0-9]+#/\1-<PID>#g' \
+    "$src" >"$dst"
+}
+
 cat > "$RDIR/bash_wrapper.sh" <<'W1'
 #!/usr/bin/env bash
 exec bash "$@"
@@ -67,8 +75,16 @@ for c in "${core_cases[@]}"; do
   ) || m_rc=$?
   out_m=0
   err_m=0
-  diff -u "$b_out" "$m_out" >"$RDIR/diff/${c}.out.diff" || out_m=1
-  diff -u "$b_err" "$m_err" >"$RDIR/diff/${c}.err.diff" || err_m=1
+  b_out_n="$RDIR/bash/${c}.out.norm"
+  m_out_n="$RDIR/mctash/${c}.out.norm"
+  b_err_n="$RDIR/bash/${c}.err.norm"
+  m_err_n="$RDIR/mctash/${c}.err.norm"
+  normalize_for_diff "$b_out" "$b_out_n"
+  normalize_for_diff "$m_out" "$m_out_n"
+  normalize_for_diff "$b_err" "$b_err_n"
+  normalize_for_diff "$m_err" "$m_err_n"
+  diff -u "$b_out_n" "$m_out_n" >"$RDIR/diff/${c}.out.diff" || out_m=1
+  diff -u "$b_err_n" "$m_err_n" >"$RDIR/diff/${c}.err.diff" || err_m=1
   printf '%s\t%s\t%s\t%s\t%s\n' "$c" "$b_rc" "$m_rc" "$out_m" "$err_m" >>"$summary"
 done
 

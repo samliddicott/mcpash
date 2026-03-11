@@ -180,6 +180,11 @@ class TokenReader:
                     buf.append(chunk)
                     self._advance_to(new_i)
                     continue
+                if ch in ["@", "!", "?", "+", "*"] and self._peek(1) == "(":
+                    chunk, new_i = _scan_extglob_atom(self.source, self.i)
+                    buf.append(chunk)
+                    self._advance_to(new_i)
+                    continue
                 two = ch + self._peek(1)
                 if two in OPERATORS or ch in OPERATORS:
                     break
@@ -893,6 +898,62 @@ def _scan_backtick_sub(source: str, start: int) -> tuple[str, int]:
             return source[start:i], i
         i += 1
     return source[start:i], i
+
+
+def _scan_extglob_atom(source: str, start: int) -> tuple[str, int]:
+    # Scan ksh-style extglob atoms like +(...), ?(...), !(...), @(...), *(...)
+    # as one word fragment so parser doesn't treat inner metacharacters as
+    # command separators.
+    if start + 1 >= len(source) or source[start] not in "@!?+*" or source[start + 1] != "(":
+        return source[start : start + 1], start + 1
+    i = start + 2
+    depth = 1
+    in_class = False
+    while i < len(source):
+        ch = source[i]
+        if ch == "\\" and i + 1 < len(source):
+            i += 2
+            continue
+        if in_class:
+            if ch == "]":
+                in_class = False
+            i += 1
+            continue
+        if ch == "[":
+            # `[` only starts a bracket class when it has a matching closing
+            # `]` ahead; malformed forms like `[)` should be treated literally
+            # so they don't consume following lines while scanning extglob.
+            if _has_unescaped_closing_bracket(source, i + 1):
+                in_class = True
+            i += 1
+            continue
+        if ch in "@!?+*" and i + 1 < len(source) and source[i + 1] == "(":
+            depth += 1
+            i += 2
+            continue
+        if ch == ")":
+            depth -= 1
+            i += 1
+            if depth == 0:
+                return source[start:i], i
+            continue
+        i += 1
+    return source[start:i], i
+
+
+def _has_unescaped_closing_bracket(source: str, start: int) -> bool:
+    i = start
+    while i < len(source):
+        ch = source[i]
+        if ch == "\n":
+            return False
+        if ch == "\\" and i + 1 < len(source):
+            i += 2
+            continue
+        if ch == "]":
+            return True
+        i += 1
+    return False
 
 
 def _scan_braced_sub(source: str, start: int) -> tuple[str, int]:
