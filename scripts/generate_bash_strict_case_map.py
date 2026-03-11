@@ -9,11 +9,23 @@ def scenario_cases_for_req(req_id: str) -> list[str]:
     # Invocation option matrix concrete scenarios currently implemented.
     inv = {
         "C1.OPT.SHORT.c": ["case:invocation.short-c"],
+        "C1.OPT.SHORT.i": ["case:invocation.short-i"],
+        "C1.OPT.SHORT.r": ["case:invocation.short-r"],
         "C1.OPT.SHORT.s": ["case:invocation.short-s-with-args"],
         "C1.OPT.SHORT.v": ["case:invocation.short-v"],
         "C1.OPT.SHORT.x": ["case:invocation.short-x"],
         "C1.OPT.SHORT.D": ["case:invocation.short-D"],
+        "C1.OPT.SHORT.O": ["case:invocation.short-O"],
+        "C1.OPT.SHORT.PLUSO": ["case:invocation.short-plusO"],
+        "C1.OPT.LONG.HELP": ["case:invocation.long-help"],
+        "C1.OPT.LONG.LOGIN": ["case:invocation.long-login"],
+        "C1.OPT.LONG.NOEDITING": ["case:invocation.long-noediting"],
+        "C1.OPT.LONG.NOPROFILE": ["case:invocation.long-noprofile"],
+        "C1.OPT.LONG.NORC": ["case:invocation.long-norc"],
+        "C1.OPT.LONG.POSIX": ["case:invocation.long-posix"],
+        "C1.OPT.LONG.RESTRICTED": ["case:invocation.long-restricted"],
         "C1.OPT.LONG.VERBOSE": ["case:invocation.long-verbose"],
+        "C1.OPT.LONG.VERSION": ["case:invocation.long-version"],
         "C1.OPT.LONG.DUMP_STRINGS": ["case:invocation.long-dump-strings"],
         "C1.OPT.LONG.DUMP_PO_STRINGS": ["case:invocation.long-dump-po"],
     }
@@ -102,4 +114,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

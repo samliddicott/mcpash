@@ -86,6 +86,15 @@ for mode in bash posix; do
   compare_case short-D "$mode" '' -D -c 'echo $"hello"' || fail=1
   compare_case long-dump-strings "$mode" '' --dump-strings -c 'echo $"hello"' || fail=1
   compare_case long-dump-po "$mode" '' --dump-po-strings -c 'echo $"hello"' || fail=1
+  compare_case_status_only long-help "$mode" '' --help || fail=1
+  compare_case_status_only long-version "$mode" '' --version || fail=1
+  compare_case_status_only long-login "$mode" '' --login --noprofile -c 'echo login:ok' || fail=1
+  compare_case_status_only long-noprofile "$mode" '' --login --noprofile -c 'echo noprofile:ok' || fail=1
+  compare_case_status_only long-norc "$mode" '' --norc -c 'echo norc:ok' || fail=1
+  compare_case_status_only long-noediting "$mode" '' --noediting -c 'echo noediting:ok' || fail=1
+  compare_case_status_only long-restricted "$mode" '' --restricted -c 'echo restricted:ok' || fail=1
+  compare_case_status_only short-O "$mode" '' -O extglob -c 'shopt -q extglob; echo rc:$?' || fail=1
+  compare_case_status_only short-plusO "$mode" '' +O extglob -c 'shopt -q extglob; echo rc:$?' || fail=1
   compare_case_status_only short-i "$mode" '' -i -c 'echo i:ok' || fail=1
   compare_case_status_only short-r "$mode" '' -r -c 'echo r:ok' || fail=1
   compare_case_status_only long-posix "$mode" '' --posix -c 'echo posix:ok' || fail=1

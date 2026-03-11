@@ -16,6 +16,7 @@ from .runtime import BreakLoop, ContinueLoop, Runtime, RuntimeError
 VALID_STARTUP_OPTION_LETTERS = set("aCefnuvxIimqVEbpslr")
 DEFAULT_BASH_COMPAT = "50"
 EMIT_PY_STYLES = {"runtime", "idiomatic"}
+MCTASH_VERSION = "5.2.0(1)-release"
 
 
 def _set_proc_comm() -> None:
@@ -69,6 +70,25 @@ def _apply_invocation_mode(mode: str, startup_changes: Dict[str, bool]) -> None:
         os.environ["BASH_COMPAT"] = DEFAULT_BASH_COMPAT
 
 
+def _print_help(mode: str) -> int:
+    name = "sh" if mode == "posix" else "bash"
+    print(f"GNU {name}, version {MCTASH_VERSION}-(x86_64-pc-linux-gnu)")
+    print("Usage:\tbash [GNU long option] [option] ...")
+    print("\tbash [GNU long option] [option] script-file ...")
+    print("GNU long options:")
+    print("\t--help\t\t--version\t--login\t\t--noprofile")
+    print("\t--norc\t\t--posix\t\t--restricted\t--verbose")
+    print("\t--dump-strings\t--dump-po-strings\t--noediting")
+    return 0
+
+
+def _print_version(mode: str) -> int:
+    name = "sh" if mode == "posix" else "bash"
+    print(f"GNU {name}, version {MCTASH_VERSION} (x86_64-pc-linux-gnu)")
+    print("Copyright (C) 2026 Free Software Foundation, Inc.")
+    return 0
+
+
 def main(argv: List[str] | None = None) -> int:
     _set_proc_comm()
     argv = list(argv) if argv is not None else sys.argv[1:]
@@ -86,6 +106,10 @@ def main(argv: List[str] | None = None) -> int:
         startup_changes["n"] = True
     mode = _resolve_invocation_mode(sys.argv[0], startup_changes)
     _apply_invocation_mode(mode, startup_changes)
+    if startup_changes.get("__print_help__", False):
+        return _print_help(mode)
+    if startup_changes.get("__print_version__", False):
+        return _print_version(mode)
     if argv and argv[0] == "-c":
         if len(argv) < 2:
             print("mctash: -c requires an argument", file=sys.stderr)
@@ -107,7 +131,14 @@ def main(argv: List[str] | None = None) -> int:
         interactive = bool(rt.options.get("i", False))
         rt.set_login_shell(login_shell)
         rt.set_interactive_session(interactive)
-        _source_startup_files(rt, mode=mode, login_shell=login_shell, interactive=interactive)
+        _source_startup_files(
+            rt,
+            mode=mode,
+            login_shell=login_shell,
+            interactive=interactive,
+            noprofile=startup_changes.get("__noprofile__", False),
+            norc=startup_changes.get("__norc__", False),
+        )
         if startup_changes.get("D", False):
             # bash always labels `-c` input as "-c" in dump output, even when
             # argv[0] for the script body is provided separately.
@@ -196,6 +227,10 @@ def main(argv: List[str] | None = None) -> int:
         dump_mode = str(startup_changes2.get("__dump_mode__", dump_mode))
     mode = _resolve_invocation_mode(sys.argv[0], startup_changes)
     _apply_invocation_mode(mode, startup_changes)
+    if startup_changes.get("__print_help__", False):
+        return _print_help(mode)
+    if startup_changes.get("__print_version__", False):
+        return _print_version(mode)
 
     cli_opts, script, script_args = _split_cli_argv(argv2)
     shebang_args: List[str] = []
@@ -225,6 +260,10 @@ def main(argv: List[str] | None = None) -> int:
         dump_mode = str(startup_changes3.get("__dump_mode__", dump_mode))
     mode = _resolve_invocation_mode(sys.argv[0], startup_changes)
     _apply_invocation_mode(mode, startup_changes)
+    if startup_changes.get("__print_help__", False):
+        return _print_help(mode)
+    if startup_changes.get("__print_version__", False):
+        return _print_version(mode)
     _, full_script, full_script_args = _split_cli_argv(full_argv)
     args = argparse.Namespace(
         dump_lst=dump_lst,
@@ -251,10 +290,24 @@ def main(argv: List[str] | None = None) -> int:
     if interactive and args.script is None:
         if "m" not in startup_changes:
             rt.options["m"] = True
-        _source_startup_files(rt, mode=mode, login_shell=login_shell, interactive=True)
-        return _run_interactive(rt)
+        _source_startup_files(
+            rt,
+            mode=mode,
+            login_shell=login_shell,
+            interactive=True,
+            noprofile=startup_changes.get("__noprofile__", False),
+            norc=startup_changes.get("__norc__", False),
+        )
+        return _run_interactive(rt, noediting=startup_changes.get("__noediting__", False))
 
-    _source_startup_files(rt, mode=mode, login_shell=login_shell, interactive=False)
+    _source_startup_files(
+        rt,
+        mode=mode,
+        login_shell=login_shell,
+        interactive=False,
+        noprofile=startup_changes.get("__noprofile__", False),
+        norc=startup_changes.get("__norc__", False),
+    )
 
     if args.script is None:
         source = sys.stdin.read()
@@ -931,6 +984,34 @@ def _parse_startup_options(argv: List[str]) -> Tuple[Dict[str, bool], List[str],
             changes["posix"] = True
             i += 1
             continue
+        if arg == "--help":
+            changes["__print_help__"] = True
+            i += 1
+            continue
+        if arg == "--version":
+            changes["__print_version__"] = True
+            i += 1
+            continue
+        if arg == "--login":
+            changes["__login__"] = True
+            i += 1
+            continue
+        if arg == "--noprofile":
+            changes["__noprofile__"] = True
+            i += 1
+            continue
+        if arg == "--norc":
+            changes["__norc__"] = True
+            i += 1
+            continue
+        if arg == "--restricted":
+            changes["r"] = True
+            i += 1
+            continue
+        if arg == "--noediting":
+            changes["__noediting__"] = True
+            i += 1
+            continue
         if arg == "--verbose":
             changes["v"] = True
             i += 1
@@ -965,6 +1046,16 @@ def _parse_startup_options(argv: List[str]) -> Tuple[Dict[str, bool], List[str],
                     return changes, out, f"illegal option name: {name}"
             i += 2
             continue
+        if arg in ["-O", "+O"]:
+            on = arg == "-O"
+            if i + 1 >= len(argv):
+                changes["__startup_shopt_list__"] = "set" if on else "reusable"
+                i += 1
+                continue
+            changes["__startup_shopt_name__"] = argv[i + 1]
+            changes["__startup_shopt_set__"] = on
+            i += 2
+            continue
         if (arg.startswith("-") or arg.startswith("+")) and len(arg) > 1 and not arg.startswith("--"):
             on = arg[0] == "-"
             chars = arg[1:]
@@ -975,6 +1066,17 @@ def _parse_startup_options(argv: List[str]) -> Tuple[Dict[str, bool], List[str],
                 out.append(arg)
                 out.extend(argv[i + 1 :])
                 break
+            if "O" in chars:
+                if len(chars) != 1:
+                    return changes, out, "illegal option grouping with -O/+O"
+                if i + 1 >= len(argv):
+                    changes["__startup_shopt_list__"] = "set" if on else "reusable"
+                    i += 1
+                    continue
+                changes["__startup_shopt_name__"] = argv[i + 1]
+                changes["__startup_shopt_set__"] = on
+                i += 2
+                continue
             special = [ch for ch in chars if ch in {"c", "s"}]
             if len(special) > 1:
                 return changes, out, "illegal option grouping with -c/-s"
@@ -1009,6 +1111,22 @@ def _parse_startup_options(argv: List[str]) -> Tuple[Dict[str, bool], List[str],
 
 
 def _apply_startup_options(rt: Runtime, changes: Dict[str, bool]) -> None:
+    shopt_name = str(changes.get("__startup_shopt_name__", "")).strip()
+    if shopt_name:
+        if shopt_name not in rt._shopts:
+            raise RuntimeError(f"line 0: {shopt_name}: invalid shell option name")
+        rt._shopts[shopt_name] = bool(changes.get("__startup_shopt_set__", True))
+    shopt_list_mode = str(changes.get("__startup_shopt_list__", "")).strip()
+    if shopt_list_mode:
+        if shopt_list_mode == "set":
+            for name in sorted(rt._shopts.keys()):
+                val = rt._shopts[name]
+                print(f"{name:<15}\t{'on' if val else 'off'}")
+        else:
+            for name in sorted(rt._shopts.keys()):
+                val = rt._shopts[name]
+                print(f"shopt {'-s' if val else '-u'} {name}")
+        raise SystemExit(0)
     for k, v in changes.items():
         if k.startswith("__"):
             continue
@@ -1110,9 +1228,17 @@ def _emit_dump_strings(source: str, source_name: str, mode: str) -> int:
     return 0
 
 
-def _source_startup_files(rt: Runtime, *, mode: str, login_shell: bool, interactive: bool) -> None:
+def _source_startup_files(
+    rt: Runtime,
+    *,
+    mode: str,
+    login_shell: bool,
+    interactive: bool,
+    noprofile: bool,
+    norc: bool,
+) -> None:
     test_mode = os.environ.get("MCTASH_TEST_MODE", "") == "1"
-    if login_shell:
+    if login_shell and not noprofile:
         login_files: list[str]
         if mode == "bash":
             login_files = [
@@ -1136,9 +1262,10 @@ def _source_startup_files(rt: Runtime, *, mode: str, login_shell: bool, interact
                     loaded_user = True
     if interactive:
         if mode == "bash":
-            bashrc = os.path.expanduser("~/.bashrc")
-            if os.path.exists(bashrc):
-                rt._run_source(bashrc, [])
+            if not norc:
+                bashrc = os.path.expanduser("~/.bashrc")
+                if os.path.exists(bashrc):
+                    rt._run_source(bashrc, [])
         else:
             env_path = rt._get_var("ENV")
             if env_path:
@@ -1173,7 +1300,9 @@ def _try_parse_complete(source: str, aliases: Dict[str, str]) -> tuple[bool, str
         return True, msg
 
 
-def _configure_line_editor(rt: Runtime) -> None:
+def _configure_line_editor(rt: Runtime, *, noediting: bool = False) -> None:
+    if noediting:
+        return
     try:
         import readline  # noqa: F401
     except Exception:
@@ -1208,9 +1337,9 @@ def _expand_history_bang(rt: Runtime, line: str) -> tuple[str | None, str | None
     return rt._history[idx], None
 
 
-def _run_interactive(rt: Runtime) -> int:
+def _run_interactive(rt: Runtime, *, noediting: bool = False) -> int:
     rt._ensure_job_control_ready()
-    _configure_line_editor(rt)
+    _configure_line_editor(rt, noediting=noediting)
     buffer: List[str] = []
     status = 0
     eof_count = 0

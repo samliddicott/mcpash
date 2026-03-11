@@ -25,8 +25,8 @@ Result:
 
 - pass
 - total requirement rows: `422`
-- mapped via explicit case/scenario IDs: `397`
-- mapped via strict runner rows: `25`
+- mapped via explicit case/scenario IDs: `409`
+- mapped via strict runner rows: `13`
 
 ## Notes
 
@@ -34,15 +34,15 @@ Result:
    - `scripts/generate_bash_strict_case_map.py`
 2. Runner-only coverage was reduced by decomposing practical matrix runners into
    concrete scenario IDs (invocation/startup/interactive/job-control lanes).
-3. Remaining runner rows are concentrated in:
-   - option-surface rows not yet decomposed in invocation matrix,
+3. Startup invocation options were implemented and decomposed to strict
+   scenario IDs:
+   - `--help`, `--version`, `-O/+O`, `--login`, `--noprofile`, `--norc`,
+     `--restricted`, `--noediting`.
+4. Remaining runner rows are concentrated in:
+   - rows intentionally validated by higher-level matrix runners, and
    - meta matrix-requirement rows (`C12.MATRIX.*`) that are inherently
      runner/meta-gate assertions.
-4. Probe runs against currently undecomposed invocation options indicate real
-   implementation gaps still to close before those rows can move to strict
-   scenario IDs (for example `--help`, `--version`, `-O/+O`, `--login`,
-   `--noprofile`, `--norc`, `--restricted`, `--noediting`).
-4. Interactive control-character rows retain deterministic strict lanes while
+5. Interactive control-character rows retain deterministic strict lanes while
    keeping literal control-char PTY behavior informational where terminal
    translation is environment-dependent.
 

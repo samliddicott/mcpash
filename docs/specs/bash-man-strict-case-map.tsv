@@ -2,17 +2,17 @@ req_id	strict_case_id	runner	notes
 C1.OPT.LONG.DEBUGGER	runner:run_bash_invocation_option_matrix.sh#C1.OPT.LONG.DEBUGGER	run_bash_invocation_option_matrix.sh	runner asserts req-specific checks in strict mode when available
 C1.OPT.LONG.DUMP_PO_STRINGS	case:invocation.long-dump-po		runner decomposed to concrete strict scenario id
 C1.OPT.LONG.DUMP_STRINGS	case:invocation.long-dump-strings		runner decomposed to concrete strict scenario id
-C1.OPT.LONG.HELP	runner:run_bash_invocation_option_matrix.sh#C1.OPT.LONG.HELP	run_bash_invocation_option_matrix.sh	runner asserts req-specific checks in strict mode when available
+C1.OPT.LONG.HELP	case:invocation.long-help		runner decomposed to concrete strict scenario id
 C1.OPT.LONG.INIT_FILE_FILE	runner:run_bash_invocation_option_matrix.sh#C1.OPT.LONG.INIT_FILE_FILE	run_bash_invocation_option_matrix.sh	runner asserts req-specific checks in strict mode when available
-C1.OPT.LONG.LOGIN	runner:run_bash_invocation_option_matrix.sh#C1.OPT.LONG.LOGIN	run_bash_invocation_option_matrix.sh	runner asserts req-specific checks in strict mode when available
-C1.OPT.LONG.NOEDITING	runner:run_bash_invocation_option_matrix.sh#C1.OPT.LONG.NOEDITING	run_bash_invocation_option_matrix.sh	runner asserts req-specific checks in strict mode when available
-C1.OPT.LONG.NOPROFILE	runner:run_bash_invocation_option_matrix.sh#C1.OPT.LONG.NOPROFILE	run_bash_invocation_option_matrix.sh	runner asserts req-specific checks in strict mode when available
-C1.OPT.LONG.NORC	runner:run_bash_invocation_option_matrix.sh#C1.OPT.LONG.NORC	run_bash_invocation_option_matrix.sh	runner asserts req-specific checks in strict mode when available
-C1.OPT.LONG.POSIX	runner:run_bash_invocation_option_matrix.sh#C1.OPT.LONG.POSIX	run_bash_invocation_option_matrix.sh	runner asserts req-specific checks in strict mode when available
+C1.OPT.LONG.LOGIN	case:invocation.long-login		runner decomposed to concrete strict scenario id
+C1.OPT.LONG.NOEDITING	case:invocation.long-noediting		runner decomposed to concrete strict scenario id
+C1.OPT.LONG.NOPROFILE	case:invocation.long-noprofile		runner decomposed to concrete strict scenario id
+C1.OPT.LONG.NORC	case:invocation.long-norc		runner decomposed to concrete strict scenario id
+C1.OPT.LONG.POSIX	case:invocation.long-posix		runner decomposed to concrete strict scenario id
 C1.OPT.LONG.RCFILE_FILE	runner:run_bash_invocation_option_matrix.sh#C1.OPT.LONG.RCFILE_FILE	run_bash_invocation_option_matrix.sh	runner asserts req-specific checks in strict mode when available
-C1.OPT.LONG.RESTRICTED	runner:run_bash_invocation_option_matrix.sh#C1.OPT.LONG.RESTRICTED	run_bash_invocation_option_matrix.sh	runner asserts req-specific checks in strict mode when available
+C1.OPT.LONG.RESTRICTED	case:invocation.long-restricted		runner decomposed to concrete strict scenario id
 C1.OPT.LONG.VERBOSE	case:invocation.long-verbose		runner decomposed to concrete strict scenario id
-C1.OPT.LONG.VERSION	runner:run_bash_invocation_option_matrix.sh#C1.OPT.LONG.VERSION	run_bash_invocation_option_matrix.sh	runner asserts req-specific checks in strict mode when available
+C1.OPT.LONG.VERSION	case:invocation.long-version		runner decomposed to concrete strict scenario id
 C1.OPT.SET.B	case:bash-man-seto-surface.sh		case id strict assertion
 C1.OPT.SET.C	case:bash-man-seto-surface.sh		case id strict assertion
 C1.OPT.SET.E	case:bash-man-seto-surface.sh		case id strict assertion
@@ -62,14 +62,14 @@ C1.OPT.SETO.XTRACE	case:bash-man-seto-surface.sh		case id strict assertion
 C1.OPT.SHORT.D	case:invocation.short-D		runner decomposed to concrete strict scenario id
 C1.OPT.SHORT.DASHDASH	runner:run_bash_invocation_option_matrix.sh#C1.OPT.SHORT.DASHDASH	run_bash_invocation_option_matrix.sh	runner asserts req-specific checks in strict mode when available
 C1.OPT.SHORT.DASHDASH	runner:run_startup_mode_matrix.sh#C1.OPT.SHORT.DASHDASH	run_startup_mode_matrix.sh	runner asserts req-specific checks in strict mode when available
-C1.OPT.SHORT.O	runner:run_bash_invocation_option_matrix.sh#C1.OPT.SHORT.O	run_bash_invocation_option_matrix.sh	runner asserts req-specific checks in strict mode when available
-C1.OPT.SHORT.PLUSO	runner:run_bash_invocation_option_matrix.sh#C1.OPT.SHORT.PLUSO	run_bash_invocation_option_matrix.sh	runner asserts req-specific checks in strict mode when available
+C1.OPT.SHORT.O	case:invocation.short-O		runner decomposed to concrete strict scenario id
+C1.OPT.SHORT.PLUSO	case:invocation.short-plusO		runner decomposed to concrete strict scenario id
 C1.OPT.SHORT.SINGLEDASH	runner:run_bash_invocation_option_matrix.sh#C1.OPT.SHORT.SINGLEDASH	run_bash_invocation_option_matrix.sh	runner asserts req-specific checks in strict mode when available
 C1.OPT.SHORT.SINGLEDASH	runner:run_startup_mode_matrix.sh#C1.OPT.SHORT.SINGLEDASH	run_startup_mode_matrix.sh	runner asserts req-specific checks in strict mode when available
 C1.OPT.SHORT.c	case:invocation.short-c		runner decomposed to concrete strict scenario id
-C1.OPT.SHORT.i	runner:run_bash_invocation_option_matrix.sh#C1.OPT.SHORT.i	run_bash_invocation_option_matrix.sh	runner asserts req-specific checks in strict mode when available
+C1.OPT.SHORT.i	case:invocation.short-i		runner decomposed to concrete strict scenario id
 C1.OPT.SHORT.l	runner:run_bash_invocation_option_matrix.sh#C1.OPT.SHORT.l	run_bash_invocation_option_matrix.sh	runner asserts req-specific checks in strict mode when available
-C1.OPT.SHORT.r	runner:run_bash_invocation_option_matrix.sh#C1.OPT.SHORT.r	run_bash_invocation_option_matrix.sh	runner asserts req-specific checks in strict mode when available
+C1.OPT.SHORT.r	case:invocation.short-r		runner decomposed to concrete strict scenario id
 C1.OPT.SHORT.s	case:invocation.short-s-with-args		runner decomposed to concrete strict scenario id
 C1.OPT.SHORT.v	case:invocation.short-v		runner decomposed to concrete strict scenario id
 C1.OPT.SHORT.x	case:invocation.short-x		runner decomposed to concrete strict scenario id
