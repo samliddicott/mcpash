@@ -63,12 +63,13 @@ Progress (2026-03-11):
 
 - Implemented strict-case mapping and gate:
   - `docs/specs/bash-man-strict-case-map.tsv`
+  - `scripts/generate_bash_strict_case_map.py`
   - `scripts/check_bash_matrix_strict_cases.py`
   - `make bash-strict-case-map-check`
 - Current mapping coverage:
   - 422/422 rows mapped
-  - 368 mapped via direct case IDs
-  - 54 mapped via strict runner row IDs
+  - 397 mapped via direct case/scenario IDs
+  - 25 mapped via strict runner row IDs
 
 ### Phase 3: Upstream Bash Corpus Differential
 

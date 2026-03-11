@@ -1,32 +1,24 @@
 req_id	strict_case_id	runner	notes
-C1.OPT.SHORT.c	runner:run_bash_invocation_option_matrix.sh#C1.OPT.SHORT.c	run_bash_invocation_option_matrix.sh	runner asserts req-specific checks in strict mode when available
-C1.OPT.SHORT.i	runner:run_bash_invocation_option_matrix.sh#C1.OPT.SHORT.i	run_bash_invocation_option_matrix.sh	runner asserts req-specific checks in strict mode when available
-C1.OPT.SHORT.l	runner:run_bash_invocation_option_matrix.sh#C1.OPT.SHORT.l	run_bash_invocation_option_matrix.sh	runner asserts req-specific checks in strict mode when available
-C1.OPT.SHORT.r	runner:run_bash_invocation_option_matrix.sh#C1.OPT.SHORT.r	run_bash_invocation_option_matrix.sh	runner asserts req-specific checks in strict mode when available
-C1.OPT.SHORT.s	runner:run_bash_invocation_option_matrix.sh#C1.OPT.SHORT.s	run_bash_invocation_option_matrix.sh	runner asserts req-specific checks in strict mode when available
-C1.OPT.SHORT.v	runner:run_bash_invocation_option_matrix.sh#C1.OPT.SHORT.v	run_bash_invocation_option_matrix.sh	runner asserts req-specific checks in strict mode when available
-C1.OPT.SHORT.x	runner:run_bash_invocation_option_matrix.sh#C1.OPT.SHORT.x	run_bash_invocation_option_matrix.sh	runner asserts req-specific checks in strict mode when available
-C1.OPT.SHORT.D	runner:run_bash_invocation_option_matrix.sh#C1.OPT.SHORT.D	run_bash_invocation_option_matrix.sh	runner asserts req-specific checks in strict mode when available
-C1.OPT.SHORT.O	runner:run_bash_invocation_option_matrix.sh#C1.OPT.SHORT.O	run_bash_invocation_option_matrix.sh	runner asserts req-specific checks in strict mode when available
-C1.OPT.SHORT.PLUSO	runner:run_bash_invocation_option_matrix.sh#C1.OPT.SHORT.PLUSO	run_bash_invocation_option_matrix.sh	runner asserts req-specific checks in strict mode when available
-C1.OPT.SHORT.DASHDASH	runner:run_bash_invocation_option_matrix.sh#C1.OPT.SHORT.DASHDASH	run_bash_invocation_option_matrix.sh	runner asserts req-specific checks in strict mode when available
-C1.OPT.SHORT.DASHDASH	runner:run_startup_mode_matrix.sh#C1.OPT.SHORT.DASHDASH	run_startup_mode_matrix.sh	runner asserts req-specific checks in strict mode when available
-C1.OPT.SHORT.SINGLEDASH	runner:run_bash_invocation_option_matrix.sh#C1.OPT.SHORT.SINGLEDASH	run_bash_invocation_option_matrix.sh	runner asserts req-specific checks in strict mode when available
-C1.OPT.SHORT.SINGLEDASH	runner:run_startup_mode_matrix.sh#C1.OPT.SHORT.SINGLEDASH	run_startup_mode_matrix.sh	runner asserts req-specific checks in strict mode when available
 C1.OPT.LONG.DEBUGGER	runner:run_bash_invocation_option_matrix.sh#C1.OPT.LONG.DEBUGGER	run_bash_invocation_option_matrix.sh	runner asserts req-specific checks in strict mode when available
-C1.OPT.LONG.DUMP_PO_STRINGS	runner:run_bash_invocation_option_matrix.sh#C1.OPT.LONG.DUMP_PO_STRINGS	run_bash_invocation_option_matrix.sh	runner asserts req-specific checks in strict mode when available
-C1.OPT.LONG.DUMP_STRINGS	runner:run_bash_invocation_option_matrix.sh#C1.OPT.LONG.DUMP_STRINGS	run_bash_invocation_option_matrix.sh	runner asserts req-specific checks in strict mode when available
+C1.OPT.LONG.DUMP_PO_STRINGS	case:invocation.long-dump-po		runner decomposed to concrete strict scenario id
+C1.OPT.LONG.DUMP_STRINGS	case:invocation.long-dump-strings		runner decomposed to concrete strict scenario id
 C1.OPT.LONG.HELP	runner:run_bash_invocation_option_matrix.sh#C1.OPT.LONG.HELP	run_bash_invocation_option_matrix.sh	runner asserts req-specific checks in strict mode when available
 C1.OPT.LONG.INIT_FILE_FILE	runner:run_bash_invocation_option_matrix.sh#C1.OPT.LONG.INIT_FILE_FILE	run_bash_invocation_option_matrix.sh	runner asserts req-specific checks in strict mode when available
-C1.OPT.LONG.RCFILE_FILE	runner:run_bash_invocation_option_matrix.sh#C1.OPT.LONG.RCFILE_FILE	run_bash_invocation_option_matrix.sh	runner asserts req-specific checks in strict mode when available
 C1.OPT.LONG.LOGIN	runner:run_bash_invocation_option_matrix.sh#C1.OPT.LONG.LOGIN	run_bash_invocation_option_matrix.sh	runner asserts req-specific checks in strict mode when available
 C1.OPT.LONG.NOEDITING	runner:run_bash_invocation_option_matrix.sh#C1.OPT.LONG.NOEDITING	run_bash_invocation_option_matrix.sh	runner asserts req-specific checks in strict mode when available
 C1.OPT.LONG.NOPROFILE	runner:run_bash_invocation_option_matrix.sh#C1.OPT.LONG.NOPROFILE	run_bash_invocation_option_matrix.sh	runner asserts req-specific checks in strict mode when available
 C1.OPT.LONG.NORC	runner:run_bash_invocation_option_matrix.sh#C1.OPT.LONG.NORC	run_bash_invocation_option_matrix.sh	runner asserts req-specific checks in strict mode when available
 C1.OPT.LONG.POSIX	runner:run_bash_invocation_option_matrix.sh#C1.OPT.LONG.POSIX	run_bash_invocation_option_matrix.sh	runner asserts req-specific checks in strict mode when available
+C1.OPT.LONG.RCFILE_FILE	runner:run_bash_invocation_option_matrix.sh#C1.OPT.LONG.RCFILE_FILE	run_bash_invocation_option_matrix.sh	runner asserts req-specific checks in strict mode when available
 C1.OPT.LONG.RESTRICTED	runner:run_bash_invocation_option_matrix.sh#C1.OPT.LONG.RESTRICTED	run_bash_invocation_option_matrix.sh	runner asserts req-specific checks in strict mode when available
-C1.OPT.LONG.VERBOSE	runner:run_bash_invocation_option_matrix.sh#C1.OPT.LONG.VERBOSE	run_bash_invocation_option_matrix.sh	runner asserts req-specific checks in strict mode when available
+C1.OPT.LONG.VERBOSE	case:invocation.long-verbose		runner decomposed to concrete strict scenario id
 C1.OPT.LONG.VERSION	runner:run_bash_invocation_option_matrix.sh#C1.OPT.LONG.VERSION	run_bash_invocation_option_matrix.sh	runner asserts req-specific checks in strict mode when available
+C1.OPT.SET.B	case:bash-man-seto-surface.sh		case id strict assertion
+C1.OPT.SET.C	case:bash-man-seto-surface.sh		case id strict assertion
+C1.OPT.SET.E	case:bash-man-seto-surface.sh		case id strict assertion
+C1.OPT.SET.H	case:bash-man-seto-surface.sh		case id strict assertion
+C1.OPT.SET.P	case:bash-man-seto-surface.sh		case id strict assertion
+C1.OPT.SET.T	case:bash-man-seto-surface.sh		case id strict assertion
 C1.OPT.SET.a	case:bash-man-seto-surface.sh		case id strict assertion
 C1.OPT.SET.b	case:bash-man-seto-surface.sh		case id strict assertion
 C1.OPT.SET.e	case:bash-man-seto-surface.sh		case id strict assertion
@@ -40,12 +32,6 @@ C1.OPT.SET.t	case:bash-man-seto-surface.sh		case id strict assertion
 C1.OPT.SET.u	case:bash-man-seto-surface.sh		case id strict assertion
 C1.OPT.SET.v	case:bash-man-seto-surface.sh		case id strict assertion
 C1.OPT.SET.x	case:bash-man-seto-surface.sh		case id strict assertion
-C1.OPT.SET.B	case:bash-man-seto-surface.sh		case id strict assertion
-C1.OPT.SET.C	case:bash-man-seto-surface.sh		case id strict assertion
-C1.OPT.SET.E	case:bash-man-seto-surface.sh		case id strict assertion
-C1.OPT.SET.H	case:bash-man-seto-surface.sh		case id strict assertion
-C1.OPT.SET.P	case:bash-man-seto-surface.sh		case id strict assertion
-C1.OPT.SET.T	case:bash-man-seto-surface.sh		case id strict assertion
 C1.OPT.SETO.ALLEXPORT	case:bash-man-seto-surface.sh		case id strict assertion
 C1.OPT.SETO.BRACEEXPAND	case:bash-man-seto-surface.sh		case id strict assertion
 C1.OPT.SETO.EMACS	case:bash-man-seto-surface.sh		case id strict assertion
@@ -73,12 +59,117 @@ C1.OPT.SETO.PRIVILEGED	case:bash-man-seto-surface.sh		case id strict assertion
 C1.OPT.SETO.VERBOSE	case:bash-man-seto-surface.sh		case id strict assertion
 C1.OPT.SETO.VI	case:bash-man-seto-surface.sh		case id strict assertion
 C1.OPT.SETO.XTRACE	case:bash-man-seto-surface.sh		case id strict assertion
-C1.STARTUP.01	runner:run_startup_mode_matrix.sh#C1.STARTUP.01	run_startup_mode_matrix.sh	runner asserts req-specific checks in strict mode when available
-C1.STARTUP.02	runner:run_startup_mode_matrix.sh#C1.STARTUP.02	run_startup_mode_matrix.sh	runner asserts req-specific checks in strict mode when available
-C1.STARTUP.03	runner:run_startup_mode_matrix.sh#C1.STARTUP.03	run_startup_mode_matrix.sh	runner asserts req-specific checks in strict mode when available
-C1.STARTUP.04	runner:run_startup_mode_matrix.sh#C1.STARTUP.04	run_startup_mode_matrix.sh	runner asserts req-specific checks in strict mode when available
-C1.STARTUP.05	runner:run_startup_mode_matrix.sh#C1.STARTUP.05	run_startup_mode_matrix.sh	runner asserts req-specific checks in strict mode when available
-C1.STARTUP.06	runner:run_startup_mode_matrix.sh#C1.STARTUP.06	run_startup_mode_matrix.sh	runner asserts req-specific checks in strict mode when available
+C1.OPT.SHORT.D	case:invocation.short-D		runner decomposed to concrete strict scenario id
+C1.OPT.SHORT.DASHDASH	runner:run_bash_invocation_option_matrix.sh#C1.OPT.SHORT.DASHDASH	run_bash_invocation_option_matrix.sh	runner asserts req-specific checks in strict mode when available
+C1.OPT.SHORT.DASHDASH	runner:run_startup_mode_matrix.sh#C1.OPT.SHORT.DASHDASH	run_startup_mode_matrix.sh	runner asserts req-specific checks in strict mode when available
+C1.OPT.SHORT.O	runner:run_bash_invocation_option_matrix.sh#C1.OPT.SHORT.O	run_bash_invocation_option_matrix.sh	runner asserts req-specific checks in strict mode when available
+C1.OPT.SHORT.PLUSO	runner:run_bash_invocation_option_matrix.sh#C1.OPT.SHORT.PLUSO	run_bash_invocation_option_matrix.sh	runner asserts req-specific checks in strict mode when available
+C1.OPT.SHORT.SINGLEDASH	runner:run_bash_invocation_option_matrix.sh#C1.OPT.SHORT.SINGLEDASH	run_bash_invocation_option_matrix.sh	runner asserts req-specific checks in strict mode when available
+C1.OPT.SHORT.SINGLEDASH	runner:run_startup_mode_matrix.sh#C1.OPT.SHORT.SINGLEDASH	run_startup_mode_matrix.sh	runner asserts req-specific checks in strict mode when available
+C1.OPT.SHORT.c	case:invocation.short-c		runner decomposed to concrete strict scenario id
+C1.OPT.SHORT.i	runner:run_bash_invocation_option_matrix.sh#C1.OPT.SHORT.i	run_bash_invocation_option_matrix.sh	runner asserts req-specific checks in strict mode when available
+C1.OPT.SHORT.l	runner:run_bash_invocation_option_matrix.sh#C1.OPT.SHORT.l	run_bash_invocation_option_matrix.sh	runner asserts req-specific checks in strict mode when available
+C1.OPT.SHORT.r	runner:run_bash_invocation_option_matrix.sh#C1.OPT.SHORT.r	run_bash_invocation_option_matrix.sh	runner asserts req-specific checks in strict mode when available
+C1.OPT.SHORT.s	case:invocation.short-s-with-args		runner decomposed to concrete strict scenario id
+C1.OPT.SHORT.v	case:invocation.short-v		runner decomposed to concrete strict scenario id
+C1.OPT.SHORT.x	case:invocation.short-x		runner decomposed to concrete strict scenario id
+C1.STARTUP.01	case:startup.default-bash-mode		runner decomposed to concrete strict scenario id
+C1.STARTUP.02	case:startup.explicit-posix		runner decomposed to concrete strict scenario id
+C1.STARTUP.03	case:startup.bash-env-preload		runner decomposed to concrete strict scenario id
+C1.STARTUP.04	case:startup.arg0-sh-posix		runner decomposed to concrete strict scenario id
+C1.STARTUP.05	case:startup.explicit-posix		runner decomposed to concrete strict scenario id
+C1.STARTUP.05	case:startup.arg0-sh-posix		runner decomposed to concrete strict scenario id
+C1.STARTUP.06	case:startup.restricted-startup		runner decomposed to concrete strict scenario id
+C10.STATE.01	case:bash-man-variables-surface.sh		case id strict assertion
+C10.STATE.01	case:man-bash-posix-14-env-exec-flow.sh		case id strict assertion
+C10.STATE.01	case:bash-builtin-declare-typeset-local.sh		case id strict assertion
+C10.STATE.02	case:bash-man-variables-surface.sh		case id strict assertion
+C10.STATE.02	case:man-bash-posix-14-env-exec-flow.sh		case id strict assertion
+C10.STATE.02	case:bash-builtin-declare-typeset-local.sh		case id strict assertion
+C10.STATE.03	case:bash-man-variables-surface.sh		case id strict assertion
+C10.STATE.03	case:man-bash-posix-14-env-exec-flow.sh		case id strict assertion
+C10.STATE.03	case:bash-builtin-declare-typeset-local.sh		case id strict assertion
+C10.STATE.04	case:bash-man-variables-surface.sh		case id strict assertion
+C10.STATE.04	case:man-bash-posix-14-env-exec-flow.sh		case id strict assertion
+C10.STATE.04	case:bash-builtin-declare-typeset-local.sh		case id strict assertion
+C10.STATE.05	case:bash-man-variables-surface.sh		case id strict assertion
+C10.STATE.05	case:man-bash-posix-14-env-exec-flow.sh		case id strict assertion
+C10.STATE.05	case:bash-builtin-declare-typeset-local.sh		case id strict assertion
+C10.STATE.06	case:bash-man-variables-surface.sh		case id strict assertion
+C10.STATE.06	case:man-bash-posix-14-env-exec-flow.sh		case id strict assertion
+C10.STATE.06	case:bash-builtin-declare-typeset-local.sh		case id strict assertion
+C11.MODE.01	case:bash-man-seto-surface.sh		case id strict assertion
+C11.MODE.02	case:bash-man-seto-surface.sh		case id strict assertion
+C11.MODE.03	case:bash-man-seto-surface.sh		case id strict assertion
+C11.MODE.04	case:bash-man-seto-surface.sh		case id strict assertion
+C11.MODE.05	case:bash-man-seto-surface.sh		case id strict assertion
+C11.SHOPT.ASSOC_EXPAND_ONCE	case:bash-man-shopt-surface.sh		case id strict assertion
+C11.SHOPT.AUTOCD	case:bash-man-shopt-surface.sh		case id strict assertion
+C11.SHOPT.CDABLE_VARS	case:bash-man-shopt-surface.sh		case id strict assertion
+C11.SHOPT.CDSPELL	case:bash-man-shopt-surface.sh		case id strict assertion
+C11.SHOPT.CHECKHASH	case:bash-man-shopt-surface.sh		case id strict assertion
+C11.SHOPT.CHECKJOBS	case:bash-man-shopt-surface.sh		case id strict assertion
+C11.SHOPT.CHECKWINSIZE	case:bash-man-shopt-surface.sh		case id strict assertion
+C11.SHOPT.CMDHIST	case:bash-man-shopt-surface.sh		case id strict assertion
+C11.SHOPT.COMPAT31	case:bash-man-shopt-surface.sh		case id strict assertion
+C11.SHOPT.COMPAT32	case:bash-man-shopt-surface.sh		case id strict assertion
+C11.SHOPT.COMPAT40	case:bash-man-shopt-surface.sh		case id strict assertion
+C11.SHOPT.COMPAT41	case:bash-man-shopt-surface.sh		case id strict assertion
+C11.SHOPT.COMPAT42	case:bash-man-shopt-surface.sh		case id strict assertion
+C11.SHOPT.COMPAT43	case:bash-man-shopt-surface.sh		case id strict assertion
+C11.SHOPT.COMPAT44	case:bash-man-shopt-surface.sh		case id strict assertion
+C11.SHOPT.COMPLETE_FULLQUOTE	case:bash-man-shopt-surface.sh		case id strict assertion
+C11.SHOPT.DIREXPAND	case:bash-man-shopt-surface.sh		case id strict assertion
+C11.SHOPT.DIRSPELL	case:bash-man-shopt-surface.sh		case id strict assertion
+C11.SHOPT.DOTGLOB	case:bash-man-shopt-surface.sh		case id strict assertion
+C11.SHOPT.EXECFAIL	case:bash-man-shopt-surface.sh		case id strict assertion
+C11.SHOPT.EXPAND_ALIASES	case:bash-man-shopt-surface.sh		case id strict assertion
+C11.SHOPT.EXTDEBUG	case:bash-man-shopt-surface.sh		case id strict assertion
+C11.SHOPT.EXTGLOB	case:bash-man-shopt-surface.sh		case id strict assertion
+C11.SHOPT.EXTQUOTE	case:bash-man-shopt-surface.sh		case id strict assertion
+C11.SHOPT.FAILGLOB	case:bash-man-shopt-surface.sh		case id strict assertion
+C11.SHOPT.FORCE_FIGNORE	case:bash-man-shopt-surface.sh		case id strict assertion
+C11.SHOPT.GLOBASCIIRANGES	case:bash-man-shopt-surface.sh		case id strict assertion
+C11.SHOPT.GLOBSTAR	case:bash-man-shopt-surface.sh		case id strict assertion
+C11.SHOPT.GNU_ERRFMT	case:bash-man-shopt-surface.sh		case id strict assertion
+C11.SHOPT.HISTAPPEND	case:bash-man-shopt-surface.sh		case id strict assertion
+C11.SHOPT.HISTREEDIT	case:bash-man-shopt-surface.sh		case id strict assertion
+C11.SHOPT.HISTVERIFY	case:bash-man-shopt-surface.sh		case id strict assertion
+C11.SHOPT.HOSTCOMPLETE	case:bash-man-shopt-surface.sh		case id strict assertion
+C11.SHOPT.HUPONEXIT	case:bash-man-shopt-surface.sh		case id strict assertion
+C11.SHOPT.INHERIT_ERREXIT	case:bash-man-shopt-surface.sh		case id strict assertion
+C11.SHOPT.INTERACTIVE_COMMENTS	case:bash-man-shopt-surface.sh		case id strict assertion
+C11.SHOPT.LASTPIPE	case:bash-man-shopt-surface.sh		case id strict assertion
+C11.SHOPT.LITHIST	case:bash-man-shopt-surface.sh		case id strict assertion
+C11.SHOPT.LOCALVAR_INHERIT	case:bash-man-shopt-surface.sh		case id strict assertion
+C11.SHOPT.LOCALVAR_UNSET	case:bash-man-shopt-surface.sh		case id strict assertion
+C11.SHOPT.LOGIN_SHELL	case:bash-man-shopt-surface.sh		case id strict assertion
+C11.SHOPT.MAILWARN	case:bash-man-shopt-surface.sh		case id strict assertion
+C11.SHOPT.NOCASEGLOB	case:bash-man-shopt-surface.sh		case id strict assertion
+C11.SHOPT.NOCASEMATCH	case:bash-man-shopt-surface.sh		case id strict assertion
+C11.SHOPT.NO_EMPTY_CMD_COMPLETION	case:bash-man-shopt-surface.sh		case id strict assertion
+C11.SHOPT.NULLGLOB	case:bash-man-shopt-surface.sh		case id strict assertion
+C11.SHOPT.PROGCOMP	case:bash-man-shopt-surface.sh		case id strict assertion
+C11.SHOPT.PROGCOMP_ALIAS	case:bash-man-shopt-surface.sh		case id strict assertion
+C11.SHOPT.PROMPTVARS	case:bash-man-shopt-surface.sh		case id strict assertion
+C11.SHOPT.RESTRICTED_SHELL	case:bash-man-shopt-surface.sh		case id strict assertion
+C11.SHOPT.SHIFT_VERBOSE	case:bash-man-shopt-surface.sh		case id strict assertion
+C11.SHOPT.SOURCEPATH	case:bash-man-shopt-surface.sh		case id strict assertion
+C11.SHOPT.XPG_ECHO	case:bash-man-shopt-surface.sh		case id strict assertion
+C12.MATRIX.01	runner:run_bash_posix_man_matrix.sh#C12.MATRIX.01	run_bash_posix_man_matrix.sh	runner asserts req-specific checks in strict mode when available
+C12.MATRIX.01	runner:run_bash_category_bucket_matrix.sh#C12.MATRIX.01	run_bash_category_bucket_matrix.sh	runner asserts req-specific checks in strict mode when available
+C12.MATRIX.02	runner:run_bash_posix_man_matrix.sh#C12.MATRIX.02	run_bash_posix_man_matrix.sh	runner asserts req-specific checks in strict mode when available
+C12.MATRIX.02	runner:run_bash_category_bucket_matrix.sh#C12.MATRIX.02	run_bash_category_bucket_matrix.sh	runner asserts req-specific checks in strict mode when available
+C12.MATRIX.03	runner:run_bash_posix_man_matrix.sh#C12.MATRIX.03	run_bash_posix_man_matrix.sh	runner asserts req-specific checks in strict mode when available
+C12.MATRIX.03	runner:run_bash_category_bucket_matrix.sh#C12.MATRIX.03	run_bash_category_bucket_matrix.sh	runner asserts req-specific checks in strict mode when available
+C12.MATRIX.04	runner:run_bash_posix_man_matrix.sh#C12.MATRIX.04	run_bash_posix_man_matrix.sh	runner asserts req-specific checks in strict mode when available
+C12.MATRIX.04	runner:run_bash_category_bucket_matrix.sh#C12.MATRIX.04	run_bash_category_bucket_matrix.sh	runner asserts req-specific checks in strict mode when available
+C12.MATRIX.05	runner:run_bash_posix_man_matrix.sh#C12.MATRIX.05	run_bash_posix_man_matrix.sh	runner asserts req-specific checks in strict mode when available
+C12.MATRIX.05	runner:run_bash_category_bucket_matrix.sh#C12.MATRIX.05	run_bash_category_bucket_matrix.sh	runner asserts req-specific checks in strict mode when available
+C12.MATRIX.06	runner:run_bash_posix_man_matrix.sh#C12.MATRIX.06	run_bash_posix_man_matrix.sh	runner asserts req-specific checks in strict mode when available
+C12.MATRIX.06	runner:run_bash_category_bucket_matrix.sh#C12.MATRIX.06	run_bash_category_bucket_matrix.sh	runner asserts req-specific checks in strict mode when available
+C12.MATRIX.07	runner:run_bash_posix_man_matrix.sh#C12.MATRIX.07	run_bash_posix_man_matrix.sh	runner asserts req-specific checks in strict mode when available
+C12.MATRIX.07	runner:run_bash_category_bucket_matrix.sh#C12.MATRIX.07	run_bash_category_bucket_matrix.sh	runner asserts req-specific checks in strict mode when available
 C2.GRAM.001	case:bash-man-grammar-core.sh		case id strict assertion
 C2.GRAM.002	case:bash-man-grammar-core.sh		case id strict assertion
 C2.GRAM.003	case:bash-man-grammar-core.sh		case id strict assertion
@@ -178,9 +269,6 @@ C4.REDIR.018	case:man-ash-redir-heredoc-matrix.sh		case id strict assertion
 C4.REDIR.019	case:bash-man-redir-bash-ext.sh		case id strict assertion
 C4.REDIR.020	case:bash-man-redir-bash-ext.sh		case id strict assertion
 C4.REDIR.021	case:man-ash-redir-heredoc-matrix.sh		case id strict assertion
-C5.BUILTIN.DOT	case:man-bash-posix-05-dot-source		case id strict assertion
-C5.BUILTIN.COLON	case:man-bash-posix-04-misc-builtins		case id strict assertion
-C5.BUILTIN.LBRACK	case:man-bash-posix-03-io-signals.sh		case id strict assertion
 C5.BUILTIN.ALIAS	case:man-bash-posix-04-misc-builtins		case id strict assertion
 C5.BUILTIN.BG	case:man-bash-posix-10-jobs-fg-bg-interactive		case id strict assertion
 C5.BUILTIN.BIND	case:bash-builtin-completion		case id strict assertion
@@ -188,6 +276,7 @@ C5.BUILTIN.BREAK	case:man-bash-posix-06-loop-control		case id strict assertion
 C5.BUILTIN.BUILTIN	case:man-bash-posix-07-builtin-dispatch		case id strict assertion
 C5.BUILTIN.CALLER	case:man-bash-posix-11-extension-builtins-core		case id strict assertion
 C5.BUILTIN.CD	case:man-bash-posix-02-path-command		case id strict assertion
+C5.BUILTIN.COLON	case:man-bash-posix-04-misc-builtins		case id strict assertion
 C5.BUILTIN.COMMAND	case:man-bash-posix-02-path-command		case id strict assertion
 C5.BUILTIN.COMPGEN	case:bash-builtin-completion		case id strict assertion
 C5.BUILTIN.COMPLETE	case:bash-builtin-completion		case id strict assertion
@@ -196,6 +285,7 @@ C5.BUILTIN.CONTINUE	case:man-bash-posix-06-loop-control		case id strict assertio
 C5.BUILTIN.DECLARE	case:man-bash-posix-08-declare-posix-policy		case id strict assertion
 C5.BUILTIN.DIRS	case:bash-builtin-dirstack		case id strict assertion
 C5.BUILTIN.DISOWN	case:bash-builtin-disown		case id strict assertion
+C5.BUILTIN.DOT	case:man-bash-posix-05-dot-source		case id strict assertion
 C5.BUILTIN.ECHO	case:man-bash-posix-04-misc-builtins		case id strict assertion
 C5.BUILTIN.ENABLE	case:bash-builtin-enable		case id strict assertion
 C5.BUILTIN.EVAL	case:man-bash-posix-04-misc-builtins		case id strict assertion
@@ -204,8 +294,8 @@ C5.BUILTIN.EXIT	case:man-bash-posix-09-return-exit		case id strict assertion
 C5.BUILTIN.EXPORT	case:man-bash-posix-01-core-state		case id strict assertion
 C5.BUILTIN.FALSE	case:man-bash-posix-04-misc-builtins		case id strict assertion
 C5.BUILTIN.FC	case:man-ash-fc		case id strict assertion
-C5.BUILTIN.FC.ENV	case:man-ash-fc-editor-env		case id strict assertion
 C5.BUILTIN.FC.EMPTY	case:man-ash-fc-empty-history		case id strict assertion
+C5.BUILTIN.FC.ENV	case:man-ash-fc-editor-env		case id strict assertion
 C5.BUILTIN.FC.EOVERRIDE	case:man-ash-fc-e-override		case id strict assertion
 C5.BUILTIN.FC.REF	case:man-ash-fc-ref-precedence		case id strict assertion
 C5.BUILTIN.FG	case:man-bash-posix-10-jobs-fg-bg-interactive		case id strict assertion
@@ -215,6 +305,7 @@ C5.BUILTIN.HELP	case:bash-builtin-help		case id strict assertion
 C5.BUILTIN.HISTORY	case:man-bash-posix-12-history-suspend-logout		case id strict assertion
 C5.BUILTIN.JOBS	case:man-bash-posix-10-jobs-fg-bg-interactive		case id strict assertion
 C5.BUILTIN.KILL	case:man-bash-posix-03-io-signals		case id strict assertion
+C5.BUILTIN.LBRACK	case:man-bash-posix-03-io-signals.sh		case id strict assertion
 C5.BUILTIN.LET	case:man-bash-posix-11-extension-builtins-core		case id strict assertion
 C5.BUILTIN.LOCAL	case:bash-builtin-declare-typeset-local		case id strict assertion
 C5.BUILTIN.LOGOUT	case:man-bash-posix-12-history-suspend-logout		case id strict assertion
@@ -252,90 +343,91 @@ C6.SPARAM.06	case:bash-compat-param-positional-extended.sh		case id strict asser
 C6.SPARAM.07	case:bash-compat-param-positional-extended.sh		case id strict assertion
 C6.SPARAM.08	case:bash-compat-param-positional-extended.sh		case id strict assertion
 C6.SPARAM.09	case:bash-compat-param-positional-extended.sh		case id strict assertion
+C6.VAR.BASH.BASH	case:bash-man-variables-surface.sh		case id strict assertion
+C6.VAR.BASH.BASHOPTS	case:bash-man-variables-surface.sh		case id strict assertion
+C6.VAR.BASH.BASHPID	case:bash-man-variables-surface.sh		case id strict assertion
+C6.VAR.BASH.BASH_ARGC	case:bash-man-variables-surface.sh		case id strict assertion
+C6.VAR.BASH.BASH_ARGV	case:bash-man-variables-surface.sh		case id strict assertion
+C6.VAR.BASH.BASH_ARGV0	case:bash-man-variables-surface.sh		case id strict assertion
+C6.VAR.BASH.BASH_CMDS	case:bash-man-variables-surface.sh		case id strict assertion
+C6.VAR.BASH.BASH_COMMAND	case:bash-man-variables-surface.sh		case id strict assertion
+C6.VAR.BASH.BASH_COMPAT	case:bash-man-variables-surface.sh		case id strict assertion
+C6.VAR.BASH.BASH_ENV	case:bash-man-variables-surface.sh		case id strict assertion
+C6.VAR.BASH.BASH_LINENO	case:bash-man-variables-surface.sh		case id strict assertion
+C6.VAR.BASH.BASH_LOADABLES_PATH	case:bash-man-variables-surface.sh		case id strict assertion
+C6.VAR.BASH.BASH_REMATCH	case:bash-man-variables-surface.sh		case id strict assertion
+C6.VAR.BASH.BASH_SOURCE	case:bash-man-variables-surface.sh		case id strict assertion
+C6.VAR.BASH.BASH_SUBSHELL	case:bash-man-variables-surface.sh		case id strict assertion
+C6.VAR.BASH.BASH_VERSINFO	case:bash-man-variables-surface.sh		case id strict assertion
+C6.VAR.BASH.BASH_VERSION	case:bash-man-variables-surface.sh		case id strict assertion
+C6.VAR.BASH.BASH_XTRACEFD	case:bash-man-variables-surface.sh		case id strict assertion
+C6.VAR.BASH.BASH_XTRACEFD	case:bash-man-bash_xtracefd.sh		case id strict assertion
+C6.VAR.BASH.COMPREPLY	case:bash-man-variables-surface.sh		case id strict assertion
+C6.VAR.BASH.COMP_CWORD	case:bash-man-variables-surface.sh		case id strict assertion
+C6.VAR.BASH.COMP_KEY	case:bash-man-variables-surface.sh		case id strict assertion
+C6.VAR.BASH.COMP_LINE	case:bash-man-variables-surface.sh		case id strict assertion
+C6.VAR.BASH.COMP_POINT	case:bash-man-variables-surface.sh		case id strict assertion
+C6.VAR.BASH.COMP_TYPE	case:bash-man-variables-surface.sh		case id strict assertion
+C6.VAR.BASH.COMP_WORDBREAKS	case:bash-man-variables-surface.sh		case id strict assertion
+C6.VAR.BASH.COMP_WORDS	case:bash-man-variables-surface.sh		case id strict assertion
+C6.VAR.BASH.COPROC	case:bash-man-variables-surface.sh		case id strict assertion
+C6.VAR.BASH.DIRSTACK	case:bash-man-variables-surface.sh		case id strict assertion
+C6.VAR.BASH.EPOCHREALTIME	case:bash-man-variables-surface.sh		case id strict assertion
+C6.VAR.BASH.EPOCHSECONDS	case:bash-man-variables-surface.sh		case id strict assertion
+C6.VAR.BASH.EUID	case:bash-man-variables-surface.sh		case id strict assertion
+C6.VAR.BASH.FCEDIT	case:bash-man-variables-surface.sh		case id strict assertion
+C6.VAR.BASH.FUNCNAME	case:bash-man-variables-surface.sh		case id strict assertion
+C6.VAR.BASH.GROUPS	case:bash-man-variables-surface.sh		case id strict assertion
+C6.VAR.BASH.HISTCONTROL	case:bash-man-variables-surface.sh		case id strict assertion
+C6.VAR.BASH.HISTFILE	case:bash-man-variables-surface.sh		case id strict assertion
+C6.VAR.BASH.HISTFILESIZE	case:bash-man-variables-surface.sh		case id strict assertion
+C6.VAR.BASH.HISTIGNORE	case:bash-man-variables-surface.sh		case id strict assertion
+C6.VAR.BASH.HISTSIZE	case:bash-man-variables-surface.sh		case id strict assertion
+C6.VAR.BASH.HISTTIMEFORMAT	case:bash-man-variables-surface.sh		case id strict assertion
+C6.VAR.BASH.HISTTIMEFORMAT	case:bash-man-histtimeformat.sh		case id strict assertion
+C6.VAR.BASH.HOSTFILE	case:bash-man-variables-surface.sh		case id strict assertion
+C6.VAR.BASH.PPID	case:bash-man-variables-surface.sh		case id strict assertion
+C6.VAR.BASH.PROMPT_COMMAND	case:bash-man-variables-surface.sh		case id strict assertion
+C6.VAR.BASH.PS0	case:bash-man-variables-surface.sh		case id strict assertion
+C6.VAR.BASH.PS3	case:bash-man-variables-surface.sh		case id strict assertion
+C6.VAR.BASH.PS4	case:bash-man-variables-surface.sh		case id strict assertion
+C6.VAR.BASH.RANDOM	case:bash-man-variables-surface.sh		case id strict assertion
+C6.VAR.BASH.REPLY	case:bash-man-variables-surface.sh		case id strict assertion
+C6.VAR.BASH.SECONDS	case:bash-man-variables-surface.sh		case id strict assertion
+C6.VAR.BASH.SHELLOPTS	case:bash-man-variables-surface.sh		case id strict assertion
+C6.VAR.BASH.SRANDOM	case:bash-man-variables-surface.sh		case id strict assertion
+C6.VAR.BASH.TIMEFORMAT	case:bash-man-timeformat.sh		case id strict assertion
+C6.VAR.BASH.TMOUT	case:bash-man-variables-surface.sh		case id strict assertion
+C6.VAR.BASH.UID	case:bash-man-variables-surface.sh		case id strict assertion
+C6.VAR.CORE.ENV	case:bash-man-variables-surface.sh		case id strict assertion
 C6.VAR.CORE.HOME	case:bash-man-variables-surface.sh		case id strict assertion
-C6.VAR.CORE.PATH	case:bash-man-variables-surface.sh		case id strict assertion
 C6.VAR.CORE.IFS	case:bash-man-variables-surface.sh		case id strict assertion
-C6.VAR.CORE.PWD	case:bash-man-variables-surface.sh		case id strict assertion
-C6.VAR.CORE.OLDPWD	case:bash-man-variables-surface.sh		case id strict assertion
-C6.VAR.CORE.OPTIND	case:bash-man-variables-surface.sh		case id strict assertion
-C6.VAR.CORE.OPTARG	case:bash-man-variables-surface.sh		case id strict assertion
-C6.VAR.CORE.PS1	case:bash-man-variables-surface.sh		case id strict assertion
-C6.VAR.CORE.PS2	case:bash-man-variables-surface.sh		case id strict assertion
-C6.VAR.CORE.MAIL	case:bash-man-variables-surface.sh		case id strict assertion
-C6.VAR.CORE.MAILPATH	case:bash-man-variables-surface.sh		case id strict assertion
 C6.VAR.CORE.LANG	case:bash-man-variables-surface.sh		case id strict assertion
 C6.VAR.CORE.LC_ALL	case:bash-man-variables-surface.sh		case id strict assertion
 C6.VAR.CORE.LC_CTYPE	case:bash-man-variables-surface.sh		case id strict assertion
 C6.VAR.CORE.LC_MESSAGES	case:bash-man-variables-surface.sh		case id strict assertion
 C6.VAR.CORE.LINENO	case:bash-man-variables-surface.sh		case id strict assertion
-C6.VAR.CORE.ENV	case:bash-man-variables-surface.sh		case id strict assertion
-C6.VAR.BASH.BASH	case:bash-man-variables-surface.sh		case id strict assertion
-C6.VAR.BASH.BASH_VERSION	case:bash-man-variables-surface.sh		case id strict assertion
-C6.VAR.BASH.BASH_VERSINFO	case:bash-man-variables-surface.sh		case id strict assertion
-C6.VAR.BASH.BASH_SOURCE	case:bash-man-variables-surface.sh		case id strict assertion
-C6.VAR.BASH.BASH_LINENO	case:bash-man-variables-surface.sh		case id strict assertion
-C6.VAR.BASH.BASH_COMMAND	case:bash-man-variables-surface.sh		case id strict assertion
-C6.VAR.BASH.BASH_SUBSHELL	case:bash-man-variables-surface.sh		case id strict assertion
-C6.VAR.BASH.BASHPID	case:bash-man-variables-surface.sh		case id strict assertion
-C6.VAR.BASH.BASHOPTS	case:bash-man-variables-surface.sh		case id strict assertion
-C6.VAR.BASH.SHELLOPTS	case:bash-man-variables-surface.sh		case id strict assertion
-C6.VAR.BASH.BASH_COMPAT	case:bash-man-variables-surface.sh		case id strict assertion
-C6.VAR.BASH.BASH_ENV	case:bash-man-variables-surface.sh		case id strict assertion
-C6.VAR.BASH.BASH_ARGC	case:bash-man-variables-surface.sh		case id strict assertion
-C6.VAR.BASH.BASH_ARGV	case:bash-man-variables-surface.sh		case id strict assertion
-C6.VAR.BASH.BASH_ARGV0	case:bash-man-variables-surface.sh		case id strict assertion
-C6.VAR.BASH.BASH_CMDS	case:bash-man-variables-surface.sh		case id strict assertion
-C6.VAR.BASH.BASH_REMATCH	case:bash-man-variables-surface.sh		case id strict assertion
-C6.VAR.BASH.BASH_LOADABLES_PATH	case:bash-man-variables-surface.sh		case id strict assertion
-C6.VAR.BASH.BASH_XTRACEFD	case:bash-man-variables-surface.sh		case id strict assertion
-C6.VAR.BASH.BASH_XTRACEFD	case:bash-man-bash_xtracefd.sh		case id strict assertion
-C6.VAR.BASH.EPOCHREALTIME	case:bash-man-variables-surface.sh		case id strict assertion
-C6.VAR.BASH.EPOCHSECONDS	case:bash-man-variables-surface.sh		case id strict assertion
-C6.VAR.BASH.RANDOM	case:bash-man-variables-surface.sh		case id strict assertion
-C6.VAR.BASH.SECONDS	case:bash-man-variables-surface.sh		case id strict assertion
-C6.VAR.BASH.SRANDOM	case:bash-man-variables-surface.sh		case id strict assertion
-C6.VAR.BASH.EUID	case:bash-man-variables-surface.sh		case id strict assertion
-C6.VAR.BASH.UID	case:bash-man-variables-surface.sh		case id strict assertion
-C6.VAR.BASH.PPID	case:bash-man-variables-surface.sh		case id strict assertion
-C6.VAR.BASH.GROUPS	case:bash-man-variables-surface.sh		case id strict assertion
-C6.VAR.BASH.DIRSTACK	case:bash-man-variables-surface.sh		case id strict assertion
-C6.VAR.BASH.FUNCNAME	case:bash-man-variables-surface.sh		case id strict assertion
-C6.VAR.BASH.COPROC	case:bash-man-variables-surface.sh		case id strict assertion
-C6.VAR.BASH.REPLY	case:bash-man-variables-surface.sh		case id strict assertion
-C6.VAR.BASH.PROMPT_COMMAND	case:bash-man-variables-surface.sh		case id strict assertion
-C6.VAR.BASH.PS0	case:bash-man-variables-surface.sh		case id strict assertion
-C6.VAR.BASH.PS3	case:bash-man-variables-surface.sh		case id strict assertion
-C6.VAR.BASH.PS4	case:bash-man-variables-surface.sh		case id strict assertion
-C6.VAR.BASH.TIMEFORMAT	case:bash-man-timeformat.sh		case id strict assertion
-C6.VAR.BASH.COMP_LINE	case:bash-man-variables-surface.sh		case id strict assertion
-C6.VAR.BASH.COMP_POINT	case:bash-man-variables-surface.sh		case id strict assertion
-C6.VAR.BASH.COMP_WORDS	case:bash-man-variables-surface.sh		case id strict assertion
-C6.VAR.BASH.COMP_CWORD	case:bash-man-variables-surface.sh		case id strict assertion
-C6.VAR.BASH.COMP_WORDBREAKS	case:bash-man-variables-surface.sh		case id strict assertion
-C6.VAR.BASH.COMP_TYPE	case:bash-man-variables-surface.sh		case id strict assertion
-C6.VAR.BASH.COMP_KEY	case:bash-man-variables-surface.sh		case id strict assertion
-C6.VAR.BASH.COMPREPLY	case:bash-man-variables-surface.sh		case id strict assertion
-C6.VAR.BASH.HISTFILE	case:bash-man-variables-surface.sh		case id strict assertion
-C6.VAR.BASH.HISTSIZE	case:bash-man-variables-surface.sh		case id strict assertion
-C6.VAR.BASH.HISTFILESIZE	case:bash-man-variables-surface.sh		case id strict assertion
-C6.VAR.BASH.HISTCONTROL	case:bash-man-variables-surface.sh		case id strict assertion
-C6.VAR.BASH.HISTIGNORE	case:bash-man-variables-surface.sh		case id strict assertion
-C6.VAR.BASH.HISTTIMEFORMAT	case:bash-man-variables-surface.sh		case id strict assertion
-C6.VAR.BASH.HISTTIMEFORMAT	case:bash-man-histtimeformat.sh		case id strict assertion
-C6.VAR.BASH.HOSTFILE	case:bash-man-variables-surface.sh		case id strict assertion
-C6.VAR.BASH.FCEDIT	case:bash-man-variables-surface.sh		case id strict assertion
-C6.VAR.BASH.TMOUT	case:bash-man-variables-surface.sh		case id strict assertion
-C7.INT.01	runner:run_interactive_ux_matrix.sh#C7.INT.01	run_interactive_ux_matrix.sh	runner asserts req-specific checks in strict mode when available
-C7.INT.02	runner:run_interactive_ux_matrix.sh#C7.INT.02	run_interactive_ux_matrix.sh	runner asserts req-specific checks in strict mode when available
-C7.INT.03	runner:run_interactive_ux_matrix.sh#C7.INT.03	run_interactive_ux_matrix.sh	runner asserts req-specific checks in strict mode when available
+C6.VAR.CORE.MAIL	case:bash-man-variables-surface.sh		case id strict assertion
+C6.VAR.CORE.MAILPATH	case:bash-man-variables-surface.sh		case id strict assertion
+C6.VAR.CORE.OLDPWD	case:bash-man-variables-surface.sh		case id strict assertion
+C6.VAR.CORE.OPTARG	case:bash-man-variables-surface.sh		case id strict assertion
+C6.VAR.CORE.OPTIND	case:bash-man-variables-surface.sh		case id strict assertion
+C6.VAR.CORE.PATH	case:bash-man-variables-surface.sh		case id strict assertion
+C6.VAR.CORE.PS1	case:bash-man-variables-surface.sh		case id strict assertion
+C6.VAR.CORE.PS2	case:bash-man-variables-surface.sh		case id strict assertion
+C6.VAR.CORE.PWD	case:bash-man-variables-surface.sh		case id strict assertion
+C7.INT.01	case:interactive.prompt-escapes		runner decomposed to concrete strict scenario id
+C7.INT.02	case:interactive.prompt-command		runner decomposed to concrete strict scenario id
+C7.INT.03	case:interactive.readline-mode		runner decomposed to concrete strict scenario id
 C7.INT.04	case:bash-builtin-completion.sh		case id strict assertion
 C7.INT.05	case:man-bash-posix-12-history-suspend-logout.sh		case id strict assertion
 C7.INT.06	case:man-bash-posix-12-history-suspend-logout.sh		case id strict assertion
 C7.INT.07	case:man-bash-posix-12-history-suspend-logout.sh		case id strict assertion
-C7.INT.07.FC	runner:run_fc_interactive_matrix.sh#C7.INT.07.FC	run_fc_interactive_matrix.sh	runner asserts req-specific checks in strict mode when available
+C7.INT.07.FC	case:interactive.fc-flow		runner decomposed to concrete strict scenario id
 C7.INT.08	case:bash-builtin-completion.sh		case id strict assertion
 C7.INT.09	case:bash-builtin-completion.sh		case id strict assertion
-C7.INT.10	runner:run_interactive_ux_matrix.sh#C7.INT.10	run_interactive_ux_matrix.sh	runner asserts req-specific checks in strict mode when available
+C7.INT.10	case:interactive.interactive-comments		runner decomposed to concrete strict scenario id
+C7.INT.11	case:interactive.prompt-expansion		runner decomposed to concrete strict scenario id
 C8.JOB.01	case:man-bash-posix-13-exec-errors-signals-jobs.sh		case id strict assertion
 C8.JOB.02	case:man-bash-posix-10-jobs-fg-bg-interactive.sh		case id strict assertion
 C8.JOB.02	case:man-ash-jobs.sh		case id strict assertion
@@ -356,6 +448,24 @@ C8.JOB.10	case:man-ash-trap-signal-matrix.sh		case id strict assertion
 C8.JOB.10	case:man-ash-trap-delivery.sh		case id strict assertion
 C8.JOB.11	case:man-ash-set-monitor.sh		case id strict assertion
 C8.JOB.12	case:man-ash-set-monitor.sh		case id strict assertion
+C8.JOB.13	case:interactive-sigint.strict-child-sigint		runner decomposed to concrete strict scenario id
+C8.JOB.14	case:man-bash-posix-10-jobs-fg-bg-interactive.sh		case id strict assertion
+C8.JOB.15	case:man-bash-posix-10-jobs-fg-bg-interactive.sh		case id strict assertion
+C8.JOB.16	case:jobs.fg-basic		runner decomposed to concrete strict scenario id
+C8.JOB.16	case:jobs.bg-basic		runner decomposed to concrete strict scenario id
+C8.JOB.17	case:bash-man-jobcontrol-foreground-signals.sh		case id strict assertion
+C8.JOB.18	case:job-tty-stop.ttin		runner decomposed to concrete strict scenario id
+C8.JOB.19	case:job-tty-stop.ttou		runner decomposed to concrete strict scenario id
+C8.JOB.20	case:jobs-suspend.ctrl-z		runner decomposed to concrete strict scenario id
+C8.JOB.21	case:bash-man-jobcontrol-suspend-y.sh		case id strict assertion
+C8.JOB.22	case:bash-man-jobcontrol-jobspec-core.sh		case id strict assertion
+C8.JOB.23	case:bash-man-jobcontrol-jobspec-match.sh		case id strict assertion
+C8.JOB.24	case:bash-man-jobcontrol-jobspec-command-forms.sh		case id strict assertion
+C8.JOB.25	case:jobs-notify.defer-vs-set-b		runner decomposed to concrete strict scenario id
+C8.JOB.26	case:bash-man-jobcontrol-sigchld-per-child.sh		case id strict assertion
+C8.JOB.27	case:jobs-exitwarn.warn-once		runner decomposed to concrete strict scenario id
+C8.JOB.28	case:jobs.wait-state-change		runner decomposed to concrete strict scenario id
+C8.JOB.29	case:jobs.wait-f-termination		runner decomposed to concrete strict scenario id
 C9.COMP.01	case:man-bash-posix-08-declare-posix-policy.sh		case id strict assertion
 C9.COMP.02	case:man-bash-posix-08-declare-posix-policy.sh		case id strict assertion
 C9.COMP.03	case:man-bash-posix-08-declare-posix-policy.sh		case id strict assertion
@@ -363,112 +473,3 @@ C9.COMP.04	case:man-bash-posix-08-declare-posix-policy.sh		case id strict assert
 C9.COMP.05	case:man-bash-posix-08-declare-posix-policy.sh		case id strict assertion
 C9.COMP.06	case:man-bash-posix-08-declare-posix-policy.sh		case id strict assertion
 C9.COMP.07	case:man-bash-posix-08-declare-posix-policy.sh		case id strict assertion
-C10.STATE.01	case:bash-man-variables-surface.sh		case id strict assertion
-C10.STATE.01	case:man-bash-posix-14-env-exec-flow.sh		case id strict assertion
-C10.STATE.01	case:bash-builtin-declare-typeset-local.sh		case id strict assertion
-C10.STATE.02	case:bash-man-variables-surface.sh		case id strict assertion
-C10.STATE.02	case:man-bash-posix-14-env-exec-flow.sh		case id strict assertion
-C10.STATE.02	case:bash-builtin-declare-typeset-local.sh		case id strict assertion
-C10.STATE.03	case:bash-man-variables-surface.sh		case id strict assertion
-C10.STATE.03	case:man-bash-posix-14-env-exec-flow.sh		case id strict assertion
-C10.STATE.03	case:bash-builtin-declare-typeset-local.sh		case id strict assertion
-C10.STATE.04	case:bash-man-variables-surface.sh		case id strict assertion
-C10.STATE.04	case:man-bash-posix-14-env-exec-flow.sh		case id strict assertion
-C10.STATE.04	case:bash-builtin-declare-typeset-local.sh		case id strict assertion
-C10.STATE.05	case:bash-man-variables-surface.sh		case id strict assertion
-C10.STATE.05	case:man-bash-posix-14-env-exec-flow.sh		case id strict assertion
-C10.STATE.05	case:bash-builtin-declare-typeset-local.sh		case id strict assertion
-C10.STATE.06	case:bash-man-variables-surface.sh		case id strict assertion
-C10.STATE.06	case:man-bash-posix-14-env-exec-flow.sh		case id strict assertion
-C10.STATE.06	case:bash-builtin-declare-typeset-local.sh		case id strict assertion
-C11.SHOPT.ASSOC_EXPAND_ONCE	case:bash-man-shopt-surface.sh		case id strict assertion
-C11.SHOPT.AUTOCD	case:bash-man-shopt-surface.sh		case id strict assertion
-C11.SHOPT.CDABLE_VARS	case:bash-man-shopt-surface.sh		case id strict assertion
-C11.SHOPT.CDSPELL	case:bash-man-shopt-surface.sh		case id strict assertion
-C11.SHOPT.CHECKHASH	case:bash-man-shopt-surface.sh		case id strict assertion
-C11.SHOPT.CHECKJOBS	case:bash-man-shopt-surface.sh		case id strict assertion
-C11.SHOPT.CHECKWINSIZE	case:bash-man-shopt-surface.sh		case id strict assertion
-C11.SHOPT.CMDHIST	case:bash-man-shopt-surface.sh		case id strict assertion
-C11.SHOPT.COMPAT31	case:bash-man-shopt-surface.sh		case id strict assertion
-C11.SHOPT.COMPAT32	case:bash-man-shopt-surface.sh		case id strict assertion
-C11.SHOPT.COMPAT40	case:bash-man-shopt-surface.sh		case id strict assertion
-C11.SHOPT.COMPAT41	case:bash-man-shopt-surface.sh		case id strict assertion
-C11.SHOPT.COMPAT42	case:bash-man-shopt-surface.sh		case id strict assertion
-C11.SHOPT.COMPAT43	case:bash-man-shopt-surface.sh		case id strict assertion
-C11.SHOPT.COMPAT44	case:bash-man-shopt-surface.sh		case id strict assertion
-C11.SHOPT.COMPLETE_FULLQUOTE	case:bash-man-shopt-surface.sh		case id strict assertion
-C11.SHOPT.DIREXPAND	case:bash-man-shopt-surface.sh		case id strict assertion
-C11.SHOPT.DIRSPELL	case:bash-man-shopt-surface.sh		case id strict assertion
-C11.SHOPT.DOTGLOB	case:bash-man-shopt-surface.sh		case id strict assertion
-C11.SHOPT.EXECFAIL	case:bash-man-shopt-surface.sh		case id strict assertion
-C11.SHOPT.EXPAND_ALIASES	case:bash-man-shopt-surface.sh		case id strict assertion
-C11.SHOPT.EXTDEBUG	case:bash-man-shopt-surface.sh		case id strict assertion
-C11.SHOPT.EXTGLOB	case:bash-man-shopt-surface.sh		case id strict assertion
-C11.SHOPT.EXTQUOTE	case:bash-man-shopt-surface.sh		case id strict assertion
-C11.SHOPT.FAILGLOB	case:bash-man-shopt-surface.sh		case id strict assertion
-C11.SHOPT.FORCE_FIGNORE	case:bash-man-shopt-surface.sh		case id strict assertion
-C11.SHOPT.GLOBASCIIRANGES	case:bash-man-shopt-surface.sh		case id strict assertion
-C11.SHOPT.GLOBSTAR	case:bash-man-shopt-surface.sh		case id strict assertion
-C11.SHOPT.GNU_ERRFMT	case:bash-man-shopt-surface.sh		case id strict assertion
-C11.SHOPT.HISTAPPEND	case:bash-man-shopt-surface.sh		case id strict assertion
-C11.SHOPT.HISTREEDIT	case:bash-man-shopt-surface.sh		case id strict assertion
-C11.SHOPT.HISTVERIFY	case:bash-man-shopt-surface.sh		case id strict assertion
-C11.SHOPT.HOSTCOMPLETE	case:bash-man-shopt-surface.sh		case id strict assertion
-C11.SHOPT.HUPONEXIT	case:bash-man-shopt-surface.sh		case id strict assertion
-C11.SHOPT.INHERIT_ERREXIT	case:bash-man-shopt-surface.sh		case id strict assertion
-C11.SHOPT.INTERACTIVE_COMMENTS	case:bash-man-shopt-surface.sh		case id strict assertion
-C11.SHOPT.LASTPIPE	case:bash-man-shopt-surface.sh		case id strict assertion
-C11.SHOPT.LITHIST	case:bash-man-shopt-surface.sh		case id strict assertion
-C11.SHOPT.LOCALVAR_INHERIT	case:bash-man-shopt-surface.sh		case id strict assertion
-C11.SHOPT.LOCALVAR_UNSET	case:bash-man-shopt-surface.sh		case id strict assertion
-C11.SHOPT.LOGIN_SHELL	case:bash-man-shopt-surface.sh		case id strict assertion
-C11.SHOPT.MAILWARN	case:bash-man-shopt-surface.sh		case id strict assertion
-C11.SHOPT.NO_EMPTY_CMD_COMPLETION	case:bash-man-shopt-surface.sh		case id strict assertion
-C11.SHOPT.NOCASEGLOB	case:bash-man-shopt-surface.sh		case id strict assertion
-C11.SHOPT.NOCASEMATCH	case:bash-man-shopt-surface.sh		case id strict assertion
-C11.SHOPT.NULLGLOB	case:bash-man-shopt-surface.sh		case id strict assertion
-C11.SHOPT.PROGCOMP	case:bash-man-shopt-surface.sh		case id strict assertion
-C11.SHOPT.PROGCOMP_ALIAS	case:bash-man-shopt-surface.sh		case id strict assertion
-C11.SHOPT.PROMPTVARS	case:bash-man-shopt-surface.sh		case id strict assertion
-C11.SHOPT.RESTRICTED_SHELL	case:bash-man-shopt-surface.sh		case id strict assertion
-C11.SHOPT.SHIFT_VERBOSE	case:bash-man-shopt-surface.sh		case id strict assertion
-C11.SHOPT.SOURCEPATH	case:bash-man-shopt-surface.sh		case id strict assertion
-C11.SHOPT.XPG_ECHO	case:bash-man-shopt-surface.sh		case id strict assertion
-C11.MODE.01	case:bash-man-seto-surface.sh		case id strict assertion
-C11.MODE.02	case:bash-man-seto-surface.sh		case id strict assertion
-C11.MODE.03	case:bash-man-seto-surface.sh		case id strict assertion
-C11.MODE.04	case:bash-man-seto-surface.sh		case id strict assertion
-C11.MODE.05	case:bash-man-seto-surface.sh		case id strict assertion
-C12.MATRIX.01	runner:run_bash_posix_man_matrix.sh#C12.MATRIX.01	run_bash_posix_man_matrix.sh	runner asserts req-specific checks in strict mode when available
-C12.MATRIX.01	runner:run_bash_category_bucket_matrix.sh#C12.MATRIX.01	run_bash_category_bucket_matrix.sh	runner asserts req-specific checks in strict mode when available
-C12.MATRIX.02	runner:run_bash_posix_man_matrix.sh#C12.MATRIX.02	run_bash_posix_man_matrix.sh	runner asserts req-specific checks in strict mode when available
-C12.MATRIX.02	runner:run_bash_category_bucket_matrix.sh#C12.MATRIX.02	run_bash_category_bucket_matrix.sh	runner asserts req-specific checks in strict mode when available
-C12.MATRIX.03	runner:run_bash_posix_man_matrix.sh#C12.MATRIX.03	run_bash_posix_man_matrix.sh	runner asserts req-specific checks in strict mode when available
-C12.MATRIX.03	runner:run_bash_category_bucket_matrix.sh#C12.MATRIX.03	run_bash_category_bucket_matrix.sh	runner asserts req-specific checks in strict mode when available
-C12.MATRIX.04	runner:run_bash_posix_man_matrix.sh#C12.MATRIX.04	run_bash_posix_man_matrix.sh	runner asserts req-specific checks in strict mode when available
-C12.MATRIX.04	runner:run_bash_category_bucket_matrix.sh#C12.MATRIX.04	run_bash_category_bucket_matrix.sh	runner asserts req-specific checks in strict mode when available
-C12.MATRIX.05	runner:run_bash_posix_man_matrix.sh#C12.MATRIX.05	run_bash_posix_man_matrix.sh	runner asserts req-specific checks in strict mode when available
-C12.MATRIX.05	runner:run_bash_category_bucket_matrix.sh#C12.MATRIX.05	run_bash_category_bucket_matrix.sh	runner asserts req-specific checks in strict mode when available
-C12.MATRIX.06	runner:run_bash_posix_man_matrix.sh#C12.MATRIX.06	run_bash_posix_man_matrix.sh	runner asserts req-specific checks in strict mode when available
-C12.MATRIX.06	runner:run_bash_category_bucket_matrix.sh#C12.MATRIX.06	run_bash_category_bucket_matrix.sh	runner asserts req-specific checks in strict mode when available
-C12.MATRIX.07	runner:run_bash_posix_man_matrix.sh#C12.MATRIX.07	run_bash_posix_man_matrix.sh	runner asserts req-specific checks in strict mode when available
-C12.MATRIX.07	runner:run_bash_category_bucket_matrix.sh#C12.MATRIX.07	run_bash_category_bucket_matrix.sh	runner asserts req-specific checks in strict mode when available
-C7.INT.11	runner:run_interactive_ux_matrix.sh#C7.INT.11	run_interactive_ux_matrix.sh	runner asserts req-specific checks in strict mode when available
-C8.JOB.13	runner:run_interactive_sigint_matrix.sh#C8.JOB.13	run_interactive_sigint_matrix.sh	runner has strict deterministic lane; literal control-char lane remains informational
-C8.JOB.14	case:man-bash-posix-10-jobs-fg-bg-interactive.sh		case id strict assertion
-C8.JOB.15	case:man-bash-posix-10-jobs-fg-bg-interactive.sh		case id strict assertion
-C8.JOB.16	runner:run_jobs_interactive_matrix.sh#C8.JOB.16	run_jobs_interactive_matrix.sh	runner asserts req-specific checks in strict mode when available
-C8.JOB.17	case:bash-man-jobcontrol-foreground-signals.sh		case id strict assertion
-C8.JOB.18	runner:run_job_tty_stop_matrix.sh#C8.JOB.18	run_job_tty_stop_matrix.sh	runner asserts req-specific checks in strict mode when available
-C8.JOB.19	runner:run_job_tty_stop_matrix.sh#C8.JOB.19	run_job_tty_stop_matrix.sh	runner asserts req-specific checks in strict mode when available
-C8.JOB.20	runner:run_jobs_interactive_matrix.sh#C8.JOB.20	run_jobs_interactive_matrix.sh	runner has strict deterministic lane; literal control-char lane remains informational
-C8.JOB.20	runner:run_job_suspend_ctrl_matrix.sh#C8.JOB.20	run_job_suspend_ctrl_matrix.sh	runner has strict deterministic lane; literal control-char lane remains informational
-C8.JOB.21	case:bash-man-jobcontrol-suspend-y.sh		case id strict assertion
-C8.JOB.22	case:bash-man-jobcontrol-jobspec-core.sh		case id strict assertion
-C8.JOB.23	case:bash-man-jobcontrol-jobspec-match.sh		case id strict assertion
-C8.JOB.24	case:bash-man-jobcontrol-jobspec-command-forms.sh		case id strict assertion
-C8.JOB.25	runner:run_job_notify_matrix.sh#C8.JOB.25	run_job_notify_matrix.sh	runner asserts req-specific checks in strict mode when available
-C8.JOB.26	case:bash-man-jobcontrol-sigchld-per-child.sh		case id strict assertion
-C8.JOB.27	runner:run_job_exitwarn_matrix.sh#C8.JOB.27	run_job_exitwarn_matrix.sh	runner asserts req-specific checks in strict mode when available
-C8.JOB.28	runner:run_jobs_interactive_matrix.sh#C8.JOB.28	run_jobs_interactive_matrix.sh	runner asserts req-specific checks in strict mode when available
-C8.JOB.29	runner:run_jobs_interactive_matrix.sh#C8.JOB.29	run_jobs_interactive_matrix.sh	runner asserts req-specific checks in strict mode when available
