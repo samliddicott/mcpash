@@ -1308,6 +1308,14 @@ class Parser:
         word_tok = self._advance()
         if word_tok is None or not self._is_word(word_tok):
             raise ParseError(f"expected case word at {self._where(word_tok)}")
+        while True:
+            sep = self._peek()
+            if sep is None:
+                break
+            if sep.kind == "OP" and sep.value in {"\n", ";"}:
+                self._advance()
+                continue
+            break
         in_tok = self._advance()
         if in_tok is None or not self._is_word(in_tok) or in_tok.value != "in":
             raise ParseError(f"expected in at {self._where(in_tok)}")

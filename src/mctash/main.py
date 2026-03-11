@@ -9,6 +9,7 @@ import shlex
 import sys
 from typing import Dict, List, Tuple
 
+from .lexer import LexError
 from .parser import ParseError, Parser
 from .asdl_map import AsdlMappingError, lst_list_item_to_asdl, lst_script_to_asdl
 from .runtime import BreakLoop, ContinueLoop, Runtime, RuntimeError
@@ -193,6 +194,13 @@ def main(argv: List[str] | None = None) -> int:
             if "bad substitution" in text:
                 return 127 if os.environ.get("MCTASH_DIAG_STYLE", "").strip().lower() == "bash" else 2
             return 2
+        except LexError as e:
+            text, line = _normalize_parse_error(str(e))
+            if line is not None:
+                print(f"{script_name or 'mctash -c'}: line {line}: {text}", file=sys.stderr)
+            else:
+                print(f"parse error: {text}", file=sys.stderr)
+            return 2
         except RuntimeError as e:
             msg = str(e)
             print(msg, file=sys.stderr)
@@ -374,6 +382,17 @@ def main(argv: List[str] | None = None) -> int:
             print(f"parse error: {text}", file=sys.stderr)
         if "bad substitution" in text:
             return 127 if os.environ.get("MCTASH_DIAG_STYLE", "").strip().lower() == "bash" else 2
+        return 2
+    except LexError as e:
+        msg = str(e)
+        text, line_hint = _normalize_parse_error(msg)
+        if args.script:
+            if line_hint is not None:
+                print(f"{args.script}: line {line_hint}: {text}", file=sys.stderr)
+            else:
+                print(f"{args.script}: {text}", file=sys.stderr)
+        else:
+            print(f"parse error: {text}", file=sys.stderr)
         return 2
     except AsdlMappingError as e:
         print(f"asdl error: {e}", file=sys.stderr)
