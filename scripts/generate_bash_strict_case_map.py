@@ -18,6 +18,8 @@ def scenario_cases_for_req(req_id: str) -> list[str]:
         "C1.OPT.SHORT.D": ["case:invocation.short-D"],
         "C1.OPT.SHORT.O": ["case:invocation.short-O"],
         "C1.OPT.SHORT.PLUSO": ["case:invocation.short-plusO"],
+        "C1.OPT.SHORT.DASHDASH": ["case:invocation.short-dashdash"],
+        "C1.OPT.SHORT.SINGLEDASH": ["case:invocation.short-singledash"],
         "C1.OPT.LONG.HELP": ["case:invocation.long-help"],
         "C1.OPT.LONG.LOGIN": ["case:invocation.long-login"],
         "C1.OPT.LONG.NOEDITING": ["case:invocation.long-noediting"],

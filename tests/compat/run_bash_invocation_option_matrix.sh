@@ -15,6 +15,9 @@ EOF
 cat >"$home/custom.rc" <<'EOF'
 : > "$HOME/customrc.marker"
 EOF
+cat >"$tmpdir/-sentinel" <<'EOF'
+echo "sentinel:$0:$#:$1"
+EOF
 
 run_cmd() {
   local name=$1
@@ -36,9 +39,15 @@ run_cmd() {
   cmd+=("$@")
   set +e
   if [[ -n "$stdin_text" ]]; then
-    printf '%s' "$stdin_text" | "${cmd[@]}" >"$out" 2>"$err"
+    (
+      cd "$tmpdir"
+      printf '%s' "$stdin_text" | "${cmd[@]}"
+    ) >"$out" 2>"$err"
   else
-    "${cmd[@]}" >"$out" 2>"$err"
+    (
+      cd "$tmpdir"
+      "${cmd[@]}"
+    ) >"$out" 2>"$err"
   fi
   echo "$?" >"$rc"
   set -e
@@ -107,6 +116,8 @@ for mode in bash posix; do
   compare_case_status_only long-restricted "$mode" '' --restricted -c 'echo restricted:ok' || fail=1
   compare_case_status_only short-O "$mode" '' -O extglob -c 'shopt -q extglob; echo rc:$?' || fail=1
   compare_case_status_only short-plusO "$mode" '' +O extglob -c 'shopt -q extglob; echo rc:$?' || fail=1
+  compare_case short-dashdash "$mode" '' -- -sentinel ARG || fail=1
+  compare_case short-singledash "$mode" '' - -sentinel ARG || fail=1
   compare_case_status_only short-l "$mode" '' -l -c '[ -f "$HOME/profile.marker" ]' || fail=1
   rm -f "$home/customrc.marker"
   compare_case_status_only long-rcfile-file "$mode" '' --rcfile "$home/custom.rc" -i -c '[ -f "$HOME/customrc.marker" ]' || fail=1

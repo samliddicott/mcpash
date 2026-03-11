@@ -237,9 +237,14 @@ def main(argv: List[str] | None = None) -> int:
     shebang_args: List[str] = []
 
     if script:
-        with open(script, "r", encoding="utf-8", errors="surrogateescape") as f:
-            source = f.read()
-        source, shebang_args = _strip_shebang_and_args(source)
+        try:
+            with open(script, "r", encoding="utf-8", errors="surrogateescape") as f:
+                source = f.read()
+            source, shebang_args = _strip_shebang_and_args(source)
+        except OSError:
+            shell_name = _resolve_invocation_name(sys.argv[0]) or "mctash"
+            print(f"{shell_name}: {script}: No such file or directory", file=sys.stderr)
+            return 127
     else:
         source = ""
 
@@ -398,6 +403,16 @@ def _split_cli_argv(argv: List[str]) -> Tuple[List[str], str | None, List[str]]:
     script_args: List[str] = []
     it = iter(argv)
     for arg in it:
+        if arg in {"--", "-"}:
+            opts.append(arg)
+            rest = list(it)
+            if rest:
+                script = rest[0]
+                script_args = rest[1:]
+            else:
+                script = None
+                script_args = []
+            break
         if arg == "-s":
             opts.append(arg)
             script = None
