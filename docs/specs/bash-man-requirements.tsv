@@ -86,16 +86,16 @@ C2.GRAM.006	2	grammar.core	grammar	OR list (||)	changed	SHELL GRAMMAR	Grammar pr
 C2.GRAM.007	2	grammar.core	grammar	negated pipeline (! pipeline)	changed	SHELL GRAMMAR	Grammar production documented in SHELL GRAMMAR / related sections.
 C2.GRAM.008	2	grammar.core	grammar	compound command: ( list ) subshell	changed	SHELL GRAMMAR	Grammar production documented in SHELL GRAMMAR / related sections.
 C2.GRAM.009	2	grammar.core	grammar	compound command: { list; } grouping	changed	SHELL GRAMMAR	Grammar production documented in SHELL GRAMMAR / related sections.
-C2.GRAM.010	2	grammar.core	grammar	if ... then ... fi	changed	SHELL GRAMMAR	Grammar production documented in SHELL GRAMMAR / related sections.
-C2.GRAM.011	2	grammar.core	grammar	if ... then ... else ... fi	changed	SHELL GRAMMAR	Grammar production documented in SHELL GRAMMAR / related sections.
-C2.GRAM.012	2	grammar.core	grammar	if ... then ... elif ... fi	changed	SHELL GRAMMAR	Grammar production documented in SHELL GRAMMAR / related sections.
-C2.GRAM.013	2	grammar.core	grammar	while ... do ... done	changed	SHELL GRAMMAR	Grammar production documented in SHELL GRAMMAR / related sections.
-C2.GRAM.014	2	grammar.core	grammar	until ... do ... done	changed	SHELL GRAMMAR	Grammar production documented in SHELL GRAMMAR / related sections.
-C2.GRAM.015	2	grammar.core	grammar	for name in words; do ... done	changed	SHELL GRAMMAR	Grammar production documented in SHELL GRAMMAR / related sections.
-C2.GRAM.016	2	grammar.core	grammar	for name; do ... done	changed	SHELL GRAMMAR	Grammar production documented in SHELL GRAMMAR / related sections.
+C2.GRAM.010	2	grammar.core	grammar	if then fi compound form	changed	SHELL GRAMMAR	Grammar production documented in SHELL GRAMMAR / related sections.
+C2.GRAM.011	2	grammar.core	grammar	if then else fi compound form	changed	SHELL GRAMMAR	Grammar production documented in SHELL GRAMMAR / related sections.
+C2.GRAM.012	2	grammar.core	grammar	if then elif fi compound form	changed	SHELL GRAMMAR	Grammar production documented in SHELL GRAMMAR / related sections.
+C2.GRAM.013	2	grammar.core	grammar	while do done loop form	changed	SHELL GRAMMAR	Grammar production documented in SHELL GRAMMAR / related sections.
+C2.GRAM.014	2	grammar.core	grammar	until do done loop form	changed	SHELL GRAMMAR	Grammar production documented in SHELL GRAMMAR / related sections.
+C2.GRAM.015	2	grammar.core	grammar	for name in words; do <list>; done loop form	changed	SHELL GRAMMAR	Grammar production documented in SHELL GRAMMAR / related sections.
+C2.GRAM.016	2	grammar.core	grammar	for name; do <list>; done loop form	changed	SHELL GRAMMAR	Grammar production documented in SHELL GRAMMAR / related sections.
 C2.GRAM.017	2	grammar.core	grammar	arithmetic for (( expr1 ; expr2 ; expr3 ))	changed	SHELL GRAMMAR	Grammar production documented in SHELL GRAMMAR / related sections.
-C2.GRAM.018	2	grammar.core	grammar	case WORD in ... esac	changed	SHELL GRAMMAR	Grammar production documented in SHELL GRAMMAR / related sections.
-C2.GRAM.019	2	grammar.core	grammar	select NAME in ...; do ... done	changed	SHELL GRAMMAR	Grammar production documented in SHELL GRAMMAR / related sections.
+C2.GRAM.018	2	grammar.core	grammar	case WORD in <patterns> esac form	changed	SHELL GRAMMAR	Grammar production documented in SHELL GRAMMAR / related sections.
+C2.GRAM.019	2	grammar.core	grammar	select NAME in <words>; do <list>; done form	changed	SHELL GRAMMAR	Grammar production documented in SHELL GRAMMAR / related sections.
 C2.GRAM.020	2	grammar.core	grammar	function definition name() compound	changed	SHELL GRAMMAR	Grammar production documented in SHELL GRAMMAR / related sections.
 C2.GRAM.021	2	grammar.core	grammar	function keyword form function name [()] compound	changed	SHELL GRAMMAR	Grammar production documented in SHELL GRAMMAR / related sections.
 C2.GRAM.022	2	grammar.core	grammar	[[ conditional command ]]	changed	SHELL GRAMMAR	Grammar production documented in SHELL GRAMMAR / related sections.
@@ -132,8 +132,8 @@ C3.EXP.024	3	expansion	expansion	process substitution <(cmd) >(cmd)	extension	QU
 C3.EXP.025	3	expansion	expansion	word splitting using IFS	present	QUOTING + PARAMETERS + EXPANSION	Expansion feature or operator family.
 C3.EXP.026	3	expansion	expansion	pathname expansion (globbing)	extension	QUOTING + PARAMETERS + EXPANSION	Expansion feature or operator family.
 C3.EXP.027	3	expansion	expansion	quote removal	present	QUOTING + PARAMETERS + EXPANSION	Expansion feature or operator family.
-C3.EXP.028	3	expansion	expansion	ANSI-C quoting $'...'	extension	QUOTING + PARAMETERS + EXPANSION	Expansion feature or operator family.
-C3.EXP.029	3	expansion	expansion	locale translation quoting $"..."	extension	QUOTING + PARAMETERS + EXPANSION	Expansion feature or operator family.
+C3.EXP.028	3	expansion	expansion	ANSI-C quoting $'string'	extension	QUOTING + PARAMETERS + EXPANSION	Expansion feature or operator family.
+C3.EXP.029	3	expansion	expansion	locale translation quoting $"string"	extension	QUOTING + PARAMETERS + EXPANSION	Expansion feature or operator family.
 C3.EXP.030	3	expansion	expansion	command substitution newline trimming	present	QUOTING + PARAMETERS + EXPANSION	Expansion feature or operator family.
 C3.EXP.031	3	expansion	expansion	expansion order as documented in EXPANSION	present	QUOTING + PARAMETERS + EXPANSION	Expansion feature or operator family.
 C4.REDIR.001	4	redirection	redirection	[n]<word input redirection	present	REDIRECTION	Redirection surface and semantics.
@@ -302,7 +302,7 @@ C6.VAR.BASH.HISTTIMEFORMAT	6	variables.bash-extension	variable	HISTTIMEFORMAT	ex
 C6.VAR.BASH.HOSTFILE	6	variables.bash-extension	variable	HOSTFILE	extension	Shell Variables + builtins	Bash-specific or Bash-extended variable surface.
 C6.VAR.BASH.FCEDIT	6	variables.bash-extension	variable	FCEDIT	extension	Shell Variables + builtins	Bash-specific or Bash-extended variable surface.
 C6.VAR.BASH.TMOUT	6	variables.bash-extension	variable	TMOUT	extension	Shell Variables + builtins	Bash-specific or Bash-extended variable surface.
-C7.INT.01	7	interactive	interactive	prompt escapes in PS1/PS2/PS4 (\u, \h, \w, \!, etc.)	n/a	PROMPTING + READLINE + HISTORY	Interactive subsystem requirement (PTY/interactive lane).
+C7.INT.01	7	interactive	interactive	prompt escapes in PS1/PS2/PS4 (\u, \h, \w, \!, for example)	n/a	PROMPTING + READLINE + HISTORY	Interactive subsystem requirement (PTY/interactive lane).
 C7.INT.02	7	interactive	interactive	PROMPT_COMMAND execution before primary prompt	n/a	PROMPTING + READLINE + HISTORY	Interactive subsystem requirement (PTY/interactive lane).
 C7.INT.03	7	interactive	interactive	readline editing modes emacs/vi	n/a	PROMPTING + READLINE + HISTORY	Interactive subsystem requirement (PTY/interactive lane).
 C7.INT.04	7	interactive	interactive	bind builtin keymap/query/assignment	n/a	PROMPTING + READLINE + HISTORY	Interactive subsystem requirement (PTY/interactive lane).
@@ -402,7 +402,7 @@ C12.MATRIX.03	12	requirements-matrix	meta	matrix column: mctash default mode	pre
 C12.MATRIX.04	12	requirements-matrix	meta	matrix column: mctash --posix mode	present	project policy	Requirements-trace discipline for exhaustive implementation tracking.
 C12.MATRIX.05	12	requirements-matrix	meta	matrix row must map to at least one executable case id	present	project policy	Requirements-trace discipline for exhaustive implementation tracking.
 C12.MATRIX.06	12	requirements-matrix	meta	matrix row must record POSIX classification	present	project policy	Requirements-trace discipline for exhaustive implementation tracking.
-C12.MATRIX.07	12	requirements-matrix	meta	matrix row must avoid grouped shorthand and etc	present	project policy	Requirements-trace discipline for exhaustive implementation tracking.
+C12.MATRIX.07	12	requirements-matrix	meta	matrix row must avoid grouped shorthand wording	present	project policy	Requirements-trace discipline for exhaustive implementation tracking.
 C7.INT.11	7	interactive	interactive	PS1 parameter/command/arithmetic expansion at prompt render time (promptvars)	n/a	PROMPTING + Shell Variables	PROMPTING says prompt string is decoded then expanded subject to promptvars.
 C8.JOB.13	8	jobs-signals	behavior	interactive Ctrl-C during foreground external command returns prompt and keeps shell alive	present	SIGNALS + JOB CONTROL	SIGNALS describes SIGINT handling in interactive shells and interruptible wait behavior.
 C8.JOB.14	8	jobs-control-detail	behavior	each pipeline is tracked as one job entry	n/a	JOB CONTROL	Paragraph 2: shell associates a job with each pipeline and keeps a job table.

@@ -154,20 +154,13 @@ C11.SHOPT.RESTRICTED_SHELL	case:bash-man-shopt-surface.sh		case id strict assert
 C11.SHOPT.SHIFT_VERBOSE	case:bash-man-shopt-surface.sh		case id strict assertion
 C11.SHOPT.SOURCEPATH	case:bash-man-shopt-surface.sh		case id strict assertion
 C11.SHOPT.XPG_ECHO	case:bash-man-shopt-surface.sh		case id strict assertion
-C12.MATRIX.01	runner:run_bash_posix_man_matrix.sh#C12.MATRIX.01	run_bash_posix_man_matrix.sh	runner asserts req-specific checks in strict mode when available
-C12.MATRIX.01	runner:run_bash_category_bucket_matrix.sh#C12.MATRIX.01	run_bash_category_bucket_matrix.sh	runner asserts req-specific checks in strict mode when available
-C12.MATRIX.02	runner:run_bash_posix_man_matrix.sh#C12.MATRIX.02	run_bash_posix_man_matrix.sh	runner asserts req-specific checks in strict mode when available
-C12.MATRIX.02	runner:run_bash_category_bucket_matrix.sh#C12.MATRIX.02	run_bash_category_bucket_matrix.sh	runner asserts req-specific checks in strict mode when available
-C12.MATRIX.03	runner:run_bash_posix_man_matrix.sh#C12.MATRIX.03	run_bash_posix_man_matrix.sh	runner asserts req-specific checks in strict mode when available
-C12.MATRIX.03	runner:run_bash_category_bucket_matrix.sh#C12.MATRIX.03	run_bash_category_bucket_matrix.sh	runner asserts req-specific checks in strict mode when available
-C12.MATRIX.04	runner:run_bash_posix_man_matrix.sh#C12.MATRIX.04	run_bash_posix_man_matrix.sh	runner asserts req-specific checks in strict mode when available
-C12.MATRIX.04	runner:run_bash_category_bucket_matrix.sh#C12.MATRIX.04	run_bash_category_bucket_matrix.sh	runner asserts req-specific checks in strict mode when available
-C12.MATRIX.05	runner:run_bash_posix_man_matrix.sh#C12.MATRIX.05	run_bash_posix_man_matrix.sh	runner asserts req-specific checks in strict mode when available
-C12.MATRIX.05	runner:run_bash_category_bucket_matrix.sh#C12.MATRIX.05	run_bash_category_bucket_matrix.sh	runner asserts req-specific checks in strict mode when available
-C12.MATRIX.06	runner:run_bash_posix_man_matrix.sh#C12.MATRIX.06	run_bash_posix_man_matrix.sh	runner asserts req-specific checks in strict mode when available
-C12.MATRIX.06	runner:run_bash_category_bucket_matrix.sh#C12.MATRIX.06	run_bash_category_bucket_matrix.sh	runner asserts req-specific checks in strict mode when available
-C12.MATRIX.07	runner:run_bash_posix_man_matrix.sh#C12.MATRIX.07	run_bash_posix_man_matrix.sh	runner asserts req-specific checks in strict mode when available
-C12.MATRIX.07	runner:run_bash_category_bucket_matrix.sh#C12.MATRIX.07	run_bash_category_bucket_matrix.sh	runner asserts req-specific checks in strict mode when available
+C12.MATRIX.01	case:matrix-contract.c12-01		runner decomposed to concrete strict scenario id
+C12.MATRIX.02	case:matrix-contract.c12-02		runner decomposed to concrete strict scenario id
+C12.MATRIX.03	case:matrix-contract.c12-03		runner decomposed to concrete strict scenario id
+C12.MATRIX.04	case:matrix-contract.c12-04		runner decomposed to concrete strict scenario id
+C12.MATRIX.05	case:matrix-contract.c12-05		runner decomposed to concrete strict scenario id
+C12.MATRIX.06	case:matrix-contract.c12-06		runner decomposed to concrete strict scenario id
+C12.MATRIX.07	case:matrix-contract.c12-07		runner decomposed to concrete strict scenario id
 C2.GRAM.001	case:bash-man-grammar-core.sh		case id strict assertion
 C2.GRAM.002	case:bash-man-grammar-core.sh		case id strict assertion
 C2.GRAM.003	case:bash-man-grammar-core.sh		case id strict assertion

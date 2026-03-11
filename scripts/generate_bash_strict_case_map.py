@@ -74,6 +74,18 @@ def scenario_cases_for_req(req_id: str) -> list[str]:
     if req_id in jobs:
         return jobs[req_id]
 
+    matrix_contract = {
+        "C12.MATRIX.01": ["case:matrix-contract.c12-01"],
+        "C12.MATRIX.02": ["case:matrix-contract.c12-02"],
+        "C12.MATRIX.03": ["case:matrix-contract.c12-03"],
+        "C12.MATRIX.04": ["case:matrix-contract.c12-04"],
+        "C12.MATRIX.05": ["case:matrix-contract.c12-05"],
+        "C12.MATRIX.06": ["case:matrix-contract.c12-06"],
+        "C12.MATRIX.07": ["case:matrix-contract.c12-07"],
+    }
+    if req_id in matrix_contract:
+        return matrix_contract[req_id]
+
     return []
 
 
