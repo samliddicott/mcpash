@@ -10856,10 +10856,36 @@ class Runtime:
     def _argv_assignment_words(
         self, argv: list[str], eligible: list[bool] | None = None
     ) -> list[tuple[str, str, object, bool]] | None:
+        words = list(argv)
+        # Join indexed assignment forms that may be split by spaces inside the
+        # subscript expression, e.g. `a[7 + 8]=x`.
+        folded_words: list[str] = []
+        i = 0
+        while i < len(words):
+            tok = words[i]
+            if (
+                re.match(r"^[A-Za-z_][A-Za-z0-9_]*\[[^\]]*$", tok)
+                and "=" not in tok
+                and "]" not in tok
+            ):
+                merged = tok
+                j = i
+                while j + 1 < len(words):
+                    j += 1
+                    merged = merged + " " + words[j]
+                    if "]" in words[j]:
+                        break
+                if "]" in merged and "=" in merged:
+                    folded_words.append(merged)
+                    i = j + 1
+                    continue
+            folded_words.append(tok)
+            i += 1
+
         out: list[tuple[str, str, object, bool]] = []
         i = 0
-        while i < len(argv):
-            tok = argv[i]
+        while i < len(folded_words):
+            tok = folded_words[i]
             if eligible is not None:
                 if i >= len(eligible) or not eligible[i]:
                     return None
@@ -10878,9 +10904,9 @@ class Runtime:
                     if tail != "":
                         vals.append(tail)
                     i += 1
-                    if i >= len(argv):
+                    if i >= len(folded_words):
                         return None
-                    tail = argv[i]
+                    tail = folded_words[i]
                 out.append((name, op, vals, True))
                 i += 1
                 continue
@@ -10889,17 +10915,17 @@ class Runtime:
             if m_comp_open is not None:
                 name = m_comp_open.group(1)
                 op = m_comp_open.group(2)
-                if i + 1 >= len(argv) or argv[i + 1] != "(":
+                if i + 1 >= len(folded_words) or folded_words[i + 1] != "(":
                     return None
                 i += 2
                 vals = []
-                while i < len(argv):
-                    cur = argv[i]
+                while i < len(folded_words):
+                    cur = folded_words[i]
                     if cur == ")":
                         break
                     vals.append(cur)
                     i += 1
-                if i >= len(argv) or argv[i] != ")":
+                if i >= len(folded_words) or folded_words[i] != ")":
                     return None
                 out.append((name, op, vals, True))
                 i += 1
@@ -11103,9 +11129,12 @@ class Runtime:
         *,
         strict: bool = False,
         name: str | None = None,
+        empty_is_zero: bool = False,
     ) -> int | None:
         text = (key or "").strip()
         if text == "":
+            if empty_is_zero:
+                return 0
             if strict:
                 label = name or key or "array"
                 raise RuntimeError(f"{label}: bad array subscript")
@@ -11193,7 +11222,7 @@ class Runtime:
                 if key == "*":
                     return self._ifs_join(vals), bool(vals)
                 return " ".join(vals), bool(vals)
-            idx = self._eval_index_subscript(key, typed, strict=True, name=base)
+            idx = self._eval_index_subscript(key, typed, strict=True, name=base, empty_is_zero=True)
             if idx is None:
                 return "", False
             if idx < 0 or idx >= len(typed):
@@ -11707,16 +11736,23 @@ class Runtime:
                 if name.endswith("+"):
                     op = "+="
                     name = name[:-1]
-                if not self._is_valid_name(name):
+                parsed_decl = self._parse_subscripted_name(name)
+                parsed_base = parsed_decl[0] if parsed_decl is not None else name
+                # `declare -a var[10]=x` accepts the indexed spelling but acts
+                # on the variable itself; subscript is ignored in this form.
+                if parsed_decl is not None and (declare_array or declare_assoc):
+                    name = parsed_base
+                    parsed_decl = None
+                if not (self._is_valid_name(name) or parsed_decl is not None):
                     self._report_error(
                         self._diag_msg(DiagnosticKey.NOT_VALID_IDENTIFIER, cmd=cmd_name, name=name),
                         line=self.current_line,
                     )
                     return 1
-                existing_attrs = set(self._var_attrs.get(name, set()))
+                existing_attrs = set(self._var_attrs.get(parsed_base, set()))
                 if declare_assoc and "array" in existing_attrs and "assoc" not in existing_attrs:
                     self._report_error(
-                        f"{name}: cannot convert indexed to associative array",
+                        f"{parsed_base}: cannot convert indexed to associative array",
                         line=self.current_line,
                     )
                     if self._bash_compat_level is None:
@@ -11724,13 +11760,23 @@ class Runtime:
                     continue
                 if declare_array and "assoc" in existing_attrs and "array" not in existing_attrs:
                     self._report_error(
-                        f"{name}: cannot convert associative to indexed array",
+                        f"{parsed_base}: cannot convert associative to indexed array",
                         line=self.current_line,
                     )
                     if self._bash_compat_level is None:
                         status = 1
                     continue
-                target_attrs = set(self._var_attrs.get(name, set()))
+                if parsed_decl is not None:
+                    expanded_sub = self._expand_assignment_word(value)
+                    if op == "+=":
+                        cur, is_set = self._get_var_with_state(name)
+                        expanded_sub = (cur if is_set else "") + expanded_sub
+                    self._assign_shell_var(name, expanded_sub)
+                    if attr_flags:
+                        self._set_var_attrs(parsed_base, **attr_flags)
+                    continue
+
+                target_attrs = set(self._var_attrs.get(parsed_base, set()))
                 target_attrs.update(attr_flags.keys())
                 is_assoc_target = "assoc" in target_attrs
                 is_array_target = "array" in target_attrs and not is_assoc_target
@@ -11797,6 +11843,10 @@ class Runtime:
                 self._declare_var(name, expanded, local_scope=effective_local_scope, **attr_flags)
             else:
                 name = spec
+                parsed_decl = self._parse_subscripted_name(name)
+                parsed_base = parsed_decl[0] if parsed_decl is not None else name
+                if parsed_decl is not None:
+                    name = parsed_base
                 if not self._is_valid_name(name):
                     self._report_error(
                         self._diag_msg(DiagnosticKey.NOT_VALID_IDENTIFIER, cmd=cmd_name, name=name),
