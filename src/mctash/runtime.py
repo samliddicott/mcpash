@@ -12040,6 +12040,23 @@ class Runtime:
                 if parsed_decl is not None and "assoc" not in attrs_apply:
                     # declare var[IDX] marks an indexed array variable.
                     attrs_apply["array"] = True
+                in_any_local = any(name in scope for scope in self.local_stack)
+                exists = (
+                    in_any_local
+                    or name in self.env
+                    or name in self._typed_vars
+                    or name in self._var_attrs
+                )
+                if effective_local_scope and name not in self.local_stack[-1]:
+                    exists = False
+                if exists:
+                    if attrs_apply:
+                        self._set_var_attrs(name, **attrs_apply)
+                    if attrs_apply.get("array") and not isinstance(self._typed_vars.get(name), list):
+                        cur_v, cur_set = self._get_var_with_state(name)
+                        self._typed_vars[name] = [cur_v] if cur_set and cur_v != "" else []
+                        self._set_subscript_projection(name, cur_v if cur_set else "")
+                    continue
                 self._declare_var(name, base_value, local_scope=effective_local_scope, **attrs_apply)
 
         return status
@@ -12208,6 +12225,9 @@ class Runtime:
             for name in sorted(self.readonly_vars):
                 print(f"readonly {name}='{self._get_var(name)}'")
             return 0
+        show_print = False
+        show_array = False
+        show_assoc = False
         idx = 0
         while idx < len(args):
             a = args[idx]
@@ -12216,7 +12236,47 @@ class Runtime:
                 break
             if not a.startswith("-") or a == "-":
                 break
+            for ch in a[1:]:
+                if ch == "p":
+                    show_print = True
+                elif ch == "a":
+                    show_array = True
+                elif ch == "A":
+                    show_assoc = True
             idx += 1
+        if idx >= len(args) and (show_print or show_array or show_assoc):
+            def _dq(value: str) -> str:
+                return '"' + value.replace("\\", "\\\\").replace('"', '\\"').replace("$", "\\$") + '"'
+            for name in sorted(self.readonly_vars):
+                attrs = set(self._var_attrs.get(name, set()))
+                if "assoc" in attrs:
+                    if show_array and not show_assoc:
+                        continue
+                    typed = self._typed_vars.get(name)
+                    if isinstance(typed, dict) and typed:
+                        parts = [f"[{k}]={_dq(str(v))}" for k, v in typed.items()]
+                        print(f"readonly -A {name}=({' '.join(parts)} )")
+                    else:
+                        print(f"readonly -A {name}")
+                    continue
+                if "array" in attrs:
+                    if show_assoc and not show_array:
+                        continue
+                    typed = self._typed_vars.get(name)
+                    if isinstance(typed, list) and any(v is not None for v in typed):
+                        parts = []
+                        for i, v in enumerate(typed):
+                            if v is None:
+                                continue
+                            parts.append(f"[{i}]={_dq(str(v))}")
+                        print(f"readonly -a {name}=({' '.join(parts)})")
+                    else:
+                        print(f"readonly -a {name}")
+                    continue
+                if show_array or show_assoc:
+                    continue
+                print(f"readonly {name}={_dq(self._get_var(name))}")
+            return 0
         for arg in args[idx:]:
             target = arg.split("=", 1)[0]
             if target.endswith("+"):
