@@ -11043,15 +11043,18 @@ class Runtime:
             tok = str(raw)
             m = re.match(r"^\[(.*)\](\+?=)(.*)$", tok)
             if m is None:
-                val = self._expand_assignment_word(tok)
-                if integer_mode:
-                    val = str(self._to_int_arith(val if val != "" else "0"))
-                while next_idx < len(out_vals) and out_vals[next_idx] is not None:
+                expanded_items = fields_to_text_list(self._legacy_word_to_expansion_fields(tok, assignment=False))
+                if not expanded_items:
+                    expanded_items = [""]
+                for val in expanded_items:
+                    if integer_mode:
+                        val = str(self._to_int_arith(val if val != "" else "0"))
+                    while next_idx < len(out_vals) and out_vals[next_idx] is not None:
+                        next_idx += 1
+                    if next_idx >= len(out_vals):
+                        out_vals.extend([None] * (next_idx + 1 - len(out_vals)))
+                    out_vals[next_idx] = val
                     next_idx += 1
-                if next_idx >= len(out_vals):
-                    out_vals.extend([None] * (next_idx + 1 - len(out_vals)))
-                out_vals[next_idx] = val
-                next_idx += 1
                 continue
             idx_expr = m.group(1)
             inner_op = m.group(2)
