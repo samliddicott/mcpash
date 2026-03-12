@@ -2702,8 +2702,8 @@ class Runtime:
             name = str(node.get("name") or "COPROC")
             child = node.get("child") or {}
             script = self._asdl_command_to_sh_source(child)
-            proc = subprocess.Popen(
-                ["bash", "-c", script],
+            proc = self._popen_shell_subprocess(
+                script=script,
                 stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
                 stderr=None,
@@ -14306,9 +14306,12 @@ class Runtime:
         stdin: Any = None,
         stdout: Any = None,
         stderr: Any = None,
+        text: bool = True,
+        start_new_session: bool = False,
+        preexec_fn: Callable[[], None] | None = None,
         cwd: str | None = None,
         env: dict[str, str] | None = None,
-    ) -> subprocess.Popen[str]:
+    ) -> subprocess.Popen[Any]:
         cmd = [sys.executable, "-m", "mctash", "-c", script]
         child_env = dict(os.environ)
         child_env.update(self.env)
@@ -14319,7 +14322,9 @@ class Runtime:
             stdin=stdin,
             stdout=stdout,
             stderr=stderr,
-            text=True,
+            text=text,
+            start_new_session=start_new_session,
+            preexec_fn=preexec_fn,
             cwd=cwd,
             env=child_env,
         )
