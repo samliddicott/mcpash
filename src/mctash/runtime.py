@@ -962,6 +962,8 @@ class Runtime:
         self._pipeline_input_latency: float | None = None
         self._test_mode: bool = self.env.get("MCTASH_TEST_MODE", "") == "1"
         self._py_import_counter: int = 0
+        self._bash_random_proc: subprocess.Popen[str] | None = None
+        self._bash_random_lock = threading.Lock()
         self._var_attrs: Dict[str, set[str]] = {k: {"exported"} for k in self.env.keys()}
         self._typed_vars: Dict[str, object] = {}
         self.disabled_builtins: set[str] = set()
@@ -1054,12 +1056,70 @@ class Runtime:
         self._random_state = seed & 0x7FFFFFFF
         if self._random_state == 0:
             self._random_state = 1
+        if self._bash_compat_level is not None:
+            self._bash_random_seed(seed)
 
     def _next_random(self) -> str:
+        if self._bash_compat_level is not None:
+            return self._next_random_bash()
         # LCG-based 15-bit RANDOM surface; deterministic under assignment.
         self._random_state = (1103515245 * self._random_state + 12345) & 0x7FFFFFFF
         out = (self._random_state >> 16) & 0x7FFF
         s = str(out)
+        self.env["RANDOM"] = s
+        return s
+
+    def _ensure_bash_random_proc(self) -> subprocess.Popen[str]:
+        proc = self._bash_random_proc
+        if proc is not None and proc.poll() is None:
+            return proc
+        proc = subprocess.Popen(
+            ["bash", "--noprofile", "--norc"],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            text=True,
+            bufsize=1,
+        )
+        self._bash_random_proc = proc
+        return proc
+
+    def _bash_random_eval(self, script: str) -> list[str]:
+        proc = self._ensure_bash_random_proc()
+        marker = "__MCTASH_RANDOM_DONE__"
+        if proc.stdin is None or proc.stdout is None:
+            raise RuntimeError("random worker unavailable")
+        proc.stdin.write(script + "\n")
+        proc.stdin.write(f"printf '%s\\n' {marker}\n")
+        proc.stdin.flush()
+        out: list[str] = []
+        while True:
+            line = proc.stdout.readline()
+            if line == "":
+                break
+            line = line.rstrip("\n")
+            if line == marker:
+                break
+            out.append(line)
+        return out
+
+    def _bash_random_seed(self, seed: int) -> None:
+        try:
+            with self._bash_random_lock:
+                self._bash_random_eval(f"RANDOM={int(seed)}")
+        except Exception:
+            # Fall back to deterministic local path if helper process fails.
+            self._bash_random_proc = None
+
+    def _next_random_bash(self) -> str:
+        try:
+            with self._bash_random_lock:
+                out = self._bash_random_eval("printf '%s\\n' \"$RANDOM\"")
+            s = out[0] if out else "0"
+        except Exception:
+            # Graceful fallback.
+            self._random_state = (1103515245 * self._random_state + 12345) & 0x7FFFFFFF
+            s = str((self._random_state >> 16) & 0x7FFF)
         self.env["RANDOM"] = s
         return s
 
@@ -10542,6 +10602,9 @@ class Runtime:
         queue: List[str] = list(re.findall(r"[A-Za-z_][A-Za-z0-9_]*", expr))
         while queue:
             name = queue.pop(0)
+            if name == "RANDOM":
+                # RANDOM state is handled by dedicated runtime generator.
+                continue
             if name in seen:
                 continue
             seen.add(name)
@@ -10757,7 +10820,13 @@ class Runtime:
         parsed = self._parse_subscripted_name(name)
         if parsed is not None:
             base = parsed[0]
+            if base == "RANDOM":
+                local_env[base] = self.env.get(base, "")
+                return
             local_env[base] = self._get_var(base)
+            return
+        if name == "RANDOM":
+            local_env[name] = self.env.get(name, "")
             return
         local_env[name] = self._get_var(name)
 

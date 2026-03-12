@@ -1,6 +1,6 @@
 # Bash Default Upstream Gap Report
 
-Generated: 2026-03-12 10:35:30Z
+Generated: 2026-03-12 12:41:56Z
 Comparator baseline: GNU bash default mode (baserock mirror corpus, `bash-5.1-testing`)
 Target: `mctash` default mode (`BASH_COMPAT=50`)
 
@@ -13,7 +13,7 @@ Target: `mctash` default mode (`BASH_COMPAT=50`)
 
 | Case | bash rc | mctash rc | stdout | stderr |
 |---|---:|---:|---|---|
-| `appendop.tests` | 0 | 0 | ok | ok |
+| `arith.tests` | 1 | 1 | ok | ok |
 
 ## Artifacts
 
