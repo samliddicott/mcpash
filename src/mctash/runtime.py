@@ -2800,6 +2800,16 @@ class Runtime:
                     comp_vals = self._parse_compound_assignment_rhs(self._asdl_rhs_word_to_text(rhs))
                     if comp_vals is not None and self._bash_compat_level is None:
                         comp_vals = None
+                    if comp_vals is None:
+                        bad_tok = self._compound_assignment_unexpected_token(self._asdl_rhs_word_to_text(rhs))
+                        if bad_tok is not None:
+                            self._print_stderr(
+                                self._format_error(
+                                    f"syntax error near unexpected token `{bad_tok}'",
+                                    line=self.current_line,
+                                )
+                            )
+                            return 1
                     if name in self._py_ties:
                         if comp_vals is not None:
                             raise RuntimeError(f"{name}: cannot assign array value to tied variable")
@@ -2807,6 +2817,8 @@ class Runtime:
                         self._sync_local_env_assignment(local_env, name)
                         continue
                     if comp_vals is not None:
+                        if self._parse_subscripted_name(name) is not None:
+                            raise RuntimeError(f"{name}: cannot assign list to array member")
                         self._assign_compound_var(name, op, comp_vals)
                         compound_assigned.add(name)
                         self._sync_local_env_assignment(local_env, name)
@@ -6091,6 +6103,16 @@ class Runtime:
                                 return 1
                             raise SystemExit(2)
                         comp_vals = self._parse_compound_assignment_rhs(assign.value) if self._bash_compat_level is not None else None
+                        if comp_vals is None:
+                            bad_tok = self._compound_assignment_unexpected_token(assign.value)
+                            if bad_tok is not None:
+                                self._print_stderr(
+                                    self._format_error(
+                                        f"syntax error near unexpected token `{bad_tok}'",
+                                        line=self.current_line,
+                                    )
+                                )
+                                return 1
                         if name in self._py_ties:
                             if comp_vals is not None:
                                 raise RuntimeError(f"{name}: cannot assign array value to tied variable")
@@ -6101,6 +6123,8 @@ class Runtime:
                             self._sync_local_env_assignment(local_env, name)
                             continue
                         if comp_vals is not None:
+                            if self._parse_subscripted_name(name) is not None:
+                                raise RuntimeError(f"{name}: cannot assign list to array member")
                             self._assign_compound_var(name, op, comp_vals)
                             compound_assigned.add(name)
                             self._sync_local_env_assignment(local_env, name)
@@ -6148,6 +6172,16 @@ class Runtime:
                             return 1
                         raise SystemExit(2)
                     comp_vals = self._parse_compound_assignment_rhs(assign.value) if self._bash_compat_level is not None else None
+                    if comp_vals is None:
+                        bad_tok = self._compound_assignment_unexpected_token(assign.value)
+                        if bad_tok is not None:
+                            self._print_stderr(
+                                self._format_error(
+                                    f"syntax error near unexpected token `{bad_tok}'",
+                                    line=self.current_line,
+                                )
+                            )
+                            return 1
                     if name in self._py_ties:
                         if comp_vals is not None:
                             raise RuntimeError(f"{name}: cannot assign array value to tied variable")
@@ -6158,6 +6192,8 @@ class Runtime:
                         self._sync_local_env_assignment(local_env, name)
                         continue
                     if comp_vals is not None:
+                        if self._parse_subscripted_name(name) is not None:
+                            raise RuntimeError(f"{name}: cannot assign list to array member")
                         self._assign_compound_var(name, op, comp_vals)
                         compound_assigned.add(name)
                         self._sync_local_env_assignment(local_env, name)
@@ -11061,6 +11097,21 @@ class Runtime:
             vals.append(tok.value)
         return vals
 
+    def _compound_assignment_unexpected_token(self, rhs: str) -> str | None:
+        text = rhs.strip()
+        if not (text.startswith("(") and text.endswith(")")):
+            return None
+        inner = text[1:-1]
+        reader = TokenReader(inner)
+        ctx = LexContext(reserved_words=set(), allow_reserved=False, allow_newline=True)
+        while True:
+            tok = reader.next(ctx)
+            if tok is None:
+                break
+            if tok.kind == "OP" and tok.value != "\n":
+                return tok.value
+        return None
+
     def _parse_assoc_compound_assignment_rhs(self, rhs: str) -> dict[str, str] | None:
         text = rhs.strip()
         if not (text.startswith("(") and text.endswith(")")):
@@ -11093,10 +11144,10 @@ class Runtime:
         if self._bash_compat_level is None:
             raise RuntimeError(f"{name}: indexed assignment requires BASH_COMPAT")
         base, key = parsed
-        if base in self.readonly_vars:
-            raise RuntimeError(self._diag_msg(DiagnosticKey.READONLY_VAR, name=base))
         attrs = self._var_attrs.get(base, set())
         if "assoc" in attrs:
+            if base in self.readonly_vars:
+                raise RuntimeError(self._diag_msg(DiagnosticKey.READONLY_VAR, name=base))
             cur = self._typed_vars.get(base)
             if not isinstance(cur, dict):
                 cur = {}
@@ -11117,6 +11168,8 @@ class Runtime:
         idx = self._eval_index_subscript(key, cur_arr, strict=True, name=name)
         if idx is None:
             raise RuntimeError(f"{name}: bad array subscript")
+        if base in self.readonly_vars:
+            raise RuntimeError(self._diag_msg(DiagnosticKey.READONLY_VAR, name=base))
         if idx >= len(cur_arr):
             cur_arr.extend([None] * (idx + 1 - len(cur_arr)))
         cur_arr[idx] = value
@@ -11641,6 +11694,16 @@ class Runtime:
                 folded.append(spec)
                 j += 1
             names = folded
+        if not names and (
+            declare_array
+            or declare_assoc
+            or declare_integer
+            or declare_export
+            or declare_readonly
+            or declare_lower
+            or declare_upper
+        ):
+            print_vars = True
         if show_funcs:
             if names:
                 for name in names:
