@@ -16580,11 +16580,10 @@ class Runtime:
                 payload = b""
                 with open(fifo_path, "rb", buffering=0) as fifo:
                     payload = fifo.read()
-                subprocess.run(
-                    ["bash", "-c", body],
+                self._run_shell_subprocess(
+                    script=body,
+                    input_text=payload.decode("utf-8", errors="ignore"),
                     env=env,
-                    input=payload,
-                    check=False,
                 )
             finally:
                 try:
