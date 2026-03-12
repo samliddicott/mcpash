@@ -56,6 +56,68 @@ exec env PYTHONPATH=/home/sam/Projects/pybash/src MCTASH_MODE=bash MCTASH_DIAG_S
 W2
 chmod +x "$RDIR/mctash_wrapper.sh"
 
+run_case_isolated() {
+  local shell_kind="$1"   # bash|mctash
+  local case_name="$2"
+  local out_file="$3"
+  local err_file="$4"
+  local case_timeout="$5"
+  local rc=0
+  local run_root
+  run_root="$(mktemp -d "${RDIR}/isolation.${shell_kind}.${case_name}.XXXXXX")"
+  local run_home="${run_root}/home"
+  local run_tmp="${run_root}/tmp"
+  mkdir -p "$run_home" "$run_tmp"
+
+  local path_safe="${PATH:-/usr/bin:/bin}"
+  local -a base_env=(
+    "HOME=$run_home"
+    "TMPDIR=$run_tmp"
+    "PARENT=$run_tmp"
+    "XDG_CACHE_HOME=$run_home/.cache"
+    "XDG_CONFIG_HOME=$run_home/.config"
+    "XDG_DATA_HOME=$run_home/.local/share"
+    "HISTFILE=$run_home/.bash_history"
+    "INPUTRC=/dev/null"
+    "BASH_ENV=/dev/null"
+    "ENV=/dev/null"
+    "CDPATH="
+    "GLOBIGNORE="
+    "SHELLOPTS="
+    "BASHOPTS="
+    "LC_ALL=C"
+    "LANG=C"
+    "PATH=$path_safe"
+    "BASH_COMPAT=50"
+    "THIS_SH=$RDIR/${shell_kind}_wrapper.sh"
+  )
+
+  local cmd
+  if [[ "$shell_kind" == "bash" ]]; then
+    cmd=(
+      env -i "${base_env[@]}" \
+      timeout -k 5 "$case_timeout" \
+      bash -lc "cd '$TROOT'; exec bash './$case_name'"
+    )
+  else
+    cmd=(
+      env -i "${base_env[@]}" \
+      "PYTHONPATH=$ROOT/src" "MCTASH_MODE=bash" "MCTASH_DIAG_STYLE=bash" "MCTASH_MAX_VMEM_KB=786432" \
+      timeout -k 5 "$case_timeout" \
+      bash -lc "cd '$TROOT'; exec python3 -m mctash './$case_name'"
+    )
+  fi
+
+  # Run each case in its own session. On timeout/interrupt, kill the whole process group.
+  setsid "${cmd[@]}" >"$out_file" 2>"$err_file" || rc=$?
+  if [[ "$rc" -eq 124 || "$rc" -eq 137 || "$rc" -eq 143 ]]; then
+    # Best effort cleanup for stragglers from this isolated run root.
+    pkill -f "$run_root" >/dev/null 2>&1 || true
+  fi
+  rm -rf "$run_root"
+  return "$rc"
+}
+
 core_cases=(
   alias.tests
   appendop.tests
@@ -85,16 +147,8 @@ for c in "${core_cases[@]}"; do
   case_timeout=90
   b_out="$RDIR/bash/${c}.out"; b_err="$RDIR/bash/${c}.err"; b_rc=0
   m_out="$RDIR/mctash/${c}.out"; m_err="$RDIR/mctash/${c}.err"; m_rc=0
-  (
-    cd "$TROOT" &&
-      timeout -k 5 "$case_timeout" env BASH_COMPAT=50 THIS_SH="$RDIR/bash_wrapper.sh" bash "./$c" >"$b_out" 2>"$b_err"
-  ) || b_rc=$?
-  (
-    cd "$TROOT" &&
-      timeout -k 5 "$case_timeout" env BASH_COMPAT=50 THIS_SH="$RDIR/mctash_wrapper.sh" \
-        PYTHONPATH="$ROOT/src" MCTASH_MODE=bash MCTASH_DIAG_STYLE=bash MCTASH_MAX_VMEM_KB=786432 \
-        python3 -m mctash "./$c" >"$m_out" 2>"$m_err"
-  ) || m_rc=$?
+  run_case_isolated bash "$c" "$b_out" "$b_err" "$case_timeout" || b_rc=$?
+  run_case_isolated mctash "$c" "$m_out" "$m_err" "$case_timeout" || m_rc=$?
   out_m=0
   err_m=0
   b_out_n="$RDIR/bash/${c}.out.norm"
