@@ -5086,51 +5086,151 @@ class Runtime:
             has_active_glob = True
         if not has_active_glob:
             return [text]
-        if self._bash_compat_level is not None:
-            matches = self._bash_compgen_glob(pattern)
-        elif self._shopts.get("extglob", False) and has_active_extglob:
-            matches = self._bash_compgen_glob(pattern)
-        else:
-            matches = sorted(glob.glob(pattern))
+        matches = self._native_glob_matches(
+            pattern,
+            extglob_active=bool(self._shopts.get("extglob", False) and has_active_extglob),
+        )
         if matches:
             return matches
         return [text]
 
-    def _bash_compgen_glob(self, pattern: str) -> list[str]:
-        script_lines: list[str] = []
-        if self._shopts.get("extglob", False):
-            script_lines.append("shopt -s extglob")
-        if self._shopts.get("globstar", False):
-            script_lines.append("shopt -s globstar")
-        if self._shopts.get("dotglob", False):
-            script_lines.append("shopt -s dotglob")
-        if self._shopts.get("nocaseglob", False):
-            script_lines.append("shopt -s nocaseglob")
-        script_lines.extend(
-            [
-                "pat=$1",
-                "gi=$2",
-                'if [ -n "$gi" ]; then GLOBIGNORE=$gi; fi',
-                "IFS=$'\\n'",
-                # Use shell word expansion itself so dotglob/GLOBIGNORE and
-                # other pattern semantics match bash behavior.
-                'for f in $pat; do printf "%s\\n" "$f"; done',
-            ]
-        )
-        try:
-            proc = subprocess.run(
-                ["bash", "-c", "\n".join(script_lines), "mctash", pattern, self.env.get("GLOBIGNORE", "")],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.DEVNULL,
-                text=True,
-                check=False,
-                env=dict(self.env),
-            )
-        except Exception:
-            return []
-        out = [line for line in proc.stdout.splitlines() if line]
-        # Keep deterministic ordering aligned with shell pathname expansion.
-        return sorted(out)
+    def _native_glob_matches(self, pattern: str, *, extglob_active: bool) -> list[str]:
+        nocase = bool(self._shopts.get("nocaseglob", False))
+        dotglob = bool(self._shopts.get("dotglob", False))
+        globstar = bool(self._shopts.get("globstar", False))
+
+        norm = pattern
+        is_abs = norm.startswith("/")
+        parts = norm.split("/")
+        if is_abs:
+            parts = parts[1:]
+            bases = ["/"]
+        else:
+            bases = ["."]
+
+        def _has_meta(seg: str) -> bool:
+            esc = False
+            for i, ch in enumerate(seg):
+                if esc:
+                    esc = False
+                    continue
+                if ch == "\\":
+                    esc = True
+                    continue
+                if ch in {"*", "?", "["}:
+                    return True
+                if extglob_active and ch in {"@", "!", "+", "?", "*"} and i + 1 < len(seg) and seg[i + 1] == "(":
+                    return True
+            return False
+
+        def _seg_match(name: str, seg: str) -> bool:
+            if name in {".", ".."}:
+                return False
+            if name.startswith(".") and not seg.startswith(".") and not dotglob:
+                return False
+            if extglob_active and self._has_extglob_syntax(seg):
+                return self._match_extglob_pattern(name, seg, nocase=nocase)
+            if nocase:
+                return fnmatch.fnmatchcase(name.lower(), seg.lower())
+            return fnmatch.fnmatchcase(name, seg)
+
+        def _join(base: str, child: str) -> str:
+            if base == "/":
+                return "/" + child
+            if base == ".":
+                return child
+            return os.path.join(base, child)
+
+        def _expand_from(base: str, idx: int) -> list[str]:
+            if idx >= len(parts):
+                return [base]
+            seg = parts[idx]
+            if seg == "":
+                if base == "/":
+                    return _expand_from("/", idx + 1)
+                return _expand_from(base, idx + 1)
+            if seg == "**" and globstar:
+                out: list[str] = []
+                out.extend(_expand_from(base, idx + 1))
+                stack = [base]
+                seen_dirs: set[str] = set()
+                while stack:
+                    cur = stack.pop()
+                    if cur in seen_dirs:
+                        continue
+                    seen_dirs.add(cur)
+                    try:
+                        with os.scandir(cur) as it:
+                            entries = [e for e in it if e.is_dir(follow_symlinks=False)]
+                    except OSError:
+                        continue
+                    for e in entries:
+                        if e.name in {".", ".."}:
+                            continue
+                        if e.name.startswith(".") and not dotglob:
+                            continue
+                        child = _join(cur, e.name)
+                        out.extend(_expand_from(child, idx + 1))
+                        stack.append(child)
+                return out
+            if not _has_meta(seg):
+                candidate = _join(base, seg)
+                if idx < len(parts) - 1:
+                    if os.path.isdir(candidate):
+                        return _expand_from(candidate, idx + 1)
+                    return []
+                if os.path.lexists(candidate):
+                    return [candidate]
+                return []
+            try:
+                with os.scandir(base) as it:
+                    names = [e.name for e in it]
+            except OSError:
+                return []
+            out: list[str] = []
+            for nm in names:
+                if not _seg_match(nm, seg):
+                    continue
+                candidate = _join(base, nm)
+                if idx < len(parts) - 1:
+                    if os.path.isdir(candidate):
+                        out.extend(_expand_from(candidate, idx + 1))
+                else:
+                    out.append(candidate)
+            return out
+
+        out: list[str] = []
+        for b in bases:
+            out.extend(_expand_from(b, 0))
+        # Normalize relative spellings.
+        preserve_dot_prefix = pattern.startswith("./")
+        normalized: list[str] = []
+        for p in out:
+            if not is_abs and p.startswith("./") and not preserve_dot_prefix:
+                normalized.append(p[2:])
+            else:
+                normalized.append(p)
+        if preserve_dot_prefix:
+            normalized = [p if p.startswith("./") else f"./{p}" for p in normalized]
+        filtered = self._apply_globignore(normalized)
+        return sorted(dict.fromkeys(filtered))
+
+    def _apply_globignore(self, paths: list[str]) -> list[str]:
+        raw = self.env.get("GLOBIGNORE", "")
+        if raw == "":
+            return paths
+        pats = [p for p in raw.split(":") if p != ""]
+        if not pats:
+            return paths
+
+        def _ignored(path: str) -> bool:
+            base = os.path.basename(path)
+            for pat in pats:
+                if fnmatch.fnmatchcase(base, pat) or fnmatch.fnmatchcase(path, pat):
+                    return True
+            return base in {".", ".."}
+
+        return [p for p in paths if not _ignored(p)]
 
     def _asdl_word_has_unquoted_glob(self, parts: list[Any]) -> bool:
         for part in parts:
