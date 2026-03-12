@@ -578,11 +578,11 @@ def _split_braced(inner: str) -> Tuple[str | None, str | None, str | None]:
         return name, ":substr", inner[i + 1 :]
     if inner[i] == "/":
         return name, "/", inner[i + 1 :]
-    two_char_ops = {":-", ":=", ":?", ":+", "##", "%%"}
+    two_char_ops = {":-", ":=", ":?", ":+", "##", "%%", ",,", "^^"}
     if i + 1 < len(inner) and inner[i : i + 2] in two_char_ops:
         op = inner[i : i + 2]
         return name, op, inner[i + 2 :]
-    if inner[i] in ["-", "=", "?", "#", "%", "+"]:
+    if inner[i] in ["-", "=", "?", "#", "%", "+", ",", "^"]:
         op = inner[i]
         return name, op, inner[i + 1 :]
     return name, "__invalid__", None

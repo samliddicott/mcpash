@@ -9508,6 +9508,19 @@ class Runtime:
             return value.lower()
         raise RuntimeError(self._format_error("syntax error: bad substitution", line=self.current_line))
 
+    @staticmethod
+    def _apply_case_mod(value: str, op: str, arg_text: str | None = None) -> str:
+        _ = arg_text  # pattern-selective variants are future work
+        if op == ",,":
+            return value.lower()
+        if op == ",":
+            return value[:1].lower() + value[1:] if value else ""
+        if op == "^^":
+            return value.upper()
+        if op == "^":
+            return value[:1].upper() + value[1:] if value else ""
+        return value
+
     def _expand_param(self, name: str, quoted: bool):
         if name == "@":
             return list(self.positional)
@@ -9892,6 +9905,8 @@ class Runtime:
                     return decl
                 if isinstance(op, str) and op.startswith("@"):
                     vals = [self._apply_param_transform(base, v, op) for v in vals]
+                elif op in {",", ",,", "^", "^^"}:
+                    vals = [self._apply_case_mod(v, op, arg_text) for v in vals]
                 elif op in ["#", "##"]:
                     pattern = (
                         self._pattern_from_structured_fields(arg_fields)
@@ -10089,6 +10104,8 @@ class Runtime:
             )
         if isinstance(op, str) and op.startswith("@"):
             return self._apply_param_transform(name, value, op)
+        if op in {",", ",,", "^", "^^"}:
+            return self._apply_case_mod(value, op, arg_text)
         return value
 
     def _substring(self, value: str, arg_text: str) -> str:
