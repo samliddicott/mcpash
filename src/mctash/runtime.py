@@ -12423,9 +12423,15 @@ class Runtime:
                     continue
                 if isinstance(typed, list):
                     if key in {"@", "*"}:
-                        for i in range(len(typed)):
-                            typed[i] = None
-                        self._set_subscript_projection(base, "")
+                        self._typed_vars.pop(base, None)
+                        attrs_now = set(self._var_attrs.get(base, set()))
+                        attrs_now.discard("array")
+                        attrs_now.discard("assoc")
+                        if attrs_now:
+                            self._var_attrs[base] = attrs_now
+                        else:
+                            self._var_attrs.pop(base, None)
+                        self.env.pop(base, None)
                         continue
                     m_name = re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", key)
                     if m_name is not None and self.options.get("u", False):
