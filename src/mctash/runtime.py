@@ -9834,6 +9834,8 @@ class Runtime:
             if key in {"@", "*"}:
                 vals: list[str] = vals_for_key
                 if op is None:
+                    if not quoted:
+                        vals = [v for v in vals if v != ""]
                     if key == "*":
                         if quoted:
                             return self._ifs_join(vals)
@@ -9890,6 +9892,8 @@ class Runtime:
                         vals = self._slice_indexed_array(typed, arg_text)
                     else:
                         vals = self._slice_fields(vals, arg_text)
+                if not quoted:
+                    vals = [v for v in vals if v != ""]
                 if key == "*":
                     if quoted:
                         return self._ifs_join(vals)
@@ -9919,11 +9923,11 @@ class Runtime:
                 return vals
             return vals
         if name == "@" and op is None:
-            return list(self.positional)
+            return [v for v in self.positional if (quoted or v != "")]
         if name == "*" and op is None:
             if quoted:
                 return self._ifs_join(self.positional)
-            return list(self.positional)
+            return [v for v in self.positional if v != ""]
         if isinstance(op, str) and op.startswith("@") and name in {"@", "*"}:
             if op == "@A":
                 if name == "@":
@@ -12018,7 +12022,11 @@ class Runtime:
                 base_value = self._get_var(name)
                 if effective_local_scope and name not in self.local_stack[-1]:
                     base_value = ""
-                self._declare_var(name, base_value, local_scope=effective_local_scope, **attr_flags)
+                attrs_apply = dict(attr_flags)
+                if parsed_decl is not None and "assoc" not in attrs_apply:
+                    # declare var[IDX] marks an indexed array variable.
+                    attrs_apply["array"] = True
+                self._declare_var(name, base_value, local_scope=effective_local_scope, **attrs_apply)
 
         return status
 
