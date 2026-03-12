@@ -10654,7 +10654,8 @@ class Runtime:
         return ""
 
     def _expand_command_subst_text(self, cmd: str, backtick: bool = False) -> str:
-        line_bias = 1
+        # Line accounting differs slightly between $(...) and backticks in ash.
+        line_bias = -1 if backtick else 0
         output, status, hard_error = self._capture_eval(cmd, line_bias=line_bias)
         if hard_error and status != 0:
             raise CommandSubstFailure(status)
@@ -10663,7 +10664,7 @@ class Runtime:
         return output.rstrip("\n")
 
     def _expand_command_subst_asdl(self, child: dict[str, Any], backtick: bool = False) -> str:
-        line_bias = 1
+        line_bias = -1 if backtick else 0
         output, status, hard_error = self._capture_eval_asdl(child, line_bias=line_bias)
         if hard_error and status != 0:
             raise CommandSubstFailure(status)
