@@ -10109,10 +10109,6 @@ class Runtime:
         return value
 
     def _substring(self, value: str, arg_text: str) -> str:
-        if self._bash_compat_level is not None:
-            via = self._substring_via_bash(value, arg_text)
-            if via is not None:
-                return via
         if arg_text == "":
             raise RuntimeError(self._format_error("syntax error: missing '}'", line=self.current_line))
         if ":" in arg_text:
@@ -10142,35 +10138,6 @@ class Runtime:
         if ln == 0:
             return ""
         return value[off : off + ln]
-
-    def _substring_via_bash(self, value: str, arg_text: str) -> str | None:
-        env = dict(self.env)
-        for scope in self.local_stack:
-            env.update(scope)
-        env["__MCTASH_SUBSTR_VALUE"] = value
-        script = f'printf "%s" "${{__MCTASH_SUBSTR_VALUE:{arg_text}}}"'
-        proc = subprocess.run(
-            ["bash", "-c", script],
-            env=env,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            check=False,
-        )
-        if proc.returncode == 0:
-            return proc.stdout
-        err = (proc.stderr or "").lower()
-        if "division by 0" in err or "divide by 0" in err:
-            self._report_error(
-                self._diag_msg(DiagnosticKey.ARITH_DIVIDE_BY_ZERO),
-                line=self.current_line,
-            )
-        else:
-            self._report_error(
-                self._diag_msg(DiagnosticKey.ARITH_SYNTAX_ERROR),
-                line=self.current_line,
-            )
-        return ""
 
     def _slice_fields(self, values: list[str], arg_text: str) -> list[str]:
         if arg_text == "":
@@ -10504,86 +10471,556 @@ class Runtime:
         return output.rstrip("\n")
 
     def _expand_arith(self, expr: str, context: str | None = None) -> str:
-        joined = expr
-        try:
-            return self._expand_arith_with_bash(joined, context=context)
-        except Exception:
-            raise
-
-    def _expand_arith_with_bash(self, expr: str, context: str | None = None) -> str:
         expr = self._materialize_random_in_arith(expr)
-        merged_env = dict(self.env)
-        for scope in self.local_stack:
-            merged_env.update(scope)
-        names = self._arith_capture_names(expr, merged_env)
-        positional = " ".join(shlex.quote(a) for a in self.positional)
-        lines = [
-            "set +u",
-            f"set -- {positional}",
-        ]
-        for name in names:
-            decl = self._bash_declare_for_subprocess(name)
-            if decl:
-                lines.append(decl)
-        lines += [
-            f"__mctash_result=$(({expr}))",
-            'printf "__MCTASH_RESULT__=%s\\n" "$__mctash_result"',
-        ]
-        for name in names:
-            lines.append(f'printf "__MCTASH_VAR__{name}=%s\\n" "${{{name}-}}"')
-            qname = shlex.quote(name)
-            lines.append(
-                f'if declare -p {qname} >/dev/null 2>&1; then '
-                f'printf "__MCTASH_DECL__{name}="; declare -p {qname}; '
-                f'else printf "__MCTASH_DECL__{name}=<UNSET>\\n"; fi'
-            )
-        proc = subprocess.run(
-            ["bash", "-c", "\n".join(lines)],
-            env=merged_env,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            check=False,
-        )
-        result = "0"
-        saw_result = False
-        for line in proc.stdout.splitlines():
-            if line.startswith("__MCTASH_RESULT__="):
-                result = line.split("=", 1)[1]
-                saw_result = True
-                continue
-            if line.startswith("__MCTASH_VAR__"):
-                payload = line[len("__MCTASH_VAR__") :]
-                if "=" in payload:
-                    name, value = payload.split("=", 1)
-                    self._assign_shell_var(name, value)
-                continue
-            if line.startswith("__MCTASH_DECL__"):
-                payload = line[len("__MCTASH_DECL__") :]
-                if "=" not in payload:
-                    continue
-                name, decl = payload.split("=", 1)
-                if decl == "<UNSET>":
-                    continue
-                self._apply_bash_decl_snapshot(name, decl)
-        err_text = (proc.stderr or "")
-        if proc.returncode != 0 or (err_text.strip() != "") or not saw_result:
-            err = err_text.lower()
+        try:
+            return str(self._eval_arith_expr(expr))
+        except ZeroDivisionError:
             if context != "subscript":
-                if "division by 0" in err or "divide by 0" in err:
-                    self._report_error(
-                        self._diag_msg(DiagnosticKey.ARITH_DIVIDE_BY_ZERO),
-                        line=self.current_line,
-                        context=context,
-                    )
-                else:
-                    self._report_error(
-                        self._diag_msg(DiagnosticKey.ARITH_SYNTAX_ERROR),
-                        line=self.current_line,
-                        context=context,
-                    )
+                self._report_error(
+                    self._diag_msg(DiagnosticKey.ARITH_DIVIDE_BY_ZERO),
+                    line=self.current_line,
+                    context=context,
+                )
             raise ArithExpansionFailure(2)
-        return result
+        except ArithExpansionFailure:
+            raise
+        except Exception:
+            if context != "subscript":
+                self._report_error(
+                    self._diag_msg(DiagnosticKey.ARITH_SYNTAX_ERROR),
+                    line=self.current_line,
+                    context=context,
+                )
+            raise ArithExpansionFailure(2)
+
+    def _eval_arith_expr(self, expr: str) -> int:
+        tokens = self._arith_tokens(expr)
+        if not tokens:
+            return 0
+        parser = self._ArithParser(self, tokens)
+        node = parser.parse()
+        if parser.peek() is not None:
+            raise ValueError("trailing arithmetic tokens")
+        return self._arith_eval_node(node)
+
+    def _arith_tokens(self, expr: str) -> list[str]:
+        tokens: list[str] = []
+        i = 0
+        n = len(expr)
+        ops = (
+            "<<=",
+            ">>=",
+            "++",
+            "--",
+            "<=",
+            ">=",
+            "==",
+            "!=",
+            "&&",
+            "||",
+            "<<",
+            ">>",
+            "+=",
+            "-=",
+            "*=",
+            "/=",
+            "%=",
+            "&=",
+            "^=",
+            "|=",
+            "=",
+            "?",
+            ":",
+            ",",
+            "(",
+            ")",
+            "[",
+            "]",
+            "+",
+            "-",
+            "*",
+            "/",
+            "%",
+            "!",
+            "~",
+            "<",
+            ">",
+            "&",
+            "^",
+            "|",
+        )
+        while i < n:
+            ch = expr[i]
+            if ch.isspace():
+                i += 1
+                continue
+            matched_op = None
+            for op in ops:
+                if expr.startswith(op, i):
+                    matched_op = op
+                    break
+            if matched_op is not None:
+                tokens.append(matched_op)
+                i += len(matched_op)
+                continue
+            if ch.isalpha() or ch == "_":
+                j = i + 1
+                while j < n and (expr[j].isalnum() or expr[j] == "_"):
+                    j += 1
+                tokens.append(expr[i:j])
+                i = j
+                continue
+            if ch.isdigit():
+                j = i + 1
+                while j < n and (expr[j].isalnum() or expr[j] in {"#", "_", "@", "."}):
+                    j += 1
+                tokens.append(expr[i:j])
+                i = j
+                continue
+            raise ValueError("invalid arithmetic token")
+        return tokens
+
+    class _ArithParser:
+        _ASSIGN_OPS = {"=", "+=", "-=", "*=", "/=", "%=", "<<=", ">>=", "&=", "^=", "|="}
+
+        def __init__(self, rt: "ShellRuntime", tokens: list[str]) -> None:
+            self._rt = rt
+            self._tokens = tokens
+            self._i = 0
+
+        def peek(self) -> str | None:
+            if self._i >= len(self._tokens):
+                return None
+            return self._tokens[self._i]
+
+        def take(self) -> str:
+            tok = self.peek()
+            if tok is None:
+                raise ValueError("unexpected end")
+            self._i += 1
+            return tok
+
+        def expect(self, tok: str) -> None:
+            got = self.take()
+            if got != tok:
+                raise ValueError(f"expected {tok}")
+
+        def parse(self) -> Any:
+            return self._parse_comma()
+
+        def _parse_comma(self) -> Any:
+            node = self._parse_assign()
+            while self.peek() == ",":
+                self.take()
+                right = self._parse_assign()
+                node = ("comma", node, right)
+            return node
+
+        def _parse_assign(self) -> Any:
+            node = self._parse_conditional()
+            tok = self.peek()
+            if tok in self._ASSIGN_OPS:
+                op = self.take()
+                right = self._parse_assign()
+                if not self._rt._arith_is_lvalue(node):
+                    raise ValueError("invalid assignment target")
+                return ("assign", op, node, right)
+            return node
+
+        def _parse_conditional(self) -> Any:
+            node = self._parse_logical_or()
+            if self.peek() == "?":
+                self.take()
+                if_true = self._parse_assign()
+                self.expect(":")
+                if_false = self._parse_conditional()
+                return ("ternary", node, if_true, if_false)
+            return node
+
+        def _parse_logical_or(self) -> Any:
+            node = self._parse_logical_and()
+            while self.peek() == "||":
+                self.take()
+                node = ("bin", "||", node, self._parse_logical_and())
+            return node
+
+        def _parse_logical_and(self) -> Any:
+            node = self._parse_bitor()
+            while self.peek() == "&&":
+                self.take()
+                node = ("bin", "&&", node, self._parse_bitor())
+            return node
+
+        def _parse_bitor(self) -> Any:
+            node = self._parse_bitxor()
+            while self.peek() == "|":
+                self.take()
+                node = ("bin", "|", node, self._parse_bitxor())
+            return node
+
+        def _parse_bitxor(self) -> Any:
+            node = self._parse_bitand()
+            while self.peek() == "^":
+                self.take()
+                node = ("bin", "^", node, self._parse_bitand())
+            return node
+
+        def _parse_bitand(self) -> Any:
+            node = self._parse_equality()
+            while self.peek() == "&":
+                self.take()
+                node = ("bin", "&", node, self._parse_equality())
+            return node
+
+        def _parse_equality(self) -> Any:
+            node = self._parse_relational()
+            while self.peek() in {"==", "!="}:
+                op = self.take()
+                node = ("bin", op, node, self._parse_relational())
+            return node
+
+        def _parse_relational(self) -> Any:
+            node = self._parse_shift()
+            while self.peek() in {"<", "<=", ">", ">="}:
+                op = self.take()
+                node = ("bin", op, node, self._parse_shift())
+            return node
+
+        def _parse_shift(self) -> Any:
+            node = self._parse_add()
+            while self.peek() in {"<<", ">>"}:
+                op = self.take()
+                node = ("bin", op, node, self._parse_add())
+            return node
+
+        def _parse_add(self) -> Any:
+            node = self._parse_mul()
+            while self.peek() in {"+", "-"}:
+                op = self.take()
+                node = ("bin", op, node, self._parse_mul())
+            return node
+
+        def _parse_mul(self) -> Any:
+            node = self._parse_unary()
+            while self.peek() in {"*", "/", "%"}:
+                op = self.take()
+                node = ("bin", op, node, self._parse_unary())
+            return node
+
+        def _parse_unary(self) -> Any:
+            tok = self.peek()
+            if tok in {"+", "-", "!", "~", "++", "--"}:
+                op = self.take()
+                node = self._parse_unary()
+                return ("unary", op, node)
+            return self._parse_postfix()
+
+        def _parse_postfix(self) -> Any:
+            node = self._parse_primary()
+            while self.peek() in {"++", "--"}:
+                op = self.take()
+                node = ("post", op, node)
+            return node
+
+        def _parse_primary(self) -> Any:
+            tok = self.peek()
+            if tok is None:
+                raise ValueError("missing expression")
+            if tok == "(":
+                self.take()
+                node = self._parse_comma()
+                self.expect(")")
+                return node
+            self.take()
+            if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", tok):
+                if self.peek() == "[":
+                    self.take()
+                    idx = self._parse_comma()
+                    self.expect("]")
+                    return ("sub", tok, idx)
+                return ("var", tok)
+            return ("num", tok)
+
+    def _arith_is_lvalue(self, node: Any) -> bool:
+        if not isinstance(node, tuple):
+            return False
+        return node[0] in {"var", "sub"}
+
+    def _arith_eval_node(self, node: Any) -> int:
+        if not isinstance(node, tuple) or not node:
+            raise ValueError("invalid arithmetic node")
+        t = node[0]
+        if t == "num":
+            return self._arith_parse_number(str(node[1]))
+        if t == "var":
+            return self._arith_get_var_int(str(node[1]), seen=set())
+        if t == "sub":
+            base = str(node[1])
+            idx = self._arith_eval_node(node[2])
+            return self._arith_get_subscript_int(base, idx)
+        if t == "comma":
+            self._arith_eval_node(node[1])
+            return self._arith_eval_node(node[2])
+        if t == "unary":
+            op = str(node[1])
+            child = node[2]
+            if op == "++":
+                old, setter = self._arith_resolve_lvalue(child)
+                new = old + 1
+                setter(new)
+                return new
+            if op == "--":
+                old, setter = self._arith_resolve_lvalue(child)
+                new = old - 1
+                setter(new)
+                return new
+            v = self._arith_eval_node(child)
+            if op == "+":
+                return v
+            if op == "-":
+                return -v
+            if op == "!":
+                return 0 if v else 1
+            if op == "~":
+                return ~v
+            raise ValueError("unknown unary op")
+        if t == "post":
+            op = str(node[1])
+            old, setter = self._arith_resolve_lvalue(node[2])
+            if op == "++":
+                setter(old + 1)
+                return old
+            if op == "--":
+                setter(old - 1)
+                return old
+            raise ValueError("unknown postfix op")
+        if t == "assign":
+            op = str(node[1])
+            old, setter = self._arith_resolve_lvalue(node[2])
+            rhs = self._arith_eval_node(node[3])
+            if op == "=":
+                out = rhs
+            elif op == "+=":
+                out = old + rhs
+            elif op == "-=":
+                out = old - rhs
+            elif op == "*=":
+                out = old * rhs
+            elif op == "/=":
+                if rhs == 0:
+                    raise ZeroDivisionError()
+                out = int(old / rhs)
+            elif op == "%=":
+                if rhs == 0:
+                    raise ZeroDivisionError()
+                out = old % rhs
+            elif op == "<<=":
+                out = old << rhs
+            elif op == ">>=":
+                out = old >> rhs
+            elif op == "&=":
+                out = old & rhs
+            elif op == "^=":
+                out = old ^ rhs
+            elif op == "|=":
+                out = old | rhs
+            else:
+                raise ValueError("unknown assignment op")
+            setter(out)
+            return out
+        if t == "ternary":
+            cond = self._arith_eval_node(node[1])
+            if cond != 0:
+                return self._arith_eval_node(node[2])
+            return self._arith_eval_node(node[3])
+        if t == "bin":
+            op = str(node[1])
+            if op == "||":
+                left = self._arith_eval_node(node[2])
+                if left != 0:
+                    return 1
+                return 1 if self._arith_eval_node(node[3]) != 0 else 0
+            if op == "&&":
+                left = self._arith_eval_node(node[2])
+                if left == 0:
+                    return 0
+                return 1 if self._arith_eval_node(node[3]) != 0 else 0
+            left = self._arith_eval_node(node[2])
+            right = self._arith_eval_node(node[3])
+            if op == "+":
+                return left + right
+            if op == "-":
+                return left - right
+            if op == "*":
+                return left * right
+            if op == "/":
+                if right == 0:
+                    raise ZeroDivisionError()
+                return int(left / right)
+            if op == "%":
+                if right == 0:
+                    raise ZeroDivisionError()
+                return left % right
+            if op == "<<":
+                return left << right
+            if op == ">>":
+                return left >> right
+            if op == "<":
+                return 1 if left < right else 0
+            if op == "<=":
+                return 1 if left <= right else 0
+            if op == ">":
+                return 1 if left > right else 0
+            if op == ">=":
+                return 1 if left >= right else 0
+            if op == "==":
+                return 1 if left == right else 0
+            if op == "!=":
+                return 1 if left != right else 0
+            if op == "&":
+                return left & right
+            if op == "^":
+                return left ^ right
+            if op == "|":
+                return left | right
+            raise ValueError("unknown binary op")
+        raise ValueError("invalid arithmetic node type")
+
+    def _arith_resolve_lvalue(self, node: Any) -> tuple[int, Callable[[int], None]]:
+        if not isinstance(node, tuple) or not node:
+            raise ValueError("invalid lvalue")
+        if node[0] == "var":
+            name = str(node[1])
+            cur = self._arith_get_var_int(name, seen=set())
+
+            def _set(v: int) -> None:
+                self._assign_shell_var(name, str(v))
+
+            return cur, _set
+        if node[0] == "sub":
+            base = str(node[1])
+            idx = self._arith_eval_node(node[2])
+            attrs = self._var_attrs.get(base, set())
+            typed = self._typed_vars.get(base)
+            if "assoc" in attrs:
+                cur_map = dict(typed) if isinstance(typed, dict) else {}
+                key = str(idx)
+                old_raw = str(cur_map.get(key, ""))
+                try:
+                    old = self._arith_parse_number(old_raw)
+                except Exception:
+                    old = self._arith_get_var_int(old_raw, seen={base})
+
+                def _set(v: int) -> None:
+                    self._assign_shell_var(f"{base}[{key}]", str(v))
+
+                return old, _set
+            cur_arr = list(typed) if isinstance(typed, list) else []
+            if idx < 0:
+                max_idx = self._array_max_index(cur_arr)
+                idx = (max_idx + 1 + idx) if max_idx is not None else idx
+            if idx < 0:
+                raise ValueError("bad array subscript")
+            old = 0
+            if 0 <= idx < len(cur_arr) and cur_arr[idx] is not None:
+                raw = str(cur_arr[idx])
+                try:
+                    old = self._arith_parse_number(raw)
+                except Exception:
+                    old = self._arith_get_var_int(raw, seen={base})
+
+            def _set(v: int, _idx: int = idx) -> None:
+                self._assign_shell_var(f"{base}[{_idx}]", str(v))
+
+            return old, _set
+        raise ValueError("invalid lvalue")
+
+    def _arith_get_subscript_int(self, base: str, idx: int) -> int:
+        attrs = self._var_attrs.get(base, set())
+        typed = self._typed_vars.get(base)
+        if "assoc" in attrs and isinstance(typed, dict):
+            raw = str(typed.get(str(idx), ""))
+            if raw == "":
+                return 0
+            try:
+                return self._arith_parse_number(raw)
+            except Exception:
+                return self._arith_get_var_int(raw, seen={base})
+        if isinstance(typed, list):
+            if idx < 0:
+                max_idx = self._array_max_index(typed)
+                idx = (max_idx + 1 + idx) if max_idx is not None else idx
+            if 0 <= idx < len(typed) and typed[idx] is not None:
+                raw = str(typed[idx])
+                try:
+                    return self._arith_parse_number(raw)
+                except Exception:
+                    return self._arith_get_var_int(raw, seen={base})
+            return 0
+        return 0
+
+    def _arith_get_var_int(self, name: str, *, seen: set[str]) -> int:
+        if name in seen:
+            return 0
+        seen2 = set(seen)
+        seen2.add(name)
+        raw, is_set = self._get_var_with_state(name)
+        if not is_set or raw == "":
+            return 0
+        try:
+            return self._arith_parse_number(raw)
+        except Exception:
+            try:
+                return self._eval_arith_expr_with_seen(raw, seen2)
+            except Exception:
+                return 0
+
+    def _eval_arith_expr_with_seen(self, expr: str, seen: set[str]) -> int:
+        tokens = self._arith_tokens(expr)
+        if not tokens:
+            return 0
+        parser = self._ArithParser(self, tokens)
+        node = parser.parse()
+        if parser.peek() is not None:
+            raise ValueError("trailing arithmetic tokens")
+        return self._arith_eval_node_with_seen(node, seen)
+
+    def _arith_eval_node_with_seen(self, node: Any, seen: set[str]) -> int:
+        if isinstance(node, tuple) and node and node[0] == "var":
+            return self._arith_get_var_int(str(node[1]), seen=seen)
+        if isinstance(node, tuple) and node and node[0] == "sub":
+            base = str(node[1])
+            idx = self._arith_eval_node_with_seen(node[2], seen)
+            return self._arith_get_subscript_int(base, idx)
+        if isinstance(node, tuple) and node and node[0] == "num":
+            return self._arith_parse_number(str(node[1]))
+        if isinstance(node, tuple) and node and node[0] in {"comma", "ternary", "bin", "unary", "post", "assign"}:
+            # Fallback to normal evaluator for operator semantics; recursive name
+            # lookup still goes through _arith_get_var_int which guards cycles.
+            return self._arith_eval_node(node)
+        raise ValueError("invalid arithmetic node")
+
+    def _arith_parse_number(self, text: str) -> int:
+        s = (text or "").strip()
+        if s == "":
+            return 0
+        m_base = re.fullmatch(r"([0-9]+)#([0-9A-Za-z@_]+)", s)
+        if m_base is not None:
+            base = int(m_base.group(1), 10)
+            if base < 2 or base > 64:
+                raise ValueError("invalid base")
+            digits = m_base.group(2)
+            alpha = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ@_"
+            out = 0
+            for ch in digits:
+                d = alpha.find(ch)
+                if d < 0 or d >= base:
+                    raise ValueError("invalid based literal")
+                out = out * base + d
+            return out
+        if re.fullmatch(r"0[0-7]+", s):
+            return int(s, 8)
+        return int(s, 0)
 
     def _materialize_random_in_arith(self, expr: str) -> str:
         if "RANDOM" not in expr:
@@ -10618,99 +11055,6 @@ class Runtime:
             out.append(expr[i])
             i += 1
         return "".join(out)
-
-    def _bash_declare_for_subprocess(self, name: str) -> str | None:
-        if not self._is_valid_name(name):
-            return None
-        attrs = self._var_attrs.get(name, set())
-        typed = self._typed_vars.get(name)
-        if isinstance(typed, list):
-            elems: list[str] = []
-            for i, v in enumerate(typed):
-                if v is None:
-                    continue
-                elems.append(f'[{i}]="{self._dq_escape(str(v))}"')
-            flag = "-ai" if "integer" in attrs else "-a"
-            return f"declare {flag} {name}=(" + " ".join(elems) + ")"
-        if isinstance(typed, dict) and "assoc" in attrs:
-            elems = []
-            for k, v in typed.items():
-                key = self._transform_q_quote(str(k))
-                elems.append(f'[{key}]="{self._dq_escape(str(v))}"')
-            flag = "-Ai" if "integer" in attrs else "-A"
-            return f"declare {flag} {name}=(" + " ".join(elems) + ")"
-        if "integer" in attrs:
-            return f"declare -i {name}={shlex.quote(self._get_var(name))}"
-        return None
-
-    def _decl_unescape(self, s: str) -> str:
-        out: list[str] = []
-        i = 0
-        while i < len(s):
-            ch = s[i]
-            if ch == "\\" and i + 1 < len(s):
-                out.append(s[i + 1])
-                i += 2
-                continue
-            out.append(ch)
-            i += 1
-        return "".join(out)
-
-    def _apply_bash_decl_snapshot(self, expect_name: str, decl: str) -> None:
-        m = re.match(r"^declare\s+(-[A-Za-z]+)\s+([A-Za-z_][A-Za-z0-9_]*)(?:=(.*))?$", decl)
-        if m is None:
-            return
-        flags = m.group(1)
-        name = m.group(2)
-        rhs = m.group(3)
-        if name != expect_name:
-            return
-        if "A" in flags:
-            amap: dict[str, str] = {}
-            if rhs is not None:
-                for km, vm in re.findall(r"\[(.*?)\]=\"((?:[^\"\\\\]|\\\\.)*)\"", rhs):
-                    key = km
-                    if len(key) >= 2 and key[0] == key[-1] and key[0] in {"'", '"'}:
-                        key = key[1:-1]
-                    amap[self._decl_unescape(key)] = self._decl_unescape(vm)
-            self._typed_vars[name] = amap
-            self._set_var_attrs(name, assoc=True, array=False, integer=("i" in flags))
-            self._set_subscript_projection(name, str(amap.get("0", "")))
-            return
-        if "a" in flags:
-            arr: list[object] = []
-            if rhs is not None:
-                for im, vm in re.findall(r"\[([0-9]+)\]=\"((?:[^\"\\\\]|\\\\.)*)\"", rhs):
-                    idx = int(im)
-                    if idx >= len(arr):
-                        arr.extend([None] * (idx + 1 - len(arr)))
-                    arr[idx] = self._decl_unescape(vm)
-            self._typed_vars[name] = arr
-            self._set_var_attrs(name, array=True, assoc=False, integer=("i" in flags))
-            vis = self._array_visible_values(arr)
-            self._set_subscript_projection(name, vis[0] if vis else "")
-            return
-        self._set_var_attrs(name, array=False, assoc=False, integer=("i" in flags))
-
-    def _arith_capture_names(self, expr: str, env: Dict[str, str]) -> List[str]:
-        seen: set[str] = set()
-        queue: List[str] = list(re.findall(r"[A-Za-z_][A-Za-z0-9_]*", expr))
-        while queue:
-            name = queue.pop(0)
-            if name == "RANDOM":
-                # RANDOM state is handled by dedicated runtime generator.
-                continue
-            if name in seen:
-                continue
-            seen.add(name)
-            raw = env.get(name)
-            if raw is None:
-                continue
-            # Variables used as arithmetic names can themselves contain expressions.
-            for sub in re.findall(r"[A-Za-z_][A-Za-z0-9_]*", raw):
-                if sub not in seen:
-                    queue.append(sub)
-        return sorted(seen)
 
     def _expand_heredoc(self, redir: Redirect) -> str:
         content = redir.here_doc or ""
