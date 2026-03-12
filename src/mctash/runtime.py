@@ -6260,6 +6260,12 @@ class Runtime:
                     self._cmd_sub_used = False
                     return status
                 return 0
+            if argv and argv[0] not in {"declare", "typeset", "local", "readonly", "export"}:
+                for arg in argv[1:]:
+                    if re.match(r"^[A-Za-z_][A-Za-z0-9_]*=\(.*$", arg):
+                        self._print_stderr(self._format_error("syntax error near unexpected token `('", line=self.current_line))
+                        self._print_stderr(self._format_error(f"`{' '.join(argv)}'", line=self.current_line))
+                        return 2
             if not argv:
                 return 0
             declaration_cmds = {"declare", "typeset", "local", "readonly", "export"}

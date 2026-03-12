@@ -193,6 +193,14 @@ def main(argv: List[str] | None = None) -> int:
             text, line = _normalize_parse_error(str(e))
             if line is not None:
                 print(f"{script_name or 'mctash -c'}: line {line}: {text}", file=sys.stderr)
+                if (
+                    rt._diag.style == "bash"
+                    and "syntax error near unexpected token" in text
+                    and line > 0
+                ):
+                    src_lines = source.splitlines()
+                    if line <= len(src_lines):
+                        print(f"{script_name or 'mctash -c'}: line {line}: `{src_lines[line - 1]}'", file=sys.stderr)
             else:
                 print(f"parse error: {text}", file=sys.stderr)
             if "bad substitution" in text:
@@ -384,6 +392,14 @@ def main(argv: List[str] | None = None) -> int:
         if args.script:
             if line_hint is not None:
                 print(f"{args.script}: line {line_hint}: {text}", file=sys.stderr)
+                if (
+                    rt._diag.style == "bash"
+                    and "syntax error near unexpected token" in text
+                    and line_hint > 0
+                ):
+                    src_lines = source.splitlines()
+                    if line_hint <= len(src_lines):
+                        print(f"{args.script}: line {line_hint}: `{src_lines[line_hint - 1]}'", file=sys.stderr)
             else:
                 print(f"{args.script}: {text}", file=sys.stderr)
         else:
@@ -1570,6 +1586,10 @@ def _normalize_parse_error(msg: str) -> tuple[str, int | None]:
         line_s = where.split(":", 1)[0]
         return 'syntax error: unexpected end of file (expecting "done")', int(line_s) if line_s.isdigit() else None
     if "syntax error:" in msg and " at " in msg:
+        text, where = msg.rsplit(" at ", 1)
+        line_s = where.split(":", 1)[0]
+        return text, int(line_s) if line_s.isdigit() else None
+    if "syntax error" in msg and " at " in msg:
         text, where = msg.rsplit(" at ", 1)
         line_s = where.split(":", 1)[0]
         return text, int(line_s) if line_s.isdigit() else None

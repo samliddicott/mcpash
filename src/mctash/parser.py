@@ -1,4 +1,5 @@
 from __future__ import annotations
+import re
 from typing import List, Optional
 
 from .ast_nodes import (
@@ -757,6 +758,15 @@ class Parser:
                     word_text = tok.value
                     word_line, word_col, word_index = tok.line, tok.col, tok.index
                     self._advance()
+                    if (
+                        argv
+                        and argv[0].text not in {"declare", "typeset", "local", "readonly", "export"}
+                        and argv[0].text not in {"eval", "let"}
+                        and re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*=", word_text)
+                    ):
+                        nxt = self._peek()
+                        if nxt is not None and nxt.kind == "OP" and nxt.value == "(":
+                            raise ParseError(f"syntax error near unexpected token `(' at {self._where(nxt)}")
                     if (
                         argv
                         and argv[0].text in {"declare", "typeset", "local", "readonly", "export"}
