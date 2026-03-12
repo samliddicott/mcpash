@@ -6679,15 +6679,21 @@ class Runtime:
         return 0
 
     def _case_pattern_matches(self, value: str, pattern: str) -> bool:
-        # Use bash itself as the primary matcher for shell case-pattern
-        # semantics (quoting, escapes, classes, locale forms).
+        if self._shopts.get("extglob", False) and self._has_extglob_syntax(pattern):
+            via = self._case_pattern_matches_extglob_via_bash(value, pattern)
+            if via is not None:
+                return via
+        if self._shopts.get("nocasematch", False):
+            return fnmatch.fnmatchcase(value.lower(), pattern.lower())
+        return fnmatch.fnmatchcase(value, pattern)
+
+    def _case_pattern_matches_extglob_via_bash(self, value: str, pattern: str) -> bool | None:
+        # Temporary compatibility path for extglob case patterns until native
+        # extglob matcher semantics are fully implemented.
         bash_argv = ["bash"]
         if self.options.get("posix", False):
             bash_argv.append("--posix")
-        shopt_prefix = ""
-        if self._shopts.get("extglob", False):
-            shopt_prefix += "shopt -s extglob; "
-        script = shopt_prefix + 'v=$1; p=$2; [[ $v == $p ]]; rc=$?; exit $rc'
+        script = 'shopt -s extglob; v=$1; p=$2; [[ $v == $p ]]; rc=$?; exit $rc'
         try:
             proc = subprocess.run(
                 bash_argv + ["-c", script, "mctash", value, pattern],
@@ -6700,9 +6706,7 @@ class Runtime:
                 return proc.returncode == 0
         except Exception:
             pass
-        if "[[." not in pattern and "[[=" not in pattern and "[[:" not in pattern and "[:" not in pattern and "[." not in pattern and "[=" not in pattern:
-            return fnmatch.fnmatchcase(value, pattern)
-        return fnmatch.fnmatchcase(value, pattern)
+        return None
 
     def _has_extglob_syntax(self, pattern: str) -> bool:
         i = 0
@@ -11792,9 +11796,7 @@ class Runtime:
         return value
 
     def _shell_pattern_match(self, text: str, pattern: str) -> bool:
-        if self._shopts.get("extglob", False) and self._has_extglob_syntax(pattern):
-            return self._case_pattern_matches(text, pattern)
-        return fnmatch.fnmatchcase(text, pattern)
+        return self._case_pattern_matches(text, pattern)
 
     def _pattern_from_word(self, text: str, for_case: bool = False) -> str:
         fields = self._legacy_word_to_expansion_fields(text, assignment=True)
