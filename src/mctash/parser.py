@@ -1090,8 +1090,6 @@ class Parser:
                                 break
                             self._advance()
                         return src[start_index:end_index]
-                elif ch == "\n" and depth > 0:
-                    raise ParseError("syntax error: missing ')' in compound assignment")
                 i += 1
             raise ParseError("syntax error: missing ')' in compound assignment")
         if tok.kind != "OP" or tok.value != "(":
@@ -1116,7 +1114,8 @@ class Parser:
                 self._advance()
                 continue
             if cur.kind == "OP" and cur.value == "\n":
-                raise ParseError(f"syntax error: missing ')' in compound assignment at {self._where(cur)}")
+                self._advance()
+                continue
             self._advance()
 
     def _make_redirect(self, op: str, target: str, fd: int | None) -> Redirect:

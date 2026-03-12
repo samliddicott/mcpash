@@ -10475,18 +10475,19 @@ class Runtime:
         err_text = (proc.stderr or "")
         if proc.returncode != 0 or (err_text.strip() != "") or not saw_result:
             err = err_text.lower()
-            if "division by 0" in err or "divide by 0" in err:
-                self._report_error(
-                    self._diag_msg(DiagnosticKey.ARITH_DIVIDE_BY_ZERO),
-                    line=self.current_line,
-                    context=context,
-                )
-            else:
-                self._report_error(
-                    self._diag_msg(DiagnosticKey.ARITH_SYNTAX_ERROR),
-                    line=self.current_line,
-                    context=context,
-                )
+            if context != "subscript":
+                if "division by 0" in err or "divide by 0" in err:
+                    self._report_error(
+                        self._diag_msg(DiagnosticKey.ARITH_DIVIDE_BY_ZERO),
+                        line=self.current_line,
+                        context=context,
+                    )
+                else:
+                    self._report_error(
+                        self._diag_msg(DiagnosticKey.ARITH_SYNTAX_ERROR),
+                        line=self.current_line,
+                        context=context,
+                    )
             raise ArithExpansionFailure(2)
         return result
 
@@ -11541,6 +11542,8 @@ class Runtime:
         declare_upper = False
         declare_export = False
         declare_readonly = False
+        unset_array = False
+        unset_assoc = False
         force_global = False
         idx = 0
         while idx < len(args):
@@ -11548,34 +11551,68 @@ class Runtime:
             if arg == "--":
                 idx += 1
                 break
-            if not arg.startswith("-") or arg == "-":
+            if (not arg.startswith("-") and not arg.startswith("+")) or arg in {"-", "+"}:
                 break
+            enable = arg[0] == "-"
             for ch in arg[1:]:
                 if ch == "F":
+                    if not enable:
+                        self._report_error(
+                            self._diag_msg(DiagnosticKey.ILLEGAL_OPTION, opt=f"+{ch}"),
+                            line=self.current_line,
+                            context=cmd_name,
+                        )
+                        return 2
                     show_funcs = True
                 elif ch == "f":
+                    if not enable:
+                        self._report_error(
+                            self._diag_msg(DiagnosticKey.ILLEGAL_OPTION, opt=f"+{ch}"),
+                            line=self.current_line,
+                            context=cmd_name,
+                        )
+                        return 2
                     show_func_defs = True
                 elif ch == "p":
+                    if not enable:
+                        self._report_error(
+                            self._diag_msg(DiagnosticKey.ILLEGAL_OPTION, opt=f"+{ch}"),
+                            line=self.current_line,
+                            context=cmd_name,
+                        )
+                        return 2
                     print_vars = True
                 elif ch == "a":
-                    declare_array = True
+                    if enable:
+                        declare_array = True
+                    else:
+                        unset_array = True
                 elif ch == "A":
-                    declare_assoc = True
+                    if enable:
+                        declare_assoc = True
+                    else:
+                        unset_assoc = True
                 elif ch == "i":
-                    declare_integer = True
+                    if enable:
+                        declare_integer = True
                 elif ch == "l":
-                    declare_lower = True
+                    if enable:
+                        declare_lower = True
                 elif ch == "u":
-                    declare_upper = True
+                    if enable:
+                        declare_upper = True
                 elif ch == "x":
-                    declare_export = True
+                    if enable:
+                        declare_export = True
                 elif ch == "r":
-                    declare_readonly = True
+                    if enable:
+                        declare_readonly = True
                 elif ch == "g":
-                    force_global = True
+                    if enable:
+                        force_global = True
                 else:
                     self._report_error(
-                        self._diag_msg(DiagnosticKey.ILLEGAL_OPTION, opt=f"-{ch}"),
+                        self._diag_msg(DiagnosticKey.ILLEGAL_OPTION, opt=f"{arg[0]}{ch}"),
                         line=self.current_line,
                         context=cmd_name,
                     )
@@ -11709,6 +11746,10 @@ class Runtime:
             attr_flags["exported"] = True
         if declare_readonly:
             attr_flags["readonly"] = True
+        if unset_array:
+            attr_flags["array"] = False
+        if unset_assoc:
+            attr_flags["assoc"] = False
 
         if declare_assoc:
             if not self._bash_feature_enabled("declare_assoc"):
@@ -11765,6 +11806,15 @@ class Runtime:
                     )
                     if self._bash_compat_level is None:
                         status = 1
+                    continue
+                if (unset_array and ("array" in existing_attrs or "assoc" in existing_attrs)) or (
+                    unset_assoc and "assoc" in existing_attrs
+                ):
+                    self._report_error(
+                        f"{cmd_name}: {parsed_base}: cannot destroy array variables in this way",
+                        line=self.current_line,
+                    )
+                    status = 1
                     continue
                 if parsed_decl is not None:
                     expanded_sub = self._expand_assignment_word(value)
@@ -11869,6 +11919,15 @@ class Runtime:
                     )
                     if self._bash_compat_level is None:
                         status = 1
+                    continue
+                if (unset_array and ("array" in existing_attrs or "assoc" in existing_attrs)) or (
+                    unset_assoc and "assoc" in existing_attrs
+                ):
+                    self._report_error(
+                        f"{cmd_name}: {name}: cannot destroy array variables in this way",
+                        line=self.current_line,
+                    )
+                    status = 1
                     continue
                 base_value = self._get_var(name)
                 if effective_local_scope and name not in self.local_stack[-1]:
