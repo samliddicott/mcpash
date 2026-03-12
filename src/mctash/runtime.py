@@ -11843,7 +11843,10 @@ class Runtime:
                             parts.append(f"[{idx}]={_dq(str(v))}")
                         print(f"declare {array_flag} {name}=({' '.join(parts)})", flush=True)
                     elif isinstance(typed, list):
-                        print(f"declare {array_flag} {name}=()", flush=True)
+                        if name == "FUNCNAME":
+                            print(f"declare {array_flag} {name}", flush=True)
+                        else:
+                            print(f"declare {array_flag} {name}=()", flush=True)
                     else:
                         print(f"declare {array_flag} {name}", flush=True)
                 elif "integer" in attrs:
@@ -12070,12 +12073,12 @@ class Runtime:
                 if effective_local_scope and name not in self.local_stack[-1]:
                     exists = False
                 if exists:
+                    pre_value, pre_is_set = self._get_var_with_state(name)
                     if attrs_apply:
                         self._set_var_attrs(name, **attrs_apply)
                     if attrs_apply.get("array") and not isinstance(self._typed_vars.get(name), list):
-                        cur_v, cur_set = self._get_var_with_state(name)
-                        self._typed_vars[name] = [cur_v] if cur_set and cur_v != "" else []
-                        self._set_subscript_projection(name, cur_v if cur_set else "")
+                        self._typed_vars[name] = [pre_value] if pre_is_set else []
+                        self._set_subscript_projection(name, pre_value if pre_is_set else "")
                     continue
                 self._declare_var(name, base_value, local_scope=effective_local_scope, **attrs_apply)
 
@@ -12273,11 +12276,12 @@ class Runtime:
                     if show_array and not show_assoc:
                         continue
                     typed = self._typed_vars.get(name)
+                    decl_prefix = "readonly" if self.options.get("posix", False) else "declare"
                     if isinstance(typed, dict) and typed:
                         parts = [f"[{k}]={_dq(str(v))}" for k, v in typed.items()]
-                        print(f"readonly -A {name}=({' '.join(parts)} )")
+                        print(f"{decl_prefix} -Ar {name}=({' '.join(parts)} )")
                     else:
-                        print(f"readonly -A {name}")
+                        print(f"{decl_prefix} -Ar {name}")
                     continue
                 if "array" in attrs:
                     if show_assoc and not show_array:
@@ -12289,9 +12293,15 @@ class Runtime:
                             if v is None:
                                 continue
                             parts.append(f"[{i}]={_dq(str(v))}")
-                        print(f"readonly -a {name}=({' '.join(parts)})")
+                        if self.options.get("posix", False):
+                            print(f"readonly -a {name}=({' '.join(parts)})")
+                        else:
+                            print(f"declare -ar {name}=({' '.join(parts)})")
                     else:
-                        print(f"readonly -a {name}")
+                        if self.options.get("posix", False):
+                            print(f"readonly -a {name}")
+                        else:
+                            print(f"declare -ar {name}")
                     continue
                 if show_array or show_assoc:
                     continue
@@ -14014,7 +14024,7 @@ class Runtime:
         else:
             values = self._split_read_fields(text, names)
         for name, value in zip(names, values):
-            self.env[name] = value
+            self._assign_shell_var(name, value)
         return 0 if ok else 1
 
     def _run_mapfile(self, args: List[str]) -> int:
