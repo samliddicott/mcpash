@@ -5763,6 +5763,13 @@ class Runtime:
     ) -> tuple[int, bytes, float]:
         start = time.monotonic()
         tmp = tempfile.TemporaryFile()
+        saved_env = dict(self.env)
+        saved_locals = [dict(s) for s in self.local_stack]
+        saved_typed = copy.deepcopy(self._typed_vars)
+        saved_attrs = {k: set(v) for k, v in self._var_attrs.items()}
+        saved_readonly = set(self.readonly_vars)
+        saved_opts = dict(self.options)
+        saved_positional = list(self.positional)
         try:
             sys.stdout.flush()
         except Exception:
@@ -5783,6 +5790,13 @@ class Runtime:
             except SystemExit as e:
                 status = int(e.code) if e.code is not None else 0
         finally:
+            self.env = saved_env
+            self.local_stack = saved_locals
+            self._typed_vars = saved_typed
+            self._var_attrs = saved_attrs
+            self.readonly_vars = saved_readonly
+            self.options = saved_opts
+            self.positional = saved_positional
             try:
                 sys.stdout.flush()
             except Exception:
@@ -11187,6 +11201,8 @@ class Runtime:
             if not isinstance(cur, dict):
                 cur = {}
             akey = self._eval_assoc_subscript_key(key)
+            if "integer" in attrs:
+                value = str(self._to_int_arith(value if value != "" else "0"))
             cur[str(akey)] = value
             self._typed_vars[base] = cur
             self._set_subscript_projection(base, str(cur.get("0", "")))
@@ -11207,6 +11223,8 @@ class Runtime:
             raise RuntimeError(self._diag_msg(DiagnosticKey.READONLY_VAR, name=base))
         if idx >= len(cur_arr):
             cur_arr.extend([None] * (idx + 1 - len(cur_arr)))
+        if "integer" in attrs:
+            value = str(self._to_int_arith(value if value != "" else "0"))
         cur_arr[idx] = value
         self._typed_vars[base] = cur_arr
         proj = ""
@@ -15727,6 +15745,12 @@ class Runtime:
             saved_cwd = None
         base = (self.current_line or 1) + line_bias
         self._line_offset = saved_offset + (base - 1)
+        # Evaluate command substitution in an isolated mutable state so
+        # temporary mutations don't leak back through shared dict objects.
+        self.env = dict(saved_env)
+        self._typed_vars = copy.deepcopy(saved_typed_vars)
+        self.local_stack = [dict(scope) for scope in saved_local_stack]
+        self.positional = list(saved_positional)
         # In bash/ash POSIX behavior, command substitution under `set -e`
         # remains errexit-sensitive. In non-POSIX bash mode, `-e` is not
         # inherited into command substitution.
@@ -15795,6 +15819,10 @@ class Runtime:
             saved_cwd = None
         base = (self.current_line or 1) + line_bias
         self._line_offset = saved_offset + (base - 1)
+        self.env = dict(saved_env)
+        self._typed_vars = copy.deepcopy(saved_typed_vars)
+        self.local_stack = [dict(scope) for scope in saved_local_stack]
+        self.positional = list(saved_positional)
         if not saved_options.get("posix", False):
             self.options["e"] = False
         hard_error = False
