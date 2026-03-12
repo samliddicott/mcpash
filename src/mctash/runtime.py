@@ -6679,34 +6679,191 @@ class Runtime:
         return 0
 
     def _case_pattern_matches(self, value: str, pattern: str) -> bool:
+        nocase = bool(self._shopts.get("nocasematch", False))
         if self._shopts.get("extglob", False) and self._has_extglob_syntax(pattern):
-            via = self._case_pattern_matches_extglob_via_bash(value, pattern)
-            if via is not None:
-                return via
-        if self._shopts.get("nocasematch", False):
+            try:
+                return self._match_extglob_pattern(value, pattern, nocase=nocase)
+            except Exception:
+                # Fall back to base matcher if pattern parser/matcher rejects.
+                pass
+        if nocase:
             return fnmatch.fnmatchcase(value.lower(), pattern.lower())
         return fnmatch.fnmatchcase(value, pattern)
 
-    def _case_pattern_matches_extglob_via_bash(self, value: str, pattern: str) -> bool | None:
-        # Temporary compatibility path for extglob case patterns until native
-        # extglob matcher semantics are fully implemented.
-        bash_argv = ["bash"]
-        if self.options.get("posix", False):
-            bash_argv.append("--posix")
-        script = 'shopt -s extglob; v=$1; p=$2; [[ $v == $p ]]; rc=$?; exit $rc'
-        try:
-            proc = subprocess.run(
-                bash_argv + ["-c", script, "mctash", value, pattern],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                text=True,
-                check=False,
-            )
-            if proc.returncode in (0, 1):
-                return proc.returncode == 0
-        except Exception:
-            pass
-        return None
+    def _match_extglob_pattern(self, value: str, pattern: str, *, nocase: bool = False) -> bool:
+        if nocase:
+            value = value.lower()
+            pattern = pattern.lower()
+        nodes = self._parse_extglob_nodes(pattern)
+        return self._extglob_match(nodes, value)
+
+    def _parse_extglob_nodes(self, pattern: str) -> list[Any]:
+        n = len(pattern)
+
+        def parse_seq(i: int, stops: set[str]) -> tuple[list[Any], int]:
+            out: list[Any] = []
+            lit_buf: list[str] = []
+
+            def flush_lit() -> None:
+                if lit_buf:
+                    out.append(("lit", "".join(lit_buf)))
+                    lit_buf.clear()
+
+            while i < n:
+                ch = pattern[i]
+                if ch in stops:
+                    break
+                if ch == "\\":
+                    if i + 1 < n:
+                        lit_buf.append(pattern[i + 1])
+                        i += 2
+                    else:
+                        lit_buf.append("\\")
+                        i += 1
+                    continue
+                if ch == "[":
+                    j = i + 1
+                    if j < n and pattern[j] in {"!", "^"}:
+                        j += 1
+                    if j < n and pattern[j] == "]":
+                        j += 1
+                    while j < n:
+                        if pattern[j] == "\\" and j + 1 < n:
+                            j += 2
+                            continue
+                        if pattern[j] == "]":
+                            break
+                        j += 1
+                    if j >= n or pattern[j] != "]":
+                        lit_buf.append("[")
+                        i += 1
+                        continue
+                    flush_lit()
+                    out.append(("class", pattern[i : j + 1]))
+                    i = j + 1
+                    continue
+                if ch in {"@", "?", "+", "*", "!"} and i + 1 < n and pattern[i + 1] == "(":
+                    flush_lit()
+                    op = ch
+                    i += 2
+                    alts: list[list[Any]] = []
+                    while True:
+                        alt, i = parse_seq(i, {"|", ")"})
+                        alts.append(alt)
+                        if i >= n:
+                            raise ValueError("unterminated extglob")
+                        if pattern[i] == "|":
+                            i += 1
+                            continue
+                        if pattern[i] == ")":
+                            i += 1
+                            break
+                    out.append(("ext", op, alts))
+                    continue
+                if ch == "*":
+                    flush_lit()
+                    out.append(("star",))
+                    i += 1
+                    continue
+                if ch == "?":
+                    flush_lit()
+                    out.append(("any",))
+                    i += 1
+                    continue
+                lit_buf.append(ch)
+                i += 1
+
+            flush_lit()
+            return out, i
+
+        nodes, idx = parse_seq(0, set())
+        if idx != n:
+            raise ValueError("unparsed pattern suffix")
+        return nodes
+
+    def _extglob_match(self, nodes: list[Any], text: str) -> bool:
+        memo: dict[tuple[int, int], set[int]] = {}
+
+        def class_match(raw: str, ch: str) -> bool:
+            return fnmatch.fnmatchcase(ch, raw)
+
+        def run(seq: list[Any], i: int) -> set[int]:
+            key = (id(seq), i)
+            cached = memo.get(key)
+            if cached is not None:
+                return cached
+            out: set[int] = set()
+
+            def walk(node_idx: int, pos: int) -> None:
+                if node_idx >= len(seq):
+                    out.add(pos)
+                    return
+                node = seq[node_idx]
+                typ = node[0]
+                if typ == "lit":
+                    lit = node[1]
+                    if text.startswith(lit, pos):
+                        walk(node_idx + 1, pos + len(lit))
+                    return
+                if typ == "any":
+                    if pos < len(text):
+                        walk(node_idx + 1, pos + 1)
+                    return
+                if typ == "class":
+                    if pos < len(text) and class_match(node[1], text[pos]):
+                        walk(node_idx + 1, pos + 1)
+                    return
+                if typ == "star":
+                    for j in range(pos, len(text) + 1):
+                        walk(node_idx + 1, j)
+                    return
+                if typ == "ext":
+                    op = node[1]
+                    alts = node[2]
+                    alt_ends: set[int] = set()
+                    for alt in alts:
+                        alt_ends.update(run(alt, pos))
+                    if op == "@":
+                        for j in alt_ends:
+                            walk(node_idx + 1, j)
+                        return
+                    if op == "?":
+                        walk(node_idx + 1, pos)
+                        for j in alt_ends:
+                            walk(node_idx + 1, j)
+                        return
+                    if op in {"*", "+"}:
+                        starts: set[int] = {pos}
+                        if op == "*":
+                            walk(node_idx + 1, pos)
+                        frontier: set[int] = set(alt_ends)
+                        seen: set[int] = set()
+                        while frontier:
+                            j = frontier.pop()
+                            if j in seen:
+                                continue
+                            seen.add(j)
+                            walk(node_idx + 1, j)
+                            nexts: set[int] = set()
+                            for alt in alts:
+                                for jj in run(alt, j):
+                                    if jj != j:
+                                        nexts.add(jj)
+                            frontier.update(nexts)
+                        return
+                    if op == "!":
+                        alt_forbidden: set[int] = set(alt_ends)
+                        for j in range(pos, len(text) + 1):
+                            if j not in alt_forbidden:
+                                walk(node_idx + 1, j)
+                        return
+                    return
+
+            walk(0, i)
+            memo[key] = out
+            return out
+
+        return len(text) in run(nodes, 0)
 
     def _has_extglob_syntax(self, pattern: str) -> bool:
         i = 0
