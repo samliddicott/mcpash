@@ -2729,7 +2729,7 @@ class Runtime:
                     except CommandSubstFailure as e:
                         return e.code
                     except ArithExpansionFailure as e:
-                        raise SystemExit(e.code)
+                        return e.code
                     assigned_names.add(name)
                     if name in self.readonly_vars:
                         msg = self._diag_msg(DiagnosticKey.READONLY_VAR, name=name)
@@ -3264,7 +3264,7 @@ class Runtime:
         except CommandSubstFailure as e:
             return e.code
         except ArithExpansionFailure as e:
-            raise SystemExit(e.code)
+            return e.code
         argv = self._expand_aliases(argv)
         assign_pairs = node.get("more_env") or []
 
@@ -3289,7 +3289,7 @@ class Runtime:
                     except CommandSubstFailure as e:
                         return e.code
                     except ArithExpansionFailure as e:
-                        raise SystemExit(e.code)
+                        return e.code
                     name = str(assign.get("name") or "")
                     assigned_names.add(name)
                     if name in self.readonly_vars:
@@ -3348,7 +3348,7 @@ class Runtime:
                 except CommandSubstFailure as e:
                     return e.code
                 except ArithExpansionFailure as e:
-                    raise SystemExit(e.code)
+                    return e.code
                 name = str(assign.get("name") or "")
                 assigned_names.add(name)
                 if name in self.readonly_vars:
@@ -4603,10 +4603,9 @@ class Runtime:
                 chars.append((ch, seg.split_active, seg.glob_active, seg.quoted, seg.source_kind))
         if not chars:
             return [field]
-        start, end, cuts = self._find_brace_candidate(chars)
-        if start == -1 or end == -1 or not cuts:
-            return [field]
         expanded = self._brace_expand_chars(chars)
+        if len(expanded) == 1 and expanded[0] == chars:
+            return [field]
         out: list[ExpansionField] = []
         for item in expanded:
             mapped = self._chars_to_structured_field(item)
@@ -4621,6 +4620,15 @@ class Runtime:
     def _brace_expand_chars(
         self, chars: list[tuple[str, bool, bool, bool, str]]
     ) -> list[list[tuple[str, bool, bool, bool, str]]]:
+        range_hit = self._find_brace_range_candidate(chars)
+        if range_hit is not None:
+            start, end, parts = range_hit
+            out: list[list[tuple[str, bool, bool, bool, str]]] = []
+            prefix = chars[:start]
+            suffix = chars[end + 1 :]
+            for part in parts:
+                out.extend(self._brace_expand_chars(prefix + part + suffix))
+            return out
         start, end, cuts = self._find_brace_candidate(chars)
         if start == -1 or end == -1 or not cuts:
             return [chars]
@@ -4675,6 +4683,99 @@ class Runtime:
                 j += 1
             i += 1
         return -1, -1, []
+
+    def _find_brace_range_candidate(
+        self, chars: list[tuple[str, bool, bool, bool, str]]
+    ) -> tuple[int, int, list[list[tuple[str, bool, bool, bool, str]]]] | None:
+        def _literal_kind(kind: str) -> bool:
+            return kind in {"word_part.Literal"}
+
+        i = 0
+        n = len(chars)
+        while i < n:
+            ch, split_a, glob_a, quoted, kind = chars[i]
+            if quoted or ch != "{" or not _literal_kind(kind):
+                i += 1
+                continue
+            depth = 0
+            j = i
+            while j < n:
+                c, _, _, c_quoted, c_kind = chars[j]
+                if c_quoted or not _literal_kind(c_kind):
+                    break
+                if c == "{":
+                    depth += 1
+                elif c == "}":
+                    depth -= 1
+                    if depth == 0:
+                        body = "".join(x[0] for x in chars[i + 1 : j])
+                        vals = self._brace_range_values(body)
+                        if vals is not None:
+                            parts = [
+                                [
+                                    (vch, split_a, glob_a, False, kind)
+                                    for vch in val
+                                ]
+                                for val in vals
+                            ]
+                            return i, j, parts
+                        break
+                    if depth < 0:
+                        break
+                j += 1
+            i += 1
+        return None
+
+    def _brace_range_values(self, body: str) -> list[str] | None:
+        m_num = re.fullmatch(r"(-?[0-9]+)\.\.(-?[0-9]+)(?:\.\.(-?[0-9]+))?", body)
+        if m_num is not None:
+            a_s, b_s, step_s = m_num.group(1), m_num.group(2), m_num.group(3)
+            a = int(a_s, 10)
+            b = int(b_s, 10)
+            if step_s is None:
+                step = 1 if b >= a else -1
+            else:
+                step = int(step_s, 10)
+                if step == 0:
+                    return None
+                if (b > a and step < 0) or (b < a and step > 0):
+                    return []
+            width = max(len(a_s.lstrip("-")), len(b_s.lstrip("-")))
+            out: list[str] = []
+            x = a
+            guard = 0
+            while (step > 0 and x <= b) or (step < 0 and x >= b):
+                sx = str(abs(x)).rjust(width, "0")
+                out.append(("-" if x < 0 else "") + sx)
+                x += step
+                guard += 1
+                if guard > 20000:
+                    break
+            return out
+        m_chr = re.fullmatch(r"([A-Za-z])\.\.([A-Za-z])(?:\.\.(-?[0-9]+))?", body)
+        if m_chr is not None:
+            a = ord(m_chr.group(1))
+            b = ord(m_chr.group(2))
+            step_s = m_chr.group(3)
+            if step_s is None:
+                step = 1 if b >= a else -1
+            else:
+                step = int(step_s, 10)
+                if step == 0:
+                    return None
+                if (b > a and step < 0) or (b < a and step > 0):
+                    return []
+            out: list[str] = []
+            x = a
+            guard = 0
+            while (step > 0 and x <= b) or (step < 0 and x >= b):
+                out.append(chr(x))
+                x += step
+                guard += 1
+                if guard > 20000:
+                    break
+            return out
+        return None
 
     def _split_structured_field(self, field: ExpansionField) -> list[ExpansionField]:
         def _empty_split_field() -> ExpansionField:
@@ -5895,7 +5996,7 @@ class Runtime:
             except CommandSubstFailure as e:
                 return e.code
             except ArithExpansionFailure as e:
-                raise SystemExit(e.code)
+                return e.code
             argv = self._expand_aliases(argv)
 
             if argv and argv[0] == "exec" and len(argv) == 2 and node.redirects:
@@ -5919,7 +6020,7 @@ class Runtime:
                         except CommandSubstFailure as e:
                             return e.code
                         except ArithExpansionFailure as e:
-                            raise SystemExit(e.code)
+                            return e.code
                         name = assign.name
                         op = assign.op
                         assigned_names.add(name)
@@ -5976,7 +6077,7 @@ class Runtime:
                     except CommandSubstFailure as e:
                         return e.code
                     except ArithExpansionFailure as e:
-                        raise SystemExit(e.code)
+                        return e.code
                     name = assign.name
                     op = assign.op
                     assigned_names.add(name)
@@ -6377,7 +6478,7 @@ class Runtime:
             try:
                 self._expand_arith(init_expr, context="for")
             except ArithExpansionFailure as e:
-                raise SystemExit(e.code)
+                return e.code
         status = 0
         self._loop_depth += 1
         try:
@@ -6389,7 +6490,7 @@ class Runtime:
                     else:
                         should_run = True
                 except ArithExpansionFailure as e:
-                    raise SystemExit(e.code)
+                    return e.code
                 except ValueError:
                     should_run = False
                 if not should_run:
@@ -6410,7 +6511,7 @@ class Runtime:
                     try:
                         self._expand_arith(update_expr, context="for")
                     except ArithExpansionFailure as e:
-                        raise SystemExit(e.code)
+                        return e.code
             return status
         finally:
             self._loop_depth -= 1
@@ -9689,7 +9790,10 @@ class Runtime:
                             for v in vals
                         ]
                 elif op == ":substr":
-                    vals = self._slice_fields(vals, arg_text)
+                    if isinstance(typed, list):
+                        vals = self._slice_indexed_array(typed, arg_text)
+                    else:
+                        vals = self._slice_fields(vals, arg_text)
                 if key == "*":
                     if quoted:
                         return self._ifs_join(vals)
@@ -9851,6 +9955,10 @@ class Runtime:
         return value
 
     def _substring(self, value: str, arg_text: str) -> str:
+        if self._bash_compat_level is not None:
+            via = self._substring_via_bash(value, arg_text)
+            if via is not None:
+                return via
         if arg_text == "":
             raise RuntimeError(self._format_error("syntax error: missing '}'", line=self.current_line))
         if ":" in arg_text:
@@ -9880,6 +9988,35 @@ class Runtime:
         if ln == 0:
             return ""
         return value[off : off + ln]
+
+    def _substring_via_bash(self, value: str, arg_text: str) -> str | None:
+        env = dict(self.env)
+        for scope in self.local_stack:
+            env.update(scope)
+        env["__MCTASH_SUBSTR_VALUE"] = value
+        script = f'printf "%s" "${{__MCTASH_SUBSTR_VALUE:{arg_text}}}"'
+        proc = subprocess.run(
+            ["bash", "-c", script],
+            env=env,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            check=False,
+        )
+        if proc.returncode == 0:
+            return proc.stdout
+        err = (proc.stderr or "").lower()
+        if "division by 0" in err or "divide by 0" in err:
+            self._report_error(
+                self._diag_msg(DiagnosticKey.ARITH_DIVIDE_BY_ZERO),
+                line=self.current_line,
+            )
+        else:
+            self._report_error(
+                self._diag_msg(DiagnosticKey.ARITH_SYNTAX_ERROR),
+                line=self.current_line,
+            )
+        return ""
 
     def _slice_fields(self, values: list[str], arg_text: str) -> list[str]:
         if arg_text == "":
@@ -9915,6 +10052,49 @@ class Runtime:
         if end > n:
             end = n
         return values[start:end]
+
+    def _slice_indexed_array(self, values: list[object], arg_text: str) -> list[str]:
+        if arg_text == "":
+            raise RuntimeError(self._format_error("syntax error: missing '}'", line=self.current_line))
+        if ":" in arg_text:
+            off_text, len_text = arg_text.split(":", 1)
+            has_len = True
+        else:
+            off_text, len_text = arg_text, ""
+            has_len = False
+        try:
+            off = int(self._expand_arith(off_text if off_text != "" else "0", context="subscript"))
+        except Exception:
+            off = 0
+        max_idx = self._array_max_index(values)
+        n = 0 if max_idx is None else (max_idx + 1)
+        start = off if off >= 0 else n + off
+        if start < 0:
+            start = 0
+        if start > n:
+            return []
+        if not has_len:
+            end = n
+        else:
+            try:
+                ln = int(self._expand_arith(len_text, context="subscript"))
+            except Exception:
+                ln = 0
+            if ln >= 0:
+                end = start + ln
+            else:
+                end = n + ln
+            if end < start:
+                end = start
+            if end > n:
+                end = n
+        out: list[str] = []
+        for i in range(start, end):
+            if 0 <= i < len(values):
+                v = values[i]
+                if v is not None:
+                    out.append(str(v))
+        return out
 
     def _replace_pattern(self, value: str, spec: str) -> str:
         global_replace = False
@@ -10177,6 +10357,7 @@ class Runtime:
             raise
 
     def _expand_arith_with_bash(self, expr: str, context: str | None = None) -> str:
+        expr = self._materialize_random_in_arith(expr)
         merged_env = dict(self.env)
         for scope in self.local_stack:
             merged_env.update(scope)
@@ -10185,11 +10366,23 @@ class Runtime:
         lines = [
             "set +u",
             f"set -- {positional}",
+        ]
+        for name in names:
+            decl = self._bash_declare_for_subprocess(name)
+            if decl:
+                lines.append(decl)
+        lines += [
             f"__mctash_result=$(({expr}))",
             'printf "__MCTASH_RESULT__=%s\\n" "$__mctash_result"',
         ]
         for name in names:
             lines.append(f'printf "__MCTASH_VAR__{name}=%s\\n" "${{{name}-}}"')
+            qname = shlex.quote(name)
+            lines.append(
+                f'if declare -p {qname} >/dev/null 2>&1; then '
+                f'printf "__MCTASH_DECL__{name}="; declare -p {qname}; '
+                f'else printf "__MCTASH_DECL__{name}=<UNSET>\\n"; fi'
+            )
         proc = subprocess.run(
             ["bash", "-c", "\n".join(lines)],
             env=merged_env,
@@ -10210,6 +10403,15 @@ class Runtime:
                 if "=" in payload:
                     name, value = payload.split("=", 1)
                     self._assign_shell_var(name, value)
+                continue
+            if line.startswith("__MCTASH_DECL__"):
+                payload = line[len("__MCTASH_DECL__") :]
+                if "=" not in payload:
+                    continue
+                name, decl = payload.split("=", 1)
+                if decl == "<UNSET>":
+                    continue
+                self._apply_bash_decl_snapshot(name, decl)
         err_text = (proc.stderr or "")
         if proc.returncode != 0 or (err_text.strip() != "") or not saw_result:
             err = err_text.lower()
@@ -10227,6 +10429,113 @@ class Runtime:
                 )
             raise ArithExpansionFailure(2)
         return result
+
+    def _materialize_random_in_arith(self, expr: str) -> str:
+        if "RANDOM" not in expr:
+            return expr
+        out: list[str] = []
+        i = 0
+        n = len(expr)
+        while i < n:
+            if expr[i] == "$":
+                if expr.startswith("$RANDOM", i):
+                    out.append(self._next_random())
+                    i += len("$RANDOM")
+                    continue
+                if expr.startswith("${RANDOM}", i):
+                    out.append(self._next_random())
+                    i += len("${RANDOM}")
+                    continue
+                out.append(expr[i])
+                i += 1
+                continue
+            if expr[i].isalpha() or expr[i] == "_":
+                j = i + 1
+                while j < n and (expr[j].isalnum() or expr[j] == "_"):
+                    j += 1
+                name = expr[i:j]
+                if name == "RANDOM":
+                    out.append(self._next_random())
+                else:
+                    out.append(name)
+                i = j
+                continue
+            out.append(expr[i])
+            i += 1
+        return "".join(out)
+
+    def _bash_declare_for_subprocess(self, name: str) -> str | None:
+        if not self._is_valid_name(name):
+            return None
+        attrs = self._var_attrs.get(name, set())
+        typed = self._typed_vars.get(name)
+        if isinstance(typed, list):
+            elems: list[str] = []
+            for i, v in enumerate(typed):
+                if v is None:
+                    continue
+                elems.append(f'[{i}]="{self._dq_escape(str(v))}"')
+            flag = "-ai" if "integer" in attrs else "-a"
+            return f"declare {flag} {name}=(" + " ".join(elems) + ")"
+        if isinstance(typed, dict) and "assoc" in attrs:
+            elems = []
+            for k, v in typed.items():
+                key = self._transform_q_quote(str(k))
+                elems.append(f'[{key}]="{self._dq_escape(str(v))}"')
+            flag = "-Ai" if "integer" in attrs else "-A"
+            return f"declare {flag} {name}=(" + " ".join(elems) + ")"
+        if "integer" in attrs:
+            return f"declare -i {name}={shlex.quote(self._get_var(name))}"
+        return None
+
+    def _decl_unescape(self, s: str) -> str:
+        out: list[str] = []
+        i = 0
+        while i < len(s):
+            ch = s[i]
+            if ch == "\\" and i + 1 < len(s):
+                out.append(s[i + 1])
+                i += 2
+                continue
+            out.append(ch)
+            i += 1
+        return "".join(out)
+
+    def _apply_bash_decl_snapshot(self, expect_name: str, decl: str) -> None:
+        m = re.match(r"^declare\s+(-[A-Za-z]+)\s+([A-Za-z_][A-Za-z0-9_]*)(?:=(.*))?$", decl)
+        if m is None:
+            return
+        flags = m.group(1)
+        name = m.group(2)
+        rhs = m.group(3)
+        if name != expect_name:
+            return
+        if "A" in flags:
+            amap: dict[str, str] = {}
+            if rhs is not None:
+                for km, vm in re.findall(r"\[(.*?)\]=\"((?:[^\"\\\\]|\\\\.)*)\"", rhs):
+                    key = km
+                    if len(key) >= 2 and key[0] == key[-1] and key[0] in {"'", '"'}:
+                        key = key[1:-1]
+                    amap[self._decl_unescape(key)] = self._decl_unescape(vm)
+            self._typed_vars[name] = amap
+            self._set_var_attrs(name, assoc=True, array=False, integer=("i" in flags))
+            self._set_subscript_projection(name, str(amap.get("0", "")))
+            return
+        if "a" in flags:
+            arr: list[object] = []
+            if rhs is not None:
+                for im, vm in re.findall(r"\[([0-9]+)\]=\"((?:[^\"\\\\]|\\\\.)*)\"", rhs):
+                    idx = int(im)
+                    if idx >= len(arr):
+                        arr.extend([None] * (idx + 1 - len(arr)))
+                    arr[idx] = self._decl_unescape(vm)
+            self._typed_vars[name] = arr
+            self._set_var_attrs(name, array=True, assoc=False, integer=("i" in flags))
+            vis = self._array_visible_values(arr)
+            self._set_subscript_projection(name, vis[0] if vis else "")
+            return
+        self._set_var_attrs(name, array=False, assoc=False, integer=("i" in flags))
 
     def _arith_capture_names(self, expr: str, env: Dict[str, str]) -> List[str]:
         seen: set[str] = set()
