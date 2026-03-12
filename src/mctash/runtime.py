@@ -2734,6 +2734,8 @@ class Runtime:
                     if name in self.readonly_vars:
                         msg = self._diag_msg(DiagnosticKey.READONLY_VAR, name=name)
                         print(self._format_error(msg, line=self.current_line), file=sys.stderr)
+                        if self._diag.style == "bash":
+                            return 1
                         raise SystemExit(2)
                     comp_vals = self._parse_compound_assignment_rhs(self._asdl_rhs_word_to_text(rhs))
                     if comp_vals is not None and self._bash_compat_level is None:
@@ -2741,10 +2743,7 @@ class Runtime:
                     if name in self._py_ties:
                         if comp_vals is not None:
                             raise RuntimeError(f"{name}: cannot assign array value to tied variable")
-                        if op == "+=":
-                            self._assign_shell_var(name, self._get_var(name) + value)
-                        else:
-                            self._assign_shell_var(name, value)
+                        self._assign_shell_var_op(name, op, value)
                         self._sync_local_env_assignment(local_env, name)
                         continue
                     if comp_vals is not None:
@@ -2752,14 +2751,8 @@ class Runtime:
                         compound_assigned.add(name)
                         self._sync_local_env_assignment(local_env, name)
                         continue
-                    if op == "+=":
-                        local_env[name] = local_env.get(name, "") + value
-                    else:
-                        if self._is_structured_assignment_target(name):
-                            self._assign_shell_var(name, value)
-                            self._sync_local_env_assignment(local_env, name)
-                        else:
-                            local_env[name] = value
+                    self._assign_shell_var_op(name, op, value)
+                    self._sync_local_env_assignment(local_env, name)
                 if self.options.get("x", False):
                     trace_assigns = [
                         Assignment(
@@ -3312,7 +3305,8 @@ class Runtime:
                     if name in self._py_ties:
                         if is_compound:
                             raise RuntimeError(f"{name}: cannot assign array value to tied variable")
-                        self._assign_shell_var(name, value)
+                        op = str(assign.get("op") or "=")
+                        self._assign_shell_var_op(name, op, value)
                         self._sync_local_env_assignment(local_env, name)
                         continue
                     op = str(assign.get("op") or "=")
@@ -3321,11 +3315,8 @@ class Runtime:
                         compound_assigned.add(name)
                         self._sync_local_env_assignment(local_env, name)
                         continue
-                    if self._is_structured_assignment_target(name):
-                        self._assign_shell_var(name, value)
-                        self._sync_local_env_assignment(local_env, name)
-                    else:
-                        local_env[name] = value
+                    self._assign_shell_var_op(name, op, value)
+                    self._sync_local_env_assignment(local_env, name)
                 should_persist_env = any(
                     not (r.op == ">&" and (r.fd is None or r.fd == 1) and r.target == "1")
                     for r in redirects
@@ -3374,7 +3365,8 @@ class Runtime:
                 if name in self._py_ties:
                     if is_compound:
                         raise RuntimeError(f"{name}: cannot assign array value to tied variable")
-                    self._assign_shell_var(name, value)
+                    op = str(assign.get("op") or "=")
+                    self._assign_shell_var_op(name, op, value)
                     self._sync_local_env_assignment(local_env, name)
                     continue
                 op = str(assign.get("op") or "=")
@@ -3384,11 +3376,8 @@ class Runtime:
                     self._sync_local_env_assignment(local_env, name)
                     self.env = local_env
                     continue
-                if self._is_structured_assignment_target(name):
-                    self._assign_shell_var(name, value)
-                    self._sync_local_env_assignment(local_env, name)
-                else:
-                    local_env[name] = value
+                self._assign_shell_var_op(name, op, value)
+                self._sync_local_env_assignment(local_env, name)
                 self.env = local_env
         finally:
             self.env = saved_env
@@ -3451,10 +3440,8 @@ class Runtime:
                         raise SystemExit(2)
                     if is_compound:
                         self._assign_compound_var(name, op, list(value) if isinstance(value, list) else [])
-                    elif op == "+=":
-                        self._assign_shell_var(name, self._get_var(name) + str(value))
                     else:
-                        self._assign_shell_var(name, str(value))
+                        self._assign_shell_var_op(name, op, str(value))
                     local_env[name.split("[", 1)[0]] = self._get_var(name.split("[", 1)[0])
                 saved_env.update(local_env)
                 for tied_name in self._py_ties:
@@ -3518,7 +3505,8 @@ class Runtime:
                             elif var_name in saved_env and self.env.get(var_name, "") == "":
                                 self.env[var_name] = saved_env[var_name]
                     return status
-                persist_assigns = self._declaration_assigns_should_persist(argv)
+                # Assignment prefixes before special builtins affect current shell state.
+                persist_assigns = True
                 saved_env = dict(self.env)
                 try:
                     self.env = local_env
@@ -3557,7 +3545,8 @@ class Runtime:
                     self._print_stderr(msg)
                     return self._runtime_error_status(msg)
                 if name in self.ENV_MUTATING_BUILTINS:
-                    persist_assigns = self._declaration_assigns_should_persist(argv)
+                    # Assignment prefixes before special builtins affect current shell state.
+                    persist_assigns = True
                     result_env = dict(self.env)
                     merged = dict(saved_env)
                     for k, v in result_env.items():
@@ -5937,6 +5926,8 @@ class Runtime:
                         if name in self.readonly_vars:
                             msg = self._diag_msg(DiagnosticKey.READONLY_VAR, name=name)
                             print(self._format_error(msg, line=self.current_line), file=sys.stderr)
+                            if self._diag.style == "bash":
+                                return 1
                             raise SystemExit(2)
                         comp_vals = self._parse_compound_assignment_rhs(assign.value) if self._bash_compat_level is not None else None
                         if name in self._py_ties:
@@ -5953,16 +5944,8 @@ class Runtime:
                             compound_assigned.add(name)
                             self._sync_local_env_assignment(local_env, name)
                             continue
-                        if self._is_structured_assignment_target(name):
-                            if op == "+=":
-                                self._assign_shell_var(name, self._get_var(name) + value)
-                            else:
-                                self._assign_shell_var(name, value)
-                            self._sync_local_env_assignment(local_env, name)
-                        elif op == "+=":
-                            self.env[name] = self.env.get(name, "") + value
-                        else:
-                            self.env[name] = value
+                        self._assign_shell_var_op(name, op, value)
+                        self._sync_local_env_assignment(local_env, name)
                     should_persist_env = any(
                         not (r.op == ">&" and (r.fd is None or r.fd == 1) and r.target == "1")
                         for r in node.redirects
@@ -6000,6 +5983,8 @@ class Runtime:
                     if name in self.readonly_vars:
                         msg = self._diag_msg(DiagnosticKey.READONLY_VAR, name=name)
                         print(self._format_error(msg, line=self.current_line), file=sys.stderr)
+                        if self._diag.style == "bash":
+                            return 1
                         raise SystemExit(2)
                     comp_vals = self._parse_compound_assignment_rhs(assign.value) if self._bash_compat_level is not None else None
                     if name in self._py_ties:
@@ -6017,16 +6002,8 @@ class Runtime:
                         self._sync_local_env_assignment(local_env, name)
                         self.env = local_env
                         continue
-                    if self._is_structured_assignment_target(name):
-                        if op == "+=":
-                            self._assign_shell_var(name, self._get_var(name) + value)
-                        else:
-                            self._assign_shell_var(name, value)
-                        self._sync_local_env_assignment(local_env, name)
-                    elif op == "+=":
-                        local_env[name] = local_env.get(name, "") + value
-                    else:
-                        local_env[name] = value
+                    self._assign_shell_var_op(name, op, value)
+                    self._sync_local_env_assignment(local_env, name)
                     self.env = local_env
             finally:
                 self.env = saved_env
@@ -6067,6 +6044,8 @@ class Runtime:
                         if var_name in self.readonly_vars:
                             msg = self._diag_msg(DiagnosticKey.READONLY_VAR, name=var_name)
                             print(self._format_error(msg, line=self.current_line), file=sys.stderr)
+                            if self._diag.style == "bash":
+                                return 1
                             raise SystemExit(2)
                         if is_compound:
                             self._assign_compound_var(
@@ -6074,10 +6053,8 @@ class Runtime:
                                 op,
                                 list(value) if isinstance(value, list) else [],
                             )
-                        elif op == "+=":
-                            self._assign_shell_var(var_name, self._get_var(var_name) + str(value))
                         else:
-                            self._assign_shell_var(var_name, str(value))
+                            self._assign_shell_var_op(var_name, op, str(value))
                         base = var_name.split("[", 1)[0]
                         local_env[base] = self._get_var(base)
                     saved_env2.update(local_env)
@@ -10592,28 +10569,72 @@ class Runtime:
             cur_map = self._typed_vars.get(name)
             out_map: dict[str, str] = dict(cur_map) if (op == "+=" and isinstance(cur_map, dict)) else {}
             for raw in values:
-                m = re.match(r"^\[(.*)\]=(.*)$", str(raw))
+                m = re.match(r"^\[(.*)\](\+?=)(.*)$", str(raw))
                 if m is None:
+                    val = self._expand_assignment_word(str(raw))
+                    if op == "+=":
+                        out_map["0"] = str(out_map.get("0", "")) + val
+                    else:
+                        out_map["0"] = val
                     continue
-                key = self._eval_assoc_subscript_key(m.group(1))
-                out_map[str(key)] = self._expand_assignment_word(m.group(2))
+                key = str(self._eval_assoc_subscript_key(m.group(1)))
+                inner_op = m.group(2)
+                rhs = self._expand_assignment_word(m.group(3))
+                if inner_op == "+=" and op == "+=":
+                    out_map[key] = str(out_map.get(key, "")) + rhs
+                else:
+                    out_map[key] = rhs
             self._typed_vars[name] = out_map
             self._set_var_attrs(name, assoc=True)
             self._set_subscript_projection(name, str(out_map.get("0", "")))
             return
         cur = self._typed_vars.get(name)
-        cur_vals: list[object] = []
-        if isinstance(cur, list):
-            cur_vals = list(cur)
-        if op == "+=":
-            cur_vals.extend(values)
-        else:
-            cur_vals = [str(v) for v in values]
-        self._typed_vars[name] = cur_vals
+        out_vals: list[object] = list(cur) if (op == "+=" and isinstance(cur, list)) else []
+        integer_mode = "integer" in attrs
+        next_idx = 0
+        if op == "+=" and out_vals:
+            next_idx = max(i for i, v in enumerate(out_vals) if v is not None) + 1
+        for raw in values:
+            tok = str(raw)
+            m = re.match(r"^\[(.*)\](\+?=)(.*)$", tok)
+            if m is None:
+                val = self._expand_assignment_word(tok)
+                if integer_mode:
+                    val = str(self._to_int_arith(val if val != "" else "0"))
+                while next_idx < len(out_vals) and out_vals[next_idx] is not None:
+                    next_idx += 1
+                if next_idx >= len(out_vals):
+                    out_vals.extend([None] * (next_idx + 1 - len(out_vals)))
+                out_vals[next_idx] = val
+                next_idx += 1
+                continue
+            idx_expr = m.group(1)
+            inner_op = m.group(2)
+            rhs_raw = m.group(3)
+            idx = self._eval_index_subscript(idx_expr, out_vals, strict=True, name=name)
+            if idx is None:
+                continue
+            if idx >= len(out_vals):
+                out_vals.extend([None] * (idx + 1 - len(out_vals)))
+            rhs = self._expand_assignment_word(rhs_raw)
+            if integer_mode:
+                rhs = str(self._to_int_arith(rhs if rhs != "" else "0"))
+            if inner_op == "+=" and op == "+=":
+                old = "" if out_vals[idx] is None else str(out_vals[idx])
+                if integer_mode:
+                    rhs = str(
+                        self._to_int_arith(old if old != "" else "0")
+                        + self._to_int_arith(rhs if rhs != "" else "0")
+                    )
+                else:
+                    rhs = old + rhs
+            out_vals[idx] = rhs
+            next_idx = idx + 1
+        self._typed_vars[name] = out_vals
         self._set_var_attrs(name, array=True)
         proj = ""
-        if len(cur_vals) > 0 and cur_vals[0] is not None:
-            proj = str(cur_vals[0])
+        if len(out_vals) > 0 and out_vals[0] is not None:
+            proj = str(out_vals[0])
         self._set_subscript_projection(name, proj)
 
     def _parse_compound_assignment_rhs(self, rhs: str) -> list[str] | None:
@@ -10632,7 +10653,7 @@ class Runtime:
                 break
             if tok.kind != "WORD":
                 return None
-            vals.append(self._expand_assignment_word(tok.value))
+            vals.append(tok.value)
         return vals
 
     def _parse_assoc_compound_assignment_rhs(self, rhs: str) -> dict[str, str] | None:
@@ -11228,6 +11249,9 @@ class Runtime:
                     prefix = "declare -r"
                 if "assoc" in attrs:
                     typed = self._typed_vars.get(name)
+                    assoc_flag = "-A"
+                    if "integer" in attrs:
+                        assoc_flag = "-Ai"
                     if isinstance(typed, dict) and typed:
                         parts = []
                         for k, v in typed.items():
@@ -11237,20 +11261,23 @@ class Runtime:
                             else:
                                 key_expr = _dq(k_s)
                             parts.append(f"[{key_expr}]={_dq(str(v))}")
-                        print(f"declare -A {name}=({' '.join(parts)} )", flush=True)
+                        print(f"declare {assoc_flag} {name}=({' '.join(parts)} )", flush=True)
                     else:
-                        print(f"declare -A {name}", flush=True)
+                        print(f"declare {assoc_flag} {name}", flush=True)
                 elif "array" in attrs:
                     typed = self._typed_vars.get(name)
+                    array_flag = "-a"
+                    if "integer" in attrs:
+                        array_flag = "-ai"
                     if isinstance(typed, list) and any(v is not None for v in typed):
                         parts = []
                         for idx, v in enumerate(typed):
                             if v is None:
                                 continue
                             parts.append(f"[{idx}]={_dq(str(v))}")
-                        print(f"declare -a {name}=({' '.join(parts)})", flush=True)
+                        print(f"declare {array_flag} {name}=({' '.join(parts)})", flush=True)
                     else:
-                        print(f"declare -a {name}", flush=True)
+                        print(f"declare {array_flag} {name}", flush=True)
                 elif "integer" in attrs:
                     print(f"declare -i {name}={_dq(value)}", flush=True)
                 else:
@@ -11378,8 +11405,17 @@ class Runtime:
                     self._set_subscript_projection(name, str(base_list[0]) if base_list else "")
                     continue
                 expanded = self._expand_assignment_word(value)
+                integer_target = "integer" in target_attrs
                 if op == "+=":
-                    expanded = self._get_var(name) + expanded
+                    if integer_target:
+                        expanded = str(
+                            self._to_int_arith(self._get_var(name) if self._get_var(name) != "" else "0")
+                            + self._to_int_arith(expanded if expanded != "" else "0")
+                        )
+                    else:
+                        expanded = self._get_var(name) + expanded
+                elif integer_target:
+                    expanded = str(self._to_int_arith(expanded if expanded != "" else "0"))
                 self._declare_var(name, expanded, local_scope=effective_local_scope, **attr_flags)
             else:
                 name = spec
@@ -11585,11 +11621,24 @@ class Runtime:
         for arg in args:
             if "=" in arg:
                 name, value = arg.split("=", 1)
+                op = "="
+                if name.endswith("+"):
+                    op = "+="
+                    name = name[:-1]
                 if name in self.readonly_vars:
                     msg = self._diag_msg(DiagnosticKey.READONLY_VAR, name=name)
                     self._report_error(msg, line=self.current_line, context="readonly")
                     status = 2
                     continue
+                if op == "+=":
+                    attrs = self._var_attrs.get(name, set())
+                    if "integer" in attrs:
+                        value = str(
+                            self._to_int_arith(self._get_var(name) if self._get_var(name) != "" else "0")
+                            + self._to_int_arith(value if value != "" else "0")
+                        )
+                    else:
+                        value = self._get_var(name) + value
                 self._set_var(name, value)
                 self.readonly_vars.add(name)
                 continue
@@ -11789,6 +11838,57 @@ class Runtime:
                 scope[name] = value
                 return
         self.env[name] = value
+
+    def _assign_shell_var_op(self, name: str, op: str, value: str) -> None:
+        if op != "+=":
+            self._assign_shell_var(name, value)
+            return
+        parsed = self._parse_subscripted_name(name)
+        if parsed is not None:
+            base, key = parsed
+            attrs = self._var_attrs.get(base, set())
+            if "assoc" in attrs:
+                cur = self._typed_vars.get(base)
+                amap = dict(cur) if isinstance(cur, dict) else {}
+                akey = str(self._eval_assoc_subscript_key(key))
+                old = str(amap.get(akey, ""))
+                if "integer" in attrs:
+                    merged = str(
+                        self._to_int_arith(old if old != "" else "0")
+                        + self._to_int_arith(value if value != "" else "0")
+                    )
+                else:
+                    merged = old + value
+                amap[akey] = merged
+                self._typed_vars[base] = amap
+                self._set_subscript_projection(base, str(amap.get("0", "")))
+                return
+            cur_arr = self._typed_vars.get(base)
+            arr = list(cur_arr) if isinstance(cur_arr, list) else []
+            idx = self._eval_index_subscript(key, arr, strict=True, name=name)
+            if idx is None:
+                raise RuntimeError(f"{name}: bad array subscript")
+            old = ""
+            if 0 <= idx < len(arr) and arr[idx] is not None:
+                old = str(arr[idx])
+            if "integer" in attrs:
+                merged = str(
+                    self._to_int_arith(old if old != "" else "0")
+                    + self._to_int_arith(value if value != "" else "0")
+                )
+            else:
+                merged = old + value
+            self._assign_shell_var(name, merged)
+            return
+        attrs = self._var_attrs.get(name, set())
+        if "integer" in attrs:
+            merged = str(
+                self._to_int_arith(self._get_var(name) if self._get_var(name) != "" else "0")
+                + self._to_int_arith(value if value != "" else "0")
+            )
+        else:
+            merged = self._get_var(name) + value
+        self._assign_shell_var(name, merged)
 
     def _is_valid_name(self, name: str) -> bool:
         if not name:
@@ -12700,12 +12800,9 @@ class Runtime:
         out = value
         if "integer" in attrs:
             try:
-                out = str(int(out, 0))
-            except ValueError:
-                try:
-                    out = str(int(out, 10))
-                except ValueError:
-                    out = "0"
+                out = str(self._to_int_arith(out if out != "" else "0"))
+            except Exception:
+                out = "0"
         if "uppercase" in attrs:
             out = out.upper()
         elif "lowercase" in attrs:

@@ -186,6 +186,7 @@ def _env_pair(assign: LstAssignment) -> Dict[str, Any]:
     return {
         "type": "EnvPair",
         "name": assign.name,
+        "op": assign.op,
         "val": {"type": "rhs_word.Compound", "word": word(assign.value)},
     }
 

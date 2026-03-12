@@ -17,9 +17,31 @@ mkdir -p "$RDIR/bash" "$RDIR/mctash" "$RDIR/diff"
 normalize_for_diff() {
   local src="$1"
   local dst="$2"
-  sed -E \
-    -e 's#/(extglob|eglob-test|bash-globignore)-[0-9]+#/\1-<PID>#g' \
-    "$src" >"$dst"
+  python3 - "$src" "$dst" <<'PY'
+import re
+import sys
+from pathlib import Path
+
+src = Path(sys.argv[1])
+dst = Path(sys.argv[2])
+text = src.read_text(errors="replace")
+text = re.sub(r"/(extglob|eglob-test|bash-globignore)-[0-9]+", r"/\1-<PID>", text)
+
+out_lines = []
+for line in text.splitlines():
+    m = re.match(r"^(declare -A[i]?\s+[A-Za-z_][A-Za-z0-9_]*=\()(.*)(\)\s*)$", line)
+    if not m:
+        out_lines.append(line)
+        continue
+    body = m.group(2)
+    pairs = re.findall(r"\[[^]]+\]=\"(?:[^\"\\\\]|\\\\.)*\"", body)
+    if not pairs:
+        out_lines.append(line)
+        continue
+    out_lines.append(m.group(1) + " ".join(sorted(pairs)) + " " + m.group(3).rstrip())
+
+dst.write_text("\n".join(out_lines) + ("\n" if text.endswith("\n") else ""))
+PY
 }
 
 cat > "$RDIR/bash_wrapper.sh" <<'W1'
