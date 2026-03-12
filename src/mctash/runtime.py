@@ -11109,6 +11109,11 @@ class Runtime:
         cur_arr = self._typed_vars.get(base)
         if not isinstance(cur_arr, list):
             cur_arr = []
+            # Bash-compatible scalar -> indexed array promotion preserves
+            # existing scalar value as element 0.
+            cur_scalar, scalar_is_set = self._get_var_with_state(base)
+            if scalar_is_set:
+                cur_arr = [cur_scalar]
         idx = self._eval_index_subscript(key, cur_arr, strict=True, name=name)
         if idx is None:
             raise RuntimeError(f"{name}: bad array subscript")
@@ -11671,7 +11676,25 @@ class Runtime:
 
         if print_vars:
             if not names:
-                return 0
+                all_names: set[str] = set(self.env.keys()) | set(self._var_attrs.keys()) | set(self._typed_vars.keys())
+                for scope in self.local_stack:
+                    all_names.update(scope.keys())
+                all_names.update(self.readonly_vars)
+                filtered: list[str] = []
+                for n in sorted(all_names):
+                    attrs_n = self._var_attrs.get(n, set())
+                    if declare_array and "array" not in attrs_n:
+                        continue
+                    if declare_assoc and "assoc" not in attrs_n:
+                        continue
+                    if declare_integer and "integer" not in attrs_n:
+                        continue
+                    if declare_export and "exported" not in attrs_n:
+                        continue
+                    if declare_readonly and "readonly" not in attrs_n and n not in self.readonly_vars:
+                        continue
+                    filtered.append(n)
+                names = filtered
             status = 0
             def _dq(value: str) -> str:
                 return '"' + value.replace("\\", "\\\\").replace('"', '\\"').replace("$", "\\$") + '"'
@@ -12096,42 +12119,33 @@ class Runtime:
         return self._maybe_fatal_special_builtin_error("export", status)
 
     def _run_readonly(self, args: List[str]) -> int:
-        if args == ["-p"]:
-            for name in sorted(self.readonly_vars):
-                print(f"readonly {name}='{self._get_var(name)}'")
-            return 0
         if not args:
             for name in sorted(self.readonly_vars):
                 print(f"readonly {name}='{self._get_var(name)}'")
             return 0
-        status = 0
-        for arg in args:
-            if "=" in arg:
-                name, value = arg.split("=", 1)
-                op = "="
-                if name.endswith("+"):
-                    op = "+="
-                    name = name[:-1]
-                if name in self.readonly_vars:
-                    msg = self._diag_msg(DiagnosticKey.READONLY_VAR, name=name)
-                    self._report_error(msg, line=self.current_line, context="readonly")
-                    status = 2
-                    continue
-                if op == "+=":
-                    attrs = self._var_attrs.get(name, set())
-                    if "integer" in attrs:
-                        value = str(
-                            self._to_int_arith(self._get_var(name) if self._get_var(name) != "" else "0")
-                            + self._to_int_arith(value if value != "" else "0")
-                        )
-                    else:
-                        value = self._get_var(name) + value
-                self._set_var(name, value)
-                self.readonly_vars.add(name)
-                continue
-            self.readonly_vars.add(arg)
-            self.env.setdefault(arg, self._get_var(arg))
-        return self._maybe_fatal_special_builtin_error("readonly", status)
+        idx = 0
+        while idx < len(args):
+            a = args[idx]
+            if a == "--":
+                idx += 1
+                break
+            if not a.startswith("-") or a == "-":
+                break
+            idx += 1
+        for arg in args[idx:]:
+            target = arg.split("=", 1)[0]
+            if target.endswith("+"):
+                target = target[:-1]
+            if self._parse_subscripted_name(target) is not None:
+                self._report_error(
+                    f"`{target}': not a valid identifier",
+                    line=self.current_line,
+                    context="readonly",
+                )
+                return self._maybe_fatal_special_builtin_error("readonly", 1)
+        # Keep readonly option/typing behavior aligned with declare/typeset by
+        # routing through declare with an implicit `-r`.
+        return self._run_declare(["-r"] + args, cmd_name="readonly", local_scope=False)
 
     def _run_unset(self, args: List[str]) -> int:
         mode_vars = True
