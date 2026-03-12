@@ -11770,7 +11770,9 @@ class Runtime:
                     self._report_error(f"{cmd_name}: {name}: not found", line=self.current_line)
                     status = 1
                     continue
-                attrs = self._var_attrs.get(name, set())
+                attrs = set(self._var_attrs.get(name, set()))
+                if name in self.readonly_vars:
+                    attrs.add("readonly")
                 value, is_set = self._get_var_with_state(name)
                 if not is_set and "array" not in attrs and "assoc" not in attrs:
                     self._report_error(f"{cmd_name}: {name}: not found", line=self.current_line)
@@ -11783,9 +11785,14 @@ class Runtime:
                     prefix = "declare -r"
                 if "assoc" in attrs:
                     typed = self._typed_vars.get(name)
-                    assoc_flag = "-A"
+                    af = ["A"]
                     if "integer" in attrs:
-                        assoc_flag = "-Ai"
+                        af.append("i")
+                    if "readonly" in attrs:
+                        af.append("r")
+                    if "exported" in attrs:
+                        af.append("x")
+                    assoc_flag = "-" + "".join(af)
                     if isinstance(typed, dict) and typed:
                         parts = []
                         for k, v in typed.items():
@@ -11800,9 +11807,14 @@ class Runtime:
                         print(f"declare {assoc_flag} {name}", flush=True)
                 elif "array" in attrs:
                     typed = self._typed_vars.get(name)
-                    array_flag = "-a"
+                    af = ["a"]
                     if "integer" in attrs:
-                        array_flag = "-ai"
+                        af.append("i")
+                    if "readonly" in attrs:
+                        af.append("r")
+                    if "exported" in attrs:
+                        af.append("x")
+                    array_flag = "-" + "".join(af)
                     if isinstance(typed, list) and any(v is not None for v in typed):
                         parts = []
                         for idx, v in enumerate(typed):
@@ -11810,6 +11822,8 @@ class Runtime:
                                 continue
                             parts.append(f"[{idx}]={_dq(str(v))}")
                         print(f"declare {array_flag} {name}=({' '.join(parts)})", flush=True)
+                    elif isinstance(typed, list):
+                        print(f"declare {array_flag} {name}=()", flush=True)
                     else:
                         print(f"declare {array_flag} {name}", flush=True)
                 elif "integer" in attrs:
