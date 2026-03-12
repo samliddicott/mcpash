@@ -86,8 +86,14 @@ RESERVED_WORDS = {
 
 
 class Parser:
-    def __init__(self, source: str, aliases: Optional[dict[str, str]] = None):
-        self.reader = TokenReader(source)
+    def __init__(
+        self,
+        source: str,
+        aliases: Optional[dict[str, str]] = None,
+        *,
+        lenient_unterminated_quotes: bool = False,
+    ):
+        self.reader = TokenReader(source, lenient_unterminated_quotes=lenient_unterminated_quotes)
         self.buffer: list[Token] = []
         self.ctx = LexContext(reserved_words=RESERVED_WORDS, allow_reserved=True, allow_newline=True)
         self.last_lst: Optional[LstAndOr] = None
@@ -159,33 +165,73 @@ class Parser:
 
     def _inject_alias_tokens(self, src_tok: Token, text: str) -> bool:
         trailing = bool(text) and text[-1].isspace()
-        alias_reader = TokenReader(text)
-        alias_ctx = LexContext(reserved_words=RESERVED_WORDS, allow_reserved=True, allow_newline=False)
+        escape_next = text.endswith("\\")
+        if escape_next:
+            text = text[:-1]
         alias_tokens: list[Token] = []
-        while True:
-            tok = alias_reader.next(alias_ctx)
-            if tok is None:
-                break
-            if tok.kind == "OP" and tok.value == "\n":
-                continue
-            alias_tokens.append(Token(tok.kind, tok.value, src_tok.line, src_tok.col, src_tok.index))
+        try:
+            alias_reader = TokenReader(text)
+            alias_ctx = LexContext(reserved_words=RESERVED_WORDS, allow_reserved=True, allow_newline=True)
+            while True:
+                tok = alias_reader.next(alias_ctx)
+                if tok is None:
+                    break
+                alias_tokens.append(Token(tok.kind, tok.value, src_tok.line, src_tok.col, src_tok.index))
+        except LexError:
+            # Some alias values are intentionally quote-incomplete and rely on
+            # following source text to terminate quoting.
+            if text:
+                alias_tokens = [Token("WORD", text, src_tok.line, src_tok.col, src_tok.index)]
+        if escape_next:
+            if not self.buffer:
+                try:
+                    nxt = self.reader.next(self.ctx)
+                except LexError as e:
+                    raise ParseError(str(e))
+                if nxt is not None:
+                    self.buffer.append(nxt)
+            escaped_text = "\\"
+            if self.buffer:
+                tok0 = self.buffer.pop(0)
+                escaped_text = tok0.value
+                # If operator and following word are adjacent in source, fold
+                # them into one escaped literal (e.g. alias-ending `\\` with
+                # subsequent `|word` => literal `|word`).
+                if not self.buffer:
+                    try:
+                        nxt = self.reader.next(self.ctx)
+                    except LexError as e:
+                        raise ParseError(str(e))
+                    if nxt is not None:
+                        self.buffer.append(nxt)
+                if self.buffer and self._is_word(self.buffer[0]):
+                    tok1 = self.buffer[0]
+                    if tok0.index + len(tok0.value) == tok1.index:
+                        escaped_text += tok1.value
+                        self.buffer.pop(0)
+            alias_tokens.append(Token("WORD", escaped_text, src_tok.line, src_tok.col, src_tok.index))
         if alias_tokens:
             self.buffer = alias_tokens + self.buffer
         return trailing
 
     def _alias_affects_syntax(self, text: str) -> bool:
-        if ";" in text or "\n" in text:
+        if ";" in text or "\n" in text or text.endswith("\\"):
             return True
         alias_reader = TokenReader(text)
-        alias_ctx = LexContext(reserved_words=RESERVED_WORDS, allow_reserved=True, allow_newline=False)
-        tok = alias_reader.next(alias_ctx)
-        if tok is None:
-            return False
-        if tok.kind == "RESERVED":
+        alias_ctx = LexContext(reserved_words=RESERVED_WORDS, allow_reserved=True, allow_newline=True)
+        try:
+            while True:
+                tok = alias_reader.next(alias_ctx)
+                if tok is None:
+                    return False
+                if tok.kind == "RESERVED":
+                    return True
+                if tok.kind == "OP":
+                    return True
+                if tok.kind == "WORD" and tok.value in {"{", "}", "(", ")"}:
+                    return True
+        except LexError:
             return True
-        if tok.kind == "WORD" and tok.value in {"{", "}", "(", ")"}:
-            return True
-        return False
 
     def _maybe_expand_alias(self, tok: Optional[Token], seen: set[str], syntax_only: bool = False) -> bool:
         if tok is None or not self._is_word(tok):
@@ -195,12 +241,42 @@ class Parser:
         name = tok.value
         if name not in self.aliases or name in seen:
             return False
+        if self._alias_has_unmatched_quote(self.aliases[name]):
+            # Quote-incomplete aliases must be expanded against following
+            # source text as raw text, not tokenized in isolation.
+            return False
         if syntax_only and not self._alias_affects_syntax(self.aliases[name]):
             return False
         seen.add(name)
         self._advance()
         self._inject_alias_tokens(tok, self.aliases[name])
         return True
+
+    def _alias_has_unmatched_quote(self, text: str) -> bool:
+        in_single = False
+        in_double = False
+        i = 0
+        while i < len(text):
+            ch = text[i]
+            if in_single:
+                if ch == "'":
+                    in_single = False
+                i += 1
+                continue
+            if in_double:
+                if ch == "\\" and i + 1 < len(text):
+                    i += 2
+                    continue
+                if ch == '"':
+                    in_double = False
+                i += 1
+                continue
+            if ch == "'":
+                in_single = True
+            elif ch == '"':
+                in_double = True
+            i += 1
+        return in_single or in_double
 
     def _is_heredoc_only_andor(self, node: AndOr) -> bool:
         if len(node.pipelines) != 1 or node.operators:
@@ -547,6 +623,9 @@ class Parser:
             tok = self._peek()
             if tok is None:
                 break
+            if not argv and self._is_word(tok):
+                if self._maybe_expand_alias(tok, alias_seen, syntax_only=True):
+                    continue
             if (
                 not argv
                 and not assignments

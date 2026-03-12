@@ -61,7 +61,7 @@ from .expand import (
     _split_braced,
 )
 from .expansion_model import ExpansionField, ExpansionSegment, fields_to_text_list
-from .lexer import LexContext, TokenReader
+from .lexer import LexContext, LexError, TokenReader
 from .parser import ParseError, Parser
 from .asdl_map import AsdlMappingError, lst_list_item_to_asdl, word as lst_word_to_asdl_word
 from .word_parser import parse_word as parse_legacy_word
@@ -975,6 +975,7 @@ class Runtime:
         self._history_ts: List[float | None] = []
         self._fc_replay_depth: int = 0
         self._fc_active_replay_signatures: set[tuple[str, ...]] = set()
+        self._alias_textual_depth: int = 0
         self._cmd_hash: Dict[str, str] = {}
         self._errexit_suppressed: int = 0
         self._py_callables: Dict[str, Any] = {}
@@ -2347,6 +2348,7 @@ class Runtime:
             if not isinstance(cmd, dict) or cmd.get("type") != "command.Simple":
                 return False
             argv = self._expand_asdl_simple_argv(cmd)
+            argv = self._expand_aliases(argv)
             if not argv:
                 return False
             name = argv[0]
@@ -2369,6 +2371,7 @@ class Runtime:
                 value = self._expand_asdl_rhs_assignment(assign.get("val") or {})
                 cmd_env[name] = value
             argv = self._expand_asdl_simple_argv(cmd)
+            argv = self._expand_aliases(argv)
             stdin = prev.stdout if prev is not None else None
             stdout = subprocess.PIPE if i < len(commands) - 1 else None
             redirects = [self._asdl_to_redirect(r) for r in (cmd.get("redirects") or [])]
@@ -2383,7 +2386,17 @@ class Runtime:
                     preexec_fn=self._preexec_reset_signals,
                 )
             except FileNotFoundError:
-                print(self._diag_msg(DiagnosticKey.COMMAND_NOT_FOUND, name=argv[0]), file=sys.stderr)
+                if "/" in argv[0]:
+                    print(
+                        self._diag_msg(
+                            DiagnosticKey.ERRNO_NAME,
+                            name=argv[0],
+                            error="No such file or directory",
+                        ),
+                        file=sys.stderr,
+                    )
+                else:
+                    print(self._diag_msg(DiagnosticKey.COMMAND_NOT_FOUND, name=argv[0]), file=sys.stderr)
                 # In a pipeline, failed exec of one stage doesn't prevent
                 # sibling stages from running; emulate by inserting a process
                 # that exits with the expected status.
@@ -3225,6 +3238,27 @@ class Runtime:
         if line is not None:
             self.current_line = line
         redirects = [self._asdl_to_redirect(r) for r in (node.get("redirects") or [])]
+        raw_words = [self._asdl_word_to_text(w) for w in (node.get("words") or [])]
+        unmatched_q = None
+        if raw_words and raw_words[0] in self.aliases:
+            unmatched_q = self._alias_unmatched_quote_char(self.aliases[raw_words[0]])
+        if (
+            self._shopts.get("expand_aliases", False)
+            and raw_words
+            and raw_words[0] in self.aliases
+            and unmatched_q is not None
+            and self._alias_textual_depth < 8
+            and not redirects
+            and not (node.get("more_env") or [])
+        ):
+            src = self.aliases[raw_words[0]]
+            if len(raw_words) > 1:
+                src += " " + " ".join(raw_words[1:])
+            self._alias_textual_depth += 1
+            try:
+                return self._eval_source(src)
+            finally:
+                self._alias_textual_depth -= 1
         try:
             self._validate_asdl_simple_like_words(node)
             argv = self._expand_asdl_simple_argv(node)
@@ -5443,7 +5477,17 @@ class Runtime:
                     preexec_fn=self._preexec_reset_signals,
                 )
             except FileNotFoundError:
-                print(self._diag_msg(DiagnosticKey.COMMAND_NOT_FOUND, name=argv[0]), file=sys.stderr)
+                if "/" in argv[0]:
+                    print(
+                        self._diag_msg(
+                            DiagnosticKey.ERRNO_NAME,
+                            name=argv[0],
+                            error="No such file or directory",
+                        ),
+                        file=sys.stderr,
+                    )
+                else:
+                    print(self._diag_msg(DiagnosticKey.COMMAND_NOT_FOUND, name=argv[0]), file=sys.stderr)
                 return 127
             except OSError as e:
                 if getattr(e, "errno", None) == 8 and os.path.isfile(argv[0]) and len(node.commands) == 1:
@@ -5749,7 +5793,17 @@ class Runtime:
                     except Exception:
                         pass
         except FileNotFoundError:
-            print(self._diag_msg(DiagnosticKey.COMMAND_NOT_FOUND, name=argv[0]), file=sys.stderr)
+            if "/" in argv[0]:
+                print(
+                    self._diag_msg(
+                        DiagnosticKey.ERRNO_NAME,
+                        name=argv[0],
+                        error="No such file or directory",
+                    ),
+                    file=sys.stderr,
+                )
+            else:
+                print(self._diag_msg(DiagnosticKey.COMMAND_NOT_FOUND, name=argv[0]), file=sys.stderr)
             return 127, b"", (time.monotonic() - start) if start is not None else None
 
     def _stdout_redirected_away(self, redirects: List[Redirect]) -> bool:
@@ -6936,7 +6990,11 @@ class Runtime:
         self._sync_root_frame()
         if args:
             self.set_positional_args(args)
-        parser_impl = Parser(source, aliases=self.aliases)
+        parser_impl = Parser(
+            source,
+            aliases=self.aliases,
+            lenient_unterminated_quotes=(self._bash_compat_level is not None),
+        )
         status = 0
         try:
             with self._push_frame(kind="source", source=path):
@@ -7407,7 +7465,14 @@ class Runtime:
                         return 128 + (-status)
                     return status
                 except FileNotFoundError:
-                    msg = self._diag_msg(DiagnosticKey.COMMAND_NOT_FOUND, name=argv[0])
+                    if "/" in argv[0]:
+                        msg = self._diag_msg(
+                            DiagnosticKey.ERRNO_NAME,
+                            name=argv[0],
+                            error="No such file or directory",
+                        )
+                    else:
+                        msg = self._diag_msg(DiagnosticKey.COMMAND_NOT_FOUND, name=argv[0])
                     self._report_error(msg, line=self.current_line, context=context)
                     return 127
                 except PermissionError:
@@ -7600,7 +7665,7 @@ class Runtime:
         for arg in args:
             if "=" in arg:
                 name, value = arg.split("=", 1)
-                self.aliases[name] = value
+                self.aliases[name] = self._dequote_alias_value(value)
                 continue
             if arg in self.aliases:
                 if show_with_prefix:
@@ -7611,6 +7676,11 @@ class Runtime:
                 print(self._diag_msg(DiagnosticKey.ALIAS_NOT_FOUND, name=arg), file=sys.stderr)
                 status = 1
         return status
+
+    def _dequote_alias_value(self, value: str) -> str:
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}:
+            return value[1:-1]
+        return value
 
     def _run_unalias(self, args: List[str]) -> int:
         if not args:
@@ -8438,6 +8508,39 @@ class Runtime:
             out, _ = self._expand_alias_at(out, 1)
         return out
 
+    def _alias_has_unmatched_quote(self, value: str) -> bool:
+        return self._alias_unmatched_quote_char(value) is not None
+
+    def _alias_unmatched_quote_char(self, value: str) -> str | None:
+        in_single = False
+        in_double = False
+        i = 0
+        while i < len(value):
+            ch = value[i]
+            if in_single:
+                if ch == "'":
+                    in_single = False
+                i += 1
+                continue
+            if in_double:
+                if ch == "\\" and i + 1 < len(value):
+                    i += 2
+                    continue
+                if ch == '"':
+                    in_double = False
+                i += 1
+                continue
+            if ch == "'":
+                in_single = True
+            elif ch == '"':
+                in_double = True
+            i += 1
+        if in_single:
+            return "'"
+        if in_double:
+            return '"'
+        return None
+
     def _expand_alias_at(self, argv: List[str], idx: int) -> Tuple[List[str], bool]:
         seen: set[str] = set()
         trailing = False
@@ -8447,16 +8550,23 @@ class Runtime:
             if value is None or word in seen:
                 break
             seen.add(word)
+            if value.lstrip().startswith("#"):
+                argv = argv[:idx]
+                trailing = False
+                break
             trailing = value.endswith(" ")
             raw_parts: List[str] = []
-            reader = TokenReader(value)
-            lex_ctx = LexContext(reserved_words=set(), allow_reserved=False, allow_newline=False)
-            while True:
-                tok = reader.next(lex_ctx)
-                if tok is None:
-                    break
-                if tok.kind == "WORD":
-                    raw_parts.append(tok.value)
+            try:
+                reader = TokenReader(value)
+                lex_ctx = LexContext(reserved_words=set(), allow_reserved=False, allow_newline=False)
+                while True:
+                    tok = reader.next(lex_ctx)
+                    if tok is None:
+                        break
+                    if tok.kind == "WORD":
+                        raw_parts.append(tok.value)
+            except LexError:
+                raw_parts = [value]
             parts: List[str] = []
             for raw in raw_parts:
                 parts.append(self._expand_word(raw))
@@ -8569,12 +8679,12 @@ class Runtime:
                     pass
             return open(path, mode)
         except OSError as e:
-            reason = (e.strerror or "error").lower()
+            reason = e.strerror or "error"
             if e.errno == 2:
                 if op in [">", ">>", "<>"]:
                     msg = f"can't create {path}: nonexistent directory"
                     raise RuntimeError(self._format_error(msg, line=self.current_line))
-                reason = "no such file"
+                reason = "No such file or directory"
             if op == "<":
                 msg = f"can't open {path}: {reason}"
             else:
@@ -8604,7 +8714,7 @@ class Runtime:
             io_mode = "rb" if "r" in mode and "w" not in mode and "a" not in mode else "wb"
             return sock.makefile(io_mode, buffering=0)
         except OSError as e:
-            reason = (e.strerror or "error").lower()
+            reason = e.strerror or "error"
             raise RuntimeError(self._format_error(f"{path}: {reason}", line=self.current_line))
 
     def _open_for_redir_readwrite(self, path: str) -> object:
@@ -8612,7 +8722,7 @@ class Runtime:
             fd = os.open(path, os.O_RDWR | os.O_CREAT, 0o666)
             return os.fdopen(fd, "r+b", buffering=0)
         except OSError as e:
-            reason = (e.strerror or "error").lower()
+            reason = e.strerror or "error"
             if e.errno == 2:
                 raise RuntimeError(self._format_error(f"can't create {path}: {reason}", line=self.current_line))
             raise RuntimeError(self._format_error(f"can't open {path}: {reason}", line=self.current_line))
@@ -14718,7 +14828,11 @@ class Runtime:
         line_offset: int = 0,
     ) -> int:
         self._last_eval_hard_error = False
-        parser_impl = Parser(source, aliases=self.aliases)
+        parser_impl = Parser(
+            source,
+            aliases=self.aliases,
+            lenient_unterminated_quotes=(self._bash_compat_level is not None),
+        )
         status = 0
         try:
             while True:

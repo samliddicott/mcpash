@@ -48,13 +48,14 @@ class LexContext:
 
 
 class TokenReader:
-    def __init__(self, source: str):
+    def __init__(self, source: str, *, lenient_unterminated_quotes: bool = False):
         self.source = source
         self.i = 0
         self.line = 1
         self.col = 1
         self._queue: list[Token] = []
         self._pending_heredocs: list[tuple[str, bool, bool]] = []
+        self._lenient_unterminated_quotes = lenient_unterminated_quotes
 
     def next(self, ctx: LexContext) -> Optional[Token]:
         if self._queue:
@@ -191,21 +192,41 @@ class TokenReader:
                 if ch == "'":
                     quote_line, quote_col = self.line, self.col
                     buf.append("'")
+                    prefix_before_quote = "".join(buf[:-1])
+                    allow_newline_break = len(buf) > 1 and "=" not in prefix_before_quote
                     self._advance()
                     while self.i < len(self.source) and self._peek() != "'":
+                        if (
+                            self._lenient_unterminated_quotes
+                            and allow_newline_break
+                            and self._peek() == "\n"
+                        ):
+                            break
                         buf.append(self._peek())
                         self._advance()
                     if self._peek() == "'":
                         buf.append("'")
                         self._advance()
+                    elif self._lenient_unterminated_quotes:
+                        # Bash alias expansion can leave quote completion to
+                        # following textual substitutions.
+                        pass
                     else:
                         raise LexError(f"syntax error: unterminated quoted string at {quote_line}:{quote_col}")
                     continue
                 if ch == '"':
                     quote_line, quote_col = self.line, self.col
                     buf.append('"')
+                    prefix_before_quote = "".join(buf[:-1])
+                    allow_newline_break = len(buf) > 1 and "=" not in prefix_before_quote
                     self._advance()
                     while self.i < len(self.source) and self._peek() != '"':
+                        if (
+                            self._lenient_unterminated_quotes
+                            and allow_newline_break
+                            and self._peek() == "\n"
+                        ):
+                            break
                         if self._peek() == "$" and self._peek(1) == "'":
                             chunk, new_i = _scan_ansi_c_single(self.source, self.i)
                             buf.append(chunk)
@@ -259,6 +280,10 @@ class TokenReader:
                     if self._peek() == '"':
                         buf.append('"')
                         self._advance()
+                    elif self._lenient_unterminated_quotes:
+                        # Bash alias expansion can leave quote completion to
+                        # following textual substitutions.
+                        pass
                     else:
                         raise LexError(f"syntax error: unterminated quoted string at {quote_line}:{quote_col}")
                     continue

@@ -1,19 +1,19 @@
 # Bash Default Upstream Gap Report
 
-Generated: 2026-03-11 17:34:24Z
+Generated: 2026-03-12 08:46:31Z
 Comparator baseline: GNU bash default mode (baserock mirror corpus, `bash-5.1-testing`)
 Target: `mctash` default mode (`BASH_COMPAT=50`)
 
 ## Summary
 
-- core full parity: 2/14
-- core failing rows: 12
+- core full parity: 3/14
+- core failing rows: 11
 
 ## Case Results
 
 | Case | bash rc | mctash rc | stdout | stderr |
 |---|---:|---:|---|---|
-| `alias.tests` | 0 | 0 | mismatch | mismatch |
+| `alias.tests` | 0 | 0 | ok | ok |
 | `appendop.tests` | 0 | 0 | mismatch | mismatch |
 | `arith.tests` | 1 | 2 | mismatch | mismatch |
 | `array.tests` | 0 | 1 | mismatch | mismatch |

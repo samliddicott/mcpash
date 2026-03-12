@@ -156,7 +156,11 @@ def main(argv: List[str] | None = None) -> int:
                 emit_cfg=emit_cfg,
             )
         try:
-            parser_impl = Parser(source, aliases=rt.aliases)
+            parser_impl = Parser(
+                source,
+                aliases=rt.aliases,
+                lenient_unterminated_quotes=(rt._bash_compat_level is not None),
+            )
             while True:
                 item = parser_impl.parse_next()
                 if item is None:
@@ -341,7 +345,11 @@ def main(argv: List[str] | None = None) -> int:
         )
 
     try:
-        parser_impl = Parser(source, aliases=rt.aliases)
+        parser_impl = Parser(
+            source,
+            aliases=rt.aliases,
+            lenient_unterminated_quotes=(rt._bash_compat_level is not None),
+        )
         while True:
             item = parser_impl.parse_next()
             if item is None:
