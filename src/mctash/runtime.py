@@ -1144,7 +1144,17 @@ class Runtime:
             self.env.setdefault("GROUPS", f"({os.getgid()})")
         except Exception:
             pass
-        self.env.setdefault("DIRSTACK", f"({self.env.get('PWD', '')})")
+        self.env.setdefault("DIRSTACK", "()")
+        self.env.setdefault("FUNCNAME", "()")
+        # Keep bash special arrays visible in declare -a listings.
+        self._typed_vars.setdefault("BASH_SOURCE", [])
+        self._typed_vars.setdefault("BASH_LINENO", ["0"])
+        self._typed_vars.setdefault("DIRSTACK", [])
+        self._typed_vars.setdefault("FUNCNAME", [])
+        self._set_var_attrs("BASH_SOURCE", array=True)
+        self._set_var_attrs("BASH_LINENO", array=True)
+        self._set_var_attrs("DIRSTACK", array=True)
+        self._set_var_attrs("FUNCNAME", array=True)
 
     @staticmethod
     def _parse_bash_compat_level(raw: str) -> int | None:
@@ -1299,6 +1309,13 @@ class Runtime:
             else:
                 self.source_stack = [name]
             self._sync_root_frame()
+            if self._bash_compat_level is not None:
+                self._typed_vars["BASH_SOURCE"] = [name]
+                self._typed_vars["BASH_LINENO"] = ["0"]
+                self._set_var_attrs("BASH_SOURCE", array=True)
+                self._set_var_attrs("BASH_LINENO", array=True)
+                self._set_subscript_projection("BASH_SOURCE", name)
+                self._set_subscript_projection("BASH_LINENO", "0")
 
     def set_interactive_session(self, enabled: bool) -> None:
         self._is_interactive_session = bool(enabled)
