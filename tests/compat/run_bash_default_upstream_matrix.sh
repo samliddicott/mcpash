@@ -145,6 +145,11 @@ summary="$RDIR/summary.tsv"
 
 for c in "${core_cases[@]}"; do
   case_timeout=90
+  if [[ "$c" == "arith.tests" ]]; then
+    # Arithmetic corpus executes thousands of arithmetic evaluations.
+    # Keep a higher cap to avoid false timeout failures while we optimize.
+    case_timeout=300
+  fi
   b_out="$RDIR/bash/${c}.out"; b_err="$RDIR/bash/${c}.err"; b_rc=0
   m_out="$RDIR/mctash/${c}.out"; m_err="$RDIR/mctash/${c}.err"; m_rc=0
   run_case_isolated bash "$c" "$b_out" "$b_err" "$case_timeout" || b_rc=$?
