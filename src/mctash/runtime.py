@@ -11076,7 +11076,18 @@ class Runtime:
             idx_expr = m.group(1)
             inner_op = m.group(2)
             rhs_raw = m.group(3)
-            idx = self._eval_index_subscript(idx_expr, out_vals, strict=True, name=name)
+            idx_text = idx_expr.strip()
+            if idx_text == "":
+                self._report_error(f"[]={rhs_raw}: bad array subscript", line=self.current_line)
+                continue
+            if idx_text in {"*", "@"}:
+                self._report_error(f"[{idx_text}]={rhs_raw}: cannot assign to non-numeric index", line=self.current_line)
+                continue
+            try:
+                idx = self._eval_index_subscript(idx_expr, out_vals, strict=True, name=name)
+            except RuntimeError:
+                self._report_error(f"[{idx_text}]={rhs_raw}: bad array subscript", line=self.current_line)
+                continue
             if idx is None:
                 continue
             if idx >= len(out_vals):
@@ -12412,6 +12423,16 @@ class Runtime:
                     vis = self._array_visible_values(typed)
                     self._set_subscript_projection(base, vis[0] if vis else "")
                     continue
+                base_exists = (
+                    base in self.env
+                    or any(base in scope for scope in self.local_stack)
+                    or base in self._var_attrs
+                    or base in self._typed_vars
+                )
+                if base_exists:
+                    self._report_error(f"{base}: not an array variable", line=self.current_line, context="unset")
+                    status = 1 if self._diag.style == "bash" else 2
+                continue
             had_var = False
             if name in self._typed_vars or name in self._var_attrs:
                 had_var = True
