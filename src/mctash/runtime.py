@@ -11838,28 +11838,36 @@ class Runtime:
         return None
 
     def _parse_assoc_compound_assignment_rhs(self, rhs: str) -> dict[str, str] | None:
-        text = rhs.strip()
-        if not (text.startswith("(") and text.endswith(")")):
+        entries = self._parse_compound_assignment_rhs_entries(rhs)
+        if entries is None:
             return None
-        inner = text[1:-1]
-        if inner.strip() == "":
+        if not entries:
             return {}
         out: dict[str, str] = {}
-        reader = TokenReader(inner)
-        ctx = LexContext(reserved_words=set(), allow_reserved=False, allow_newline=False)
-        while True:
-            tok = reader.next(ctx)
-            if tok is None:
-                break
-            if tok.kind != "WORD":
-                return None
-            m = re.match(r"^\[(.*)\]=(.*)$", tok.value)
-            if m is None:
-                return None
-            key_raw = m.group(1)
-            val_raw = m.group(2)
-            key = self._eval_assoc_subscript_key(key_raw)
-            out[str(key)] = self._expand_assignment_word(val_raw)
+        i = 0
+        while i < len(entries):
+            tok, explicit_idx_syntax = entries[i]
+            if explicit_idx_syntax:
+                m = re.match(r"^\[(.*)\](\+?=)(.*)$", tok)
+                if m is None:
+                    return None
+                key = str(self._eval_assoc_subscript_key(m.group(1)))
+                op = m.group(2)
+                val = self._expand_assignment_word(m.group(3))
+                if op == "+=":
+                    out[key] = str(out.get(key, "")) + val
+                else:
+                    out[key] = val
+                i += 1
+                continue
+            key = self._expand_assignment_word(tok)
+            if i + 1 < len(entries):
+                val = self._expand_assignment_word(entries[i + 1][0])
+                i += 2
+            else:
+                val = ""
+                i += 1
+            out[str(key)] = val
         return out
 
     def _assign_subscripted_var(self, name: str, value: str) -> bool:
@@ -12540,6 +12548,10 @@ class Runtime:
                 if "assoc" in attrs:
                     typed = self._typed_vars.get(name)
                     af = ["A"]
+                    if "lowercase" in attrs:
+                        af.append("l")
+                    if "uppercase" in attrs:
+                        af.append("u")
                     if "integer" in attrs:
                         af.append("i")
                     if "readonly" in attrs:
@@ -12562,6 +12574,10 @@ class Runtime:
                 elif "array" in attrs:
                     typed = self._typed_vars.get(name)
                     af = ["a"]
+                    if "lowercase" in attrs:
+                        af.append("l")
+                    if "uppercase" in attrs:
+                        af.append("u")
                     if "integer" in attrs:
                         af.append("i")
                     if "readonly" in attrs:
