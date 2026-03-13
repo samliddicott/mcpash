@@ -11889,7 +11889,11 @@ class Runtime:
                     # words that contain command substitution/arithmetic in
                     # subscripts (e.g. array[$(cmd)-1]=x). Keep recognizing
                     # clear lexical assignment forms here.
-                    if re.match(r"^[A-Za-z_][A-Za-z0-9_]*(?:\[[^]]*\])?\+?=", tok) is None:
+                    m_lhs = re.match(r"^([^=]+?)\+?=", tok)
+                    if m_lhs is None:
+                        return None
+                    lhs = m_lhs.group(1)
+                    if not (self._is_valid_name(lhs) or self._parse_subscripted_name(lhs) is not None):
                         return None
             m_comp = re.match(r"^([A-Za-z_][A-Za-z0-9_]*)(\+?=)\((.*)$", tok)
             if m_comp is not None:
