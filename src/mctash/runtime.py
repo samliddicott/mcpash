@@ -6018,8 +6018,8 @@ class Runtime:
         tmp = tempfile.TemporaryFile()
         saved_env = dict(self.env)
         saved_locals = [dict(s) for s in self.local_stack]
-        saved_var_store = copy.deepcopy(self._global_var_store)
-        saved_local_var_store = [copy.deepcopy(s) for s in self._local_var_store_stack]
+        saved_var_store = self._clone_var_store(self._global_var_store)
+        saved_local_var_store = self._clone_var_store_stack(self._local_var_store_stack)
         saved_readonly = set(self.readonly_vars)
         saved_opts = dict(self.options)
         saved_positional = list(self.positional)
@@ -14864,6 +14864,24 @@ class Runtime:
                     names.add(name)
         return sorted(names)
 
+    @staticmethod
+    def _clone_var_obj(obj: object) -> object:
+        if isinstance(obj, ShellScalar):
+            # Keep tie binding by reference; tied callables may capture runtime
+            # state that is not deepcopy-safe (thread locks, FDs, etc.).
+            return ShellScalar(value=str(obj.value), attrs=set(obj.attrs), tie=obj.tie)
+        if isinstance(obj, ShellArray):
+            return ShellArray(list(obj), set(obj.attrs))
+        if isinstance(obj, ShellAssoc):
+            return ShellAssoc(dict(obj), set(obj.attrs))
+        return copy.deepcopy(obj)
+
+    def _clone_var_store(self, store: dict[str, object]) -> dict[str, object]:
+        return {k: self._clone_var_obj(v) for k, v in store.items()}
+
+    def _clone_var_store_stack(self, stack: list[dict[str, object]]) -> list[dict[str, object]]:
+        return [self._clone_var_store(scope) for scope in stack]
+
     def _get_var_attrs(self, name: str) -> dict[str, bool]:
         attrs = self._lookup_var_attrs_set(name)
         if name in self.readonly_vars:
@@ -17055,8 +17073,8 @@ class Runtime:
         saved_offset = self._line_offset
         saved_options = dict(self.options)
         saved_env = dict(self.env)
-        saved_var_store = copy.deepcopy(self._global_var_store)
-        saved_local_var_store = [copy.deepcopy(s) for s in self._local_var_store_stack]
+        saved_var_store = self._clone_var_store(self._global_var_store)
+        saved_local_var_store = self._clone_var_store_stack(self._local_var_store_stack)
         saved_local_stack = [dict(scope) for scope in self.local_stack]
         saved_positional = list(self.positional)
         saved_script_name = self.script_name
@@ -17069,8 +17087,8 @@ class Runtime:
         # Evaluate command substitution in an isolated mutable state so
         # temporary mutations don't leak back through shared dict objects.
         self.env = dict(saved_env)
-        self._global_var_store = copy.deepcopy(saved_var_store)
-        self._local_var_store_stack = [copy.deepcopy(s) for s in saved_local_var_store]
+        self._global_var_store = self._clone_var_store(saved_var_store)
+        self._local_var_store_stack = self._clone_var_store_stack(saved_local_var_store)
         self.local_stack = [dict(scope) for scope in saved_local_stack]
         self.positional = list(saved_positional)
         # In bash/ash POSIX behavior, command substitution under `set -e`
@@ -17132,8 +17150,8 @@ class Runtime:
         saved_offset = self._line_offset
         saved_options = dict(self.options)
         saved_env = dict(self.env)
-        saved_var_store = copy.deepcopy(self._global_var_store)
-        saved_local_var_store = [copy.deepcopy(s) for s in self._local_var_store_stack]
+        saved_var_store = self._clone_var_store(self._global_var_store)
+        saved_local_var_store = self._clone_var_store_stack(self._local_var_store_stack)
         saved_local_stack = [dict(scope) for scope in self.local_stack]
         saved_positional = list(self.positional)
         saved_script_name = self.script_name
@@ -17144,8 +17162,8 @@ class Runtime:
         base = (self.current_line or 1) + line_bias
         self._line_offset = saved_offset + (base - 1)
         self.env = dict(saved_env)
-        self._global_var_store = copy.deepcopy(saved_var_store)
-        self._local_var_store_stack = [copy.deepcopy(s) for s in saved_local_var_store]
+        self._global_var_store = self._clone_var_store(saved_var_store)
+        self._local_var_store_stack = self._clone_var_store_stack(saved_local_var_store)
         self.local_stack = [dict(scope) for scope in saved_local_stack]
         self.positional = list(saved_positional)
         if not saved_options.get("posix", False):
