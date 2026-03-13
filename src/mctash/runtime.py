@@ -785,6 +785,7 @@ class Runtime:
         "unalias",
         "trap",
         "let",
+        "printf",
         "py",
         "python:",
         "from",
@@ -13802,6 +13803,25 @@ class Runtime:
     def _eval_assoc_subscript_key(self, key: str) -> str:
         return self._expand_assignment_word(key)
 
+    def _validate_assoc_name_for_builtin(self, base: str, key: str) -> tuple[str, bool]:
+        k = (key or "").strip()
+        expanded = ""
+        m_simple = re.fullmatch(r"\$([A-Za-z_][A-Za-z0-9_]*)", k)
+        if m_simple is not None:
+            expanded = self._get_var(m_simple.group(1))
+        else:
+            m_braced = re.fullmatch(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}", k)
+            if m_braced is not None:
+                expanded = self._get_var(m_braced.group(1))
+            else:
+                expanded = self._eval_assoc_subscript_key(key)
+        rendered = f"{base}[{expanded}]"
+        if self._shopts.get("assoc_expand_once", False):
+            return rendered, True
+        if "'" in expanded:
+            return rendered, False
+        return rendered, True
+
     def _run_shift(self, args: List[str]) -> int:
         n = 1
         if args:
@@ -14345,6 +14365,19 @@ class Runtime:
     def _run_printf(self, args: List[str]) -> int:
         if not args:
             return 0
+        out_var: str | None = None
+        if args and args[0] == "-v":
+            if len(args) < 3:
+                self._report_error(
+                    "usage: printf [-v var] format [arguments]",
+                    line=self.current_line,
+                    context="printf",
+                )
+                return 2
+            out_var = args[1]
+            args = args[2:]
+        if not args:
+            return 0
         fmt = self._decode_backslash_escapes(args[0])
         vals = args[1:]
         def count_specs(s: str) -> int:
@@ -14424,6 +14457,23 @@ class Runtime:
                 if not vals:
                     break
         rendered = "".join(rendered_parts)
+        if out_var is not None:
+            parsed = self._parse_subscripted_name(out_var)
+            if parsed is not None:
+                base, key = parsed
+                attrs = self._lookup_var_attrs_set(base)
+                typed = self._lookup_typed_var(base)
+                if "assoc" in attrs and isinstance(typed, dict):
+                    rendered_name, ok = self._validate_assoc_name_for_builtin(base, key)
+                    if not ok:
+                        self._report_error(
+                            f"`{rendered_name}': not a valid identifier",
+                            line=self.current_line,
+                            context="printf",
+                        )
+                        return 2
+            self._assign_shell_var(out_var, rendered)
+            return 0
         if isinstance(sys.stdout, io.StringIO) and self._fd_redirect_depth == 0:
             sys.stdout.write(rendered)
             return 0
@@ -15455,6 +15505,20 @@ class Runtime:
         else:
             values = self._split_read_fields(text, names)
         for name, value in zip(names, values):
+            parsed = self._parse_subscripted_name(name)
+            if parsed is not None:
+                base, key = parsed
+                attrs = self._lookup_var_attrs_set(base)
+                typed = self._lookup_typed_var(base)
+                if "assoc" in attrs and isinstance(typed, dict):
+                    rendered_name, ok = self._validate_assoc_name_for_builtin(base, key)
+                    if not ok:
+                        self._report_error(
+                            f"`{rendered_name}': not a valid identifier",
+                            line=self.current_line,
+                            context="read",
+                        )
+                        return 1
             self._assign_shell_var(name, value)
         return 0 if ok else 1
 
