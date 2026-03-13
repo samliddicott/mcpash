@@ -11851,16 +11851,23 @@ class Runtime:
         if "assoc" in attrs:
             cur_map = self._typed_vars.get(name)
             out_map: dict[str, str] = dict(cur_map) if (op == "+=" and isinstance(cur_map, dict)) else {}
-            for entry in normalized:
+            i = 0
+            while i < len(normalized):
+                entry = normalized[i]
                 raw = entry.text
                 m = re.match(r"^\[(.*)\](\+?=)(.*)$", raw) if entry.explicit_index_syntax else None
                 if m is None:
-                    val_raw = raw if entry.expanded else self._expand_assignment_word(raw)
-                    val = self._coerce_value_with_attrs(val_raw, attrs)
-                    if op == "+=":
-                        out_map["0"] = str(out_map.get("0", "")) + val
+                    key_raw = raw if entry.expanded else self._expand_assignment_word(raw)
+                    key = str(key_raw)
+                    if i + 1 < len(normalized):
+                        nxt = normalized[i + 1]
+                        val_raw = nxt.text if nxt.expanded else self._expand_assignment_word(nxt.text)
+                        i += 2
                     else:
-                        out_map["0"] = val
+                        val_raw = ""
+                        i += 1
+                    val = self._coerce_value_with_attrs(val_raw, attrs)
+                    out_map[key] = val
                     continue
                 key = str(self._eval_assoc_subscript_key(m.group(1)))
                 inner_op = m.group(2)
@@ -11869,6 +11876,7 @@ class Runtime:
                     out_map[key] = str(out_map.get(key, "")) + rhs
                 else:
                     out_map[key] = rhs
+                i += 1
             self._typed_vars[name] = out_map
             self._set_var_attrs(name, assoc=True)
             self._set_subscript_projection(name, str(out_map.get("0", "")))
