@@ -13731,6 +13731,18 @@ class Runtime:
                 typed = self._lookup_typed_var(base)
                 attrs = self._lookup_var_attrs_set(base)
                 if isinstance(typed, dict) and "assoc" in attrs:
+                    if (
+                        not self._shopts.get("assoc_expand_once", False)
+                        and any(ch in key for ch in {'"', "'", "`", "\\"})
+                    ):
+                        rendered = f"{base}[{self._eval_assoc_subscript_key(key)}]"
+                        self._report_error(
+                            f"`{rendered}': not a valid identifier",
+                            line=self.current_line,
+                            context="unset",
+                        )
+                        status = 1
+                        continue
                     if key in {"@", "*"}:
                         # bash COMPAT <=51: unset A[@] removes the whole assoc
                         # variable; 5.2+ may target key '@' instead.
