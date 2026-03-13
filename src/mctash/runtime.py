@@ -108,6 +108,13 @@ class ArithExpansionFailure(Exception):
         self.code = code
 
 
+@dataclass(frozen=True)
+class AssignmentEntry:
+    text: str
+    explicit_index_syntax: bool
+    expanded: bool = False
+
+
 JOB_RUNNING = "running"
 JOB_STOPPED = "stopped"
 JOB_DONE = "done"
@@ -3899,19 +3906,16 @@ class Runtime:
             return self._expand_assignment_word(self._asdl_word_to_text(word))
         return ""
 
-    def _asdl_rhs_compound_entries(self, rhs_word: dict[str, Any]) -> list[tuple[str, bool]] | None:
-        # Build entry IR from ASDL lexical source. Keep entries as raw lexical
-        # tokens (with quote/escape spelling) and explicit-index provenance.
-        # Expansion is then performed exactly once by _assign_compound_var().
+    def _asdl_rhs_compound_entries(self, rhs_word: dict[str, Any]) -> list[AssignmentEntry] | None:
         raw = self._asdl_word_to_text(rhs_word)
         raw_entries = self._parse_compound_assignment_rhs_entries(raw)
         if raw_entries is None:
             return None
-        return raw_entries
+        return [AssignmentEntry(text=t, explicit_index_syntax=e, expanded=False) for t, e in raw_entries]
 
     def _asdl_rhs_assignment_ir(
         self, rhs: dict[str, Any] | None
-    ) -> tuple[str, list[tuple[str, bool]] | None, str | None]:
+    ) -> tuple[str, list[AssignmentEntry] | None, str | None]:
         scalar = self._expand_asdl_rhs_assignment(rhs)
         if not isinstance(rhs, dict) or rhs.get("type") != "rhs_word.Compound":
             return scalar, None, None
@@ -11691,27 +11695,38 @@ class Runtime:
         self,
         name: str,
         op: str,
-        values: list[str] | list[tuple[str, bool]],
+        values: list[str] | list[tuple[str, bool]] | list[AssignmentEntry],
         *,
         attrs_override: set[str] | None = None,
     ) -> None:
         if self._bash_compat_level is None:
             raise RuntimeError(f"{name}: compound assignment requires BASH_COMPAT")
-        normalized: list[tuple[str, bool]] = []
+        normalized: list[AssignmentEntry] = []
         for v in values:
+            if isinstance(v, AssignmentEntry):
+                normalized.append(v)
+                continue
             if isinstance(v, tuple):
-                normalized.append((str(v[0]), bool(v[1])))
-            else:
-                tok = str(v)
-                normalized.append((tok, re.match(r"^\[(.*)\](\+?=)(.*)$", tok) is not None))
+                normalized.append(AssignmentEntry(str(v[0]), bool(v[1]), False))
+                continue
+            tok = str(v)
+            normalized.append(
+                AssignmentEntry(
+                    tok,
+                    re.match(r"^\[(.*)\](\+?=)(.*)$", tok) is not None,
+                    False,
+                )
+            )
         attrs = set(attrs_override) if attrs_override is not None else self._var_attrs.get(name, set())
         if "assoc" in attrs:
             cur_map = self._typed_vars.get(name)
             out_map: dict[str, str] = dict(cur_map) if (op == "+=" and isinstance(cur_map, dict)) else {}
-            for raw, explicit_idx_syntax in normalized:
-                m = re.match(r"^\[(.*)\](\+?=)(.*)$", raw) if explicit_idx_syntax else None
+            for entry in normalized:
+                raw = entry.text
+                m = re.match(r"^\[(.*)\](\+?=)(.*)$", raw) if entry.explicit_index_syntax else None
                 if m is None:
-                    val = self._coerce_value_with_attrs(self._expand_assignment_word(raw), attrs)
+                    val_raw = raw if entry.expanded else self._expand_assignment_word(raw)
+                    val = self._coerce_value_with_attrs(val_raw, attrs)
                     if op == "+=":
                         out_map["0"] = str(out_map.get("0", "")) + val
                     else:
@@ -11734,12 +11749,16 @@ class Runtime:
         next_idx = 0
         if op == "+=" and out_vals:
             next_idx = max(i for i, v in enumerate(out_vals) if v is not None) + 1
-        for tok, explicit_idx_syntax in normalized:
-            m = re.match(r"^\[(.*)\](\+?=)(.*)$", tok) if explicit_idx_syntax else None
+        for entry in normalized:
+            tok = entry.text
+            m = re.match(r"^\[(.*)\](\+?=)(.*)$", tok) if entry.explicit_index_syntax else None
             if m is None:
-                expanded_items = fields_to_text_list(self._legacy_word_to_expansion_fields(tok, assignment=False))
-                if not expanded_items:
-                    expanded_items = [""]
+                if entry.expanded:
+                    expanded_items = [tok]
+                else:
+                    expanded_items = fields_to_text_list(self._legacy_word_to_expansion_fields(tok, assignment=False))
+                    if not expanded_items:
+                        expanded_items = [""]
                 for val in expanded_items:
                     val = self._coerce_value_with_attrs(val, attrs)
                     while next_idx < len(out_vals) and out_vals[next_idx] is not None:
@@ -11772,7 +11791,7 @@ class Runtime:
                 continue
             if idx >= len(out_vals):
                 out_vals.extend([None] * (idx + 1 - len(out_vals)))
-            rhs = self._expand_assignment_word(rhs_raw)
+            rhs = rhs_raw if entry.expanded else self._expand_assignment_word(rhs_raw)
             rhs = self._coerce_value_with_attrs(rhs, attrs)
             if inner_op == "+=" and op == "+=":
                 old = "" if out_vals[idx] is None else str(out_vals[idx])
