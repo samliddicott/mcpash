@@ -13562,6 +13562,26 @@ class Runtime:
                         self._set_var_attrs(name, local_scope=effective_local_scope, **attrs_apply)
                         continue
                     expanded_assoc_value = self._expand_assignment_word(rhs_for_expand)
+                    exp_entries = self._parse_compound_assignment_rhs_entries(expanded_assoc_value)
+                    if exp_entries is not None:
+                        self._assign_compound_var(
+                            name,
+                            op,
+                            [
+                                AssignmentEntry(
+                                    text=e.text,
+                                    explicit_index_syntax=e.explicit_index_syntax,
+                                    expanded=True,
+                                )
+                                for e in exp_entries
+                            ],
+                            attrs_override=effective_attrs,
+                            local_scope=effective_local_scope,
+                        )
+                        attrs_apply = dict(attr_flags)
+                        attrs_apply["assoc"] = True
+                        self._set_var_attrs(name, local_scope=effective_local_scope, **attrs_apply)
+                        continue
                     cur = self._lookup_typed_var(name)
                     base = dict(cur) if (op == "+=" and isinstance(cur, dict)) else {}
                     merged = (str(base.get("0", "")) + expanded_assoc_value) if op == "+=" else expanded_assoc_value
@@ -13600,6 +13620,26 @@ class Runtime:
                         self._set_var_attrs(name, local_scope=effective_local_scope, **attrs_apply)
                         continue
                     expanded_arr_value = self._expand_assignment_word(rhs_for_expand)
+                    exp_entries = self._parse_compound_assignment_rhs_entries(expanded_arr_value)
+                    if exp_entries is not None:
+                        self._assign_compound_var(
+                            name,
+                            op,
+                            [
+                                AssignmentEntry(
+                                    text=e.text,
+                                    explicit_index_syntax=e.explicit_index_syntax,
+                                    expanded=True,
+                                )
+                                for e in exp_entries
+                            ],
+                            attrs_override=effective_attrs,
+                            local_scope=effective_local_scope,
+                        )
+                        attrs_apply = dict(attr_flags)
+                        attrs_apply["array"] = True
+                        self._set_var_attrs(name, local_scope=effective_local_scope, **attrs_apply)
+                        continue
                     cur = self._lookup_typed_var(name)
                     base_list: list[object]
                     if isinstance(cur, list):
