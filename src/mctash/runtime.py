@@ -3285,6 +3285,14 @@ class Runtime:
             out.extend(self._expand_asdl_word_fields(w, split_glob=True))
         return out
 
+    def _expand_asdl_conditional_argv(self, node: dict[str, Any]) -> list[str]:
+        """Expand [[ ... ]] words without field splitting/pathname expansion."""
+        words = node.get("words") or []
+        out: list[str] = []
+        for w in words:
+            out.extend(self._expand_asdl_word_fields(w, split_glob=False))
+        return out
+
     def _expand_asdl_declare_argv(self, node: dict[str, Any], cmd_name: str) -> tuple[list[str], dict[int, str]]:
         words = node.get("words") or []
         out: list[str] = [cmd_name]
@@ -3375,7 +3383,10 @@ class Runtime:
                 self._alias_textual_depth -= 1
         try:
             self._validate_asdl_simple_like_words(node)
-            argv = self._expand_asdl_simple_argv(node)
+            if raw_words and raw_words[0] == "[[":
+                argv = self._expand_asdl_conditional_argv(node)
+            else:
+                argv = self._expand_asdl_simple_argv(node)
         except RuntimeError as e:
             msg = str(e)
             self._print_stderr(msg)
@@ -13813,7 +13824,43 @@ class Runtime:
         return status
 
     def _eval_assoc_subscript_key(self, key: str) -> str:
+        if self._shopts.get("assoc_expand_once", False):
+            return self._expand_assoc_key_once(key)
         return self._expand_assignment_word(key)
+
+    def _expand_assoc_key_once(self, key: str) -> str:
+        """Single-pass assoc key expansion (no command/arithmetic substitution)."""
+        s = str(key or "")
+        out: list[str] = []
+        i = 0
+        n = len(s)
+        while i < n:
+            ch = s[i]
+            if ch == "\\" and i + 1 < n:
+                out.append(s[i + 1])
+                i += 2
+                continue
+            if ch == "$":
+                if i + 1 < n and s[i + 1] == "{":
+                    j = i + 2
+                    while j < n and s[j] != "}":
+                        j += 1
+                    if j < n:
+                        name = s[i + 2 : j]
+                        if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", name):
+                            out.append(self._get_var(name))
+                            i = j + 1
+                            continue
+                j = i + 1
+                while j < n and (s[j].isalnum() or s[j] == "_"):
+                    j += 1
+                if j > i + 1:
+                    out.append(self._get_var(s[i + 1 : j]))
+                    i = j
+                    continue
+            out.append(ch)
+            i += 1
+        return "".join(out)
 
     def _validate_assoc_name_for_builtin(self, base: str, key: str) -> tuple[str, bool]:
         k = (key or "").strip()
