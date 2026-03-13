@@ -1002,6 +1002,7 @@ class Runtime:
             else "interpreter"
         )
         self._compile_debug: bool = self.env.get("MCTASH_COMPILE_DEBUG", "").strip().lower() in {"1", "true", "yes", "on"}
+        self._declare_raw_assign_by_arg: dict[int, str] = {}
         self._compiled_cache: Dict[tuple[str, str], Callable[["Runtime"], int]] = {}
         self._compile_fallback_seen: set[str] = set()
         self._compiled_depth: int = 0
@@ -3217,6 +3218,30 @@ class Runtime:
             out.extend(self._expand_asdl_word_fields(w, split_glob=True))
         return out
 
+    def _expand_asdl_declare_argv(self, node: dict[str, Any], cmd_name: str) -> tuple[list[str], dict[int, str]]:
+        words = node.get("words") or []
+        out: list[str] = [cmd_name]
+        raw_by_idx: dict[int, str] = {}
+        for w in words[1:]:
+            if not isinstance(w, dict):
+                continue
+            raw = self._asdl_word_to_text(w)
+            # Preserve declaration assignment words as raw lexical units so
+            # _run_declare can apply assignment-context expansion itself.
+            if re.match(r"^[A-Za-z_][A-Za-z0-9_]*(?:\[[^]]*\])?\+?=", raw):
+                m = re.match(r"^([^=]+?)(\+?=)(.*)$", raw)
+                if m is None:
+                    out.append(raw)
+                    continue
+                lhs = m.group(1)
+                op = m.group(2)
+                rhs = m.group(3)
+                out.append(f"{lhs}{op}{self._expand_assignment_word(rhs)}")
+                raw_by_idx[len(out) - 2] = raw
+                continue
+            out.extend(self._expand_asdl_word_fields(w, split_glob=True))
+        return out, raw_by_idx
+
     def _asdl_word_can_expand_case_natively_safe(self, word: dict[str, Any]) -> bool:
         if not isinstance(word, dict) or word.get("type") != "word.Compound":
             return False
@@ -3485,6 +3510,10 @@ class Runtime:
             self._cmd_sub_used = False
 
         name = argv[0]
+        if name in {"declare", "typeset", "local", "readonly", "export"}:
+            argv, raw_assign_by_idx = self._expand_asdl_declare_argv(node, name)
+        else:
+            raw_assign_by_idx = {}
         assign_names = {str(a.get("name") or "") for a in assign_pairs}
         if self._has_function(name):
             saved_env = dict(self.env)
@@ -3515,6 +3544,8 @@ class Runtime:
             return status
         if self._should_dispatch_builtin(argv):
             is_special = name in self.SPECIAL_BUILTINS
+            saved_decl_meta = self._declare_raw_assign_by_arg
+            self._declare_raw_assign_by_arg = raw_assign_by_idx
             if is_special:
                 if self.options.get("posix", False):
                     saved_env = dict(self.env)
@@ -3533,6 +3564,7 @@ class Runtime:
                                     self.env[var_name] = saved_env[var_name]
                             elif var_name in saved_env and self.env.get(var_name, "") == "":
                                 self.env[var_name] = saved_env[var_name]
+                    self._declare_raw_assign_by_arg = saved_decl_meta
                     return status
                 # Assignment prefixes before special builtins affect current shell state.
                 persist_assigns = True
@@ -3562,6 +3594,7 @@ class Runtime:
                             else:
                                 merged.pop(k, None)
                     self.env = merged
+                self._declare_raw_assign_by_arg = saved_decl_meta
                 return status
             saved_env = self.env
             try:
@@ -3595,6 +3628,7 @@ class Runtime:
                 return status
             finally:
                 self.env = saved_env
+                self._declare_raw_assign_by_arg = saved_decl_meta
         if name in self._py_callables:
             saved_env = self.env
             try:
@@ -11618,17 +11652,29 @@ class Runtime:
                 return False
         return True
 
-    def _assign_compound_var(self, name: str, op: str, values: list[str]) -> None:
+    def _assign_compound_var(
+        self,
+        name: str,
+        op: str,
+        values: list[str] | list[tuple[str, bool]],
+    ) -> None:
         if self._bash_compat_level is None:
             raise RuntimeError(f"{name}: compound assignment requires BASH_COMPAT")
+        normalized: list[tuple[str, bool]] = []
+        for v in values:
+            if isinstance(v, tuple):
+                normalized.append((str(v[0]), bool(v[1])))
+            else:
+                tok = str(v)
+                normalized.append((tok, re.match(r"^\[(.*)\](\+?=)(.*)$", tok) is not None))
         attrs = self._var_attrs.get(name, set())
         if "assoc" in attrs:
             cur_map = self._typed_vars.get(name)
             out_map: dict[str, str] = dict(cur_map) if (op == "+=" and isinstance(cur_map, dict)) else {}
-            for raw in values:
-                m = re.match(r"^\[(.*)\](\+?=)(.*)$", str(raw))
+            for raw, explicit_idx_syntax in normalized:
+                m = re.match(r"^\[(.*)\](\+?=)(.*)$", raw) if explicit_idx_syntax else None
                 if m is None:
-                    val = self._coerce_var_value(name, self._expand_assignment_word(str(raw)))
+                    val = self._coerce_var_value(name, self._expand_assignment_word(raw))
                     if op == "+=":
                         out_map["0"] = str(out_map.get("0", "")) + val
                     else:
@@ -11651,9 +11697,8 @@ class Runtime:
         next_idx = 0
         if op == "+=" and out_vals:
             next_idx = max(i for i, v in enumerate(out_vals) if v is not None) + 1
-        for raw in values:
-            tok = str(raw)
-            m = re.match(r"^\[(.*)\](\+?=)(.*)$", tok)
+        for tok, explicit_idx_syntax in normalized:
+            m = re.match(r"^\[(.*)\](\+?=)(.*)$", tok) if explicit_idx_syntax else None
             if m is None:
                 expanded_items = fields_to_text_list(self._legacy_word_to_expansion_fields(tok, assignment=False))
                 if not expanded_items:
@@ -11706,14 +11751,14 @@ class Runtime:
             proj = str(out_vals[0])
         self._set_subscript_projection(name, proj)
 
-    def _parse_compound_assignment_rhs(self, rhs: str) -> list[str] | None:
+    def _parse_compound_assignment_rhs_entries(self, rhs: str) -> list[tuple[str, bool]] | None:
         text = rhs.strip()
         if not (text.startswith("(") and text.endswith(")")):
             return None
         inner = text[1:-1]
         if inner.strip() == "":
             return []
-        vals: list[str] = []
+        vals: list[tuple[str, bool]] = []
         reader = TokenReader(inner)
         ctx = LexContext(reserved_words=set(), allow_reserved=False, allow_newline=False)
         while True:
@@ -11722,8 +11767,14 @@ class Runtime:
                 break
             if tok.kind != "WORD":
                 return None
-            vals.append(tok.value)
+            vals.append((tok.value, re.match(r"^\[(.*)\](\+?=)(.*)$", tok.value) is not None))
         return vals
+
+    def _parse_compound_assignment_rhs(self, rhs: str) -> list[str] | None:
+        entries = self._parse_compound_assignment_rhs_entries(rhs)
+        if entries is None:
+            return None
+        return [v for v, _ in entries]
 
     def _compound_assignment_unexpected_token(self, rhs: str) -> str | None:
         text = rhs.strip()
@@ -12334,11 +12385,14 @@ class Runtime:
             idx += 1
 
         names = args[idx:]
+        raw_names = [self._declare_raw_assign_by_arg.get(idx + i, names[i]) for i in range(len(names))]
         if names:
             folded: List[str] = []
+            folded_raw: List[str] = []
             j = 0
             while j < len(names):
                 spec = names[j]
+                raw_spec = raw_names[j] if j < len(raw_names) else spec
                 if "=" in spec:
                     _, rhs0 = spec.split("=", 1)
                     if rhs0.startswith("("):
@@ -12348,8 +12402,10 @@ class Runtime:
                             spec = spec + " " + names[j]
                             depth += names[j].count("(") - names[j].count(")")
                 folded.append(spec)
+                folded_raw.append(raw_spec)
                 j += 1
             names = folded
+            raw_names = folded_raw
         if not names and (
             declare_array
             or declare_assoc
@@ -12529,13 +12585,22 @@ class Runtime:
                 return 2
 
         status = 0
-        for spec in names:
+        for spec_i, spec in enumerate(names):
             if "=" in spec:
                 name, value = spec.split("=", 1)
                 op = "="
                 if name.endswith("+"):
                     op = "+="
                     name = name[:-1]
+                raw_spec = raw_names[spec_i] if spec_i < len(raw_names) else None
+                raw_name = None
+                raw_op = "="
+                raw_value = None
+                if raw_spec is not None and "=" in raw_spec:
+                    raw_name, raw_value = raw_spec.split("=", 1)
+                    if raw_name.endswith("+"):
+                        raw_op = "+="
+                        raw_name = raw_name[:-1]
                 parsed_decl = self._parse_subscripted_name(name)
                 parsed_base = parsed_decl[0] if parsed_decl is not None else name
                 # `declare -a var[10]=x` accepts the indexed spelling but acts
@@ -12612,9 +12677,23 @@ class Runtime:
                     self._set_subscript_projection(name, str(base.get("0", "")))
                     continue
                 if is_array_target:
-                    comp_vals = self._parse_compound_assignment_rhs(value)
-                    if comp_vals is not None:
-                        self._assign_compound_var(name, op, comp_vals)
+                    comp_entries = self._parse_compound_assignment_rhs_entries(value)
+                    if comp_entries is not None:
+                        # Preserve explicit [idx]=rhs syntax provenance from
+                        # raw declaration word when available; expanded text
+                        # like `"$b"` -> `[0]=bar` must remain plain value.
+                        if (
+                            raw_value is not None
+                            and raw_op == op
+                            and raw_name == name
+                        ):
+                            raw_entries = self._parse_compound_assignment_rhs_entries(raw_value)
+                            if raw_entries is not None and len(raw_entries) == len(comp_entries):
+                                comp_entries = [
+                                    (comp_entries[i][0], raw_entries[i][1])
+                                    for i in range(len(comp_entries))
+                                ]
+                        self._assign_compound_var(name, op, comp_entries)
                         attrs_apply = dict(attr_flags)
                         attrs_apply["array"] = True
                         self._set_var_attrs(name, **attrs_apply)
