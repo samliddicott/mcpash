@@ -11657,6 +11657,8 @@ class Runtime:
         name: str,
         op: str,
         values: list[str] | list[tuple[str, bool]],
+        *,
+        attrs_override: set[str] | None = None,
     ) -> None:
         if self._bash_compat_level is None:
             raise RuntimeError(f"{name}: compound assignment requires BASH_COMPAT")
@@ -11667,14 +11669,14 @@ class Runtime:
             else:
                 tok = str(v)
                 normalized.append((tok, re.match(r"^\[(.*)\](\+?=)(.*)$", tok) is not None))
-        attrs = self._var_attrs.get(name, set())
+        attrs = set(attrs_override) if attrs_override is not None else self._var_attrs.get(name, set())
         if "assoc" in attrs:
             cur_map = self._typed_vars.get(name)
             out_map: dict[str, str] = dict(cur_map) if (op == "+=" and isinstance(cur_map, dict)) else {}
             for raw, explicit_idx_syntax in normalized:
                 m = re.match(r"^\[(.*)\](\+?=)(.*)$", raw) if explicit_idx_syntax else None
                 if m is None:
-                    val = self._coerce_var_value(name, self._expand_assignment_word(raw))
+                    val = self._coerce_value_with_attrs(self._expand_assignment_word(raw), attrs)
                     if op == "+=":
                         out_map["0"] = str(out_map.get("0", "")) + val
                     else:
@@ -11682,7 +11684,7 @@ class Runtime:
                     continue
                 key = str(self._eval_assoc_subscript_key(m.group(1)))
                 inner_op = m.group(2)
-                rhs = self._coerce_var_value(name, self._expand_assignment_word(m.group(3)))
+                rhs = self._coerce_value_with_attrs(self._expand_assignment_word(m.group(3)), attrs)
                 if inner_op == "+=" and op == "+=":
                     out_map[key] = str(out_map.get(key, "")) + rhs
                 else:
@@ -11704,7 +11706,7 @@ class Runtime:
                 if not expanded_items:
                     expanded_items = [""]
                 for val in expanded_items:
-                    val = self._coerce_var_value(name, val)
+                    val = self._coerce_value_with_attrs(val, attrs)
                     while next_idx < len(out_vals) and out_vals[next_idx] is not None:
                         next_idx += 1
                     if next_idx >= len(out_vals):
@@ -11732,7 +11734,7 @@ class Runtime:
             if idx >= len(out_vals):
                 out_vals.extend([None] * (idx + 1 - len(out_vals)))
             rhs = self._expand_assignment_word(rhs_raw)
-            rhs = self._coerce_var_value(name, rhs)
+            rhs = self._coerce_value_with_attrs(rhs, attrs)
             if inner_op == "+=" and op == "+=":
                 old = "" if out_vals[idx] is None else str(out_vals[idx])
                 if integer_mode:
@@ -12654,12 +12656,23 @@ class Runtime:
                 target_attrs.update(attr_flags.keys())
                 is_assoc_target = "assoc" in target_attrs
                 is_array_target = "array" in target_attrs and not is_assoc_target
+                effective_attrs = set(self._var_attrs.get(name, set()))
+                for k, v in attr_flags.items():
+                    if v:
+                        effective_attrs.add(k)
+                    else:
+                        effective_attrs.discard(k)
+                if "lowercase" in effective_attrs:
+                    effective_attrs.discard("uppercase")
+                if "uppercase" in effective_attrs:
+                    effective_attrs.discard("lowercase")
                 if is_assoc_target:
                     assoc_values = self._parse_assoc_compound_assignment_rhs(value)
                     if assoc_values is not None:
                         cur = self._typed_vars.get(name)
                         base: dict[str, str] = dict(cur) if (op == "+=" and isinstance(cur, dict)) else {}
-                        base.update(assoc_values)
+                        for k, v in assoc_values.items():
+                            base[k] = self._coerce_value_with_attrs(str(v), effective_attrs)
                         self._typed_vars[name] = base
                         attrs_apply = dict(attr_flags)
                         attrs_apply["assoc"] = True
@@ -12669,7 +12682,8 @@ class Runtime:
                     expanded_assoc_value = self._expand_assignment_word(value)
                     cur = self._typed_vars.get(name)
                     base = dict(cur) if (op == "+=" and isinstance(cur, dict)) else {}
-                    base["0"] = (str(base.get("0", "")) + expanded_assoc_value) if op == "+=" else expanded_assoc_value
+                    merged = (str(base.get("0", "")) + expanded_assoc_value) if op == "+=" else expanded_assoc_value
+                    base["0"] = self._coerce_value_with_attrs(merged, effective_attrs)
                     self._typed_vars[name] = base
                     attrs_apply = dict(attr_flags)
                     attrs_apply["assoc"] = True
@@ -12693,7 +12707,7 @@ class Runtime:
                                     (comp_entries[i][0], raw_entries[i][1])
                                     for i in range(len(comp_entries))
                                 ]
-                        self._assign_compound_var(name, op, comp_entries)
+                        self._assign_compound_var(name, op, comp_entries, attrs_override=effective_attrs)
                         attrs_apply = dict(attr_flags)
                         attrs_apply["array"] = True
                         self._set_var_attrs(name, **attrs_apply)
@@ -12705,11 +12719,11 @@ class Runtime:
                         base_list = list(cur)
                         if base_list:
                             first = "" if base_list[0] is None else str(base_list[0])
-                            base_list[0] = first + expanded_arr_value
+                            base_list[0] = self._coerce_value_with_attrs(first + expanded_arr_value, effective_attrs)
                         else:
-                            base_list = [expanded_arr_value]
+                            base_list = [self._coerce_value_with_attrs(expanded_arr_value, effective_attrs)]
                     else:
-                        base_list = [expanded_arr_value]
+                        base_list = [self._coerce_value_with_attrs(expanded_arr_value, effective_attrs)]
                     self._typed_vars[name] = base_list
                     attrs_apply = dict(attr_flags)
                     attrs_apply["array"] = True
@@ -14200,6 +14214,9 @@ class Runtime:
 
     def _coerce_var_value(self, name: str, value: str) -> str:
         attrs = self._var_attrs.get(name, set())
+        return self._coerce_value_with_attrs(value, attrs)
+
+    def _coerce_value_with_attrs(self, value: str, attrs: set[str]) -> str:
         out = value
         if "integer" in attrs:
             try:
