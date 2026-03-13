@@ -11851,12 +11851,20 @@ class Runtime:
         if "assoc" in attrs:
             cur_map = self._typed_vars.get(name)
             out_map: dict[str, str] = dict(cur_map) if (op == "+=" and isinstance(cur_map, dict)) else {}
+            any_explicit = any(e.explicit_index_syntax for e in normalized)
             i = 0
             while i < len(normalized):
                 entry = normalized[i]
                 raw = entry.text
                 m = re.match(r"^\[(.*)\](\+?=)(.*)$", raw) if entry.explicit_index_syntax else None
                 if m is None:
+                    if any_explicit:
+                        self._report_error(
+                            f"{name}: {raw}: must use subscript when assigning associative array",
+                            line=self.current_line,
+                        )
+                        i += 1
+                        continue
                     key_raw = raw if entry.expanded else self._expand_assignment_word(raw)
                     key = str(key_raw)
                     if i + 1 < len(normalized):
@@ -11870,6 +11878,10 @@ class Runtime:
                     out_map[key] = val
                     continue
                 key = str(self._eval_assoc_subscript_key(m.group(1)))
+                if key in {"*", "@"}:
+                    self._report_error(f"{raw}: invalid associative array key", line=self.current_line)
+                    i += 1
+                    continue
                 inner_op = m.group(2)
                 rhs = self._coerce_value_with_attrs(self._expand_assignment_word(m.group(3)), attrs)
                 if inner_op == "+=" and op == "+=":
@@ -12153,10 +12165,14 @@ class Runtime:
         attrs = self._var_attrs.get(base, set())
         if "assoc" in attrs:
             if base in self.readonly_vars:
-                raise RuntimeError(self._diag_msg(DiagnosticKey.READONLY_VAR, name=base))
+                raise RuntimeError(
+                    self._format_error(self._diag_msg(DiagnosticKey.READONLY_VAR, name=base), line=self.current_line)
+                )
             cur = self._typed_vars.get(base)
             if not isinstance(cur, dict):
                 cur = {}
+            if key in {"*", "@"}:
+                raise RuntimeError(self._format_error(f"{name}: bad array subscript", line=self.current_line))
             akey = self._eval_assoc_subscript_key(key)
             if "integer" in attrs:
                 value = str(self._to_int_arith(value if value != "" else "0"))
@@ -12562,7 +12578,9 @@ class Runtime:
         if self._assign_subscripted_var(name, value):
             return
         if name in self.readonly_vars:
-            raise RuntimeError(self._diag_msg(DiagnosticKey.READONLY_VAR, name=name))
+            raise RuntimeError(
+                self._format_error(self._diag_msg(DiagnosticKey.READONLY_VAR, name=name), line=self.current_line)
+            )
         if name == "RANDOM":
             self._seed_random(value)
             self.env["RANDOM"] = str(value)
@@ -12648,6 +12666,10 @@ class Runtime:
         declare_upper = False
         declare_export = False
         declare_readonly = False
+        unset_integer = False
+        unset_lower = False
+        unset_upper = False
+        unset_export = False
         unset_array = False
         unset_assoc = False
         force_global = False
@@ -12701,15 +12723,23 @@ class Runtime:
                 elif ch == "i":
                     if enable:
                         declare_integer = True
+                    else:
+                        unset_integer = True
                 elif ch == "l":
                     if enable:
                         declare_lower = True
+                    else:
+                        unset_lower = True
                 elif ch == "u":
                     if enable:
                         declare_upper = True
+                    else:
+                        unset_upper = True
                 elif ch == "x":
                     if enable:
                         declare_export = True
+                    else:
+                        unset_export = True
                 elif ch == "r":
                     if enable:
                         declare_readonly = True
@@ -12910,6 +12940,14 @@ class Runtime:
             attr_flags["exported"] = True
         if declare_readonly:
             attr_flags["readonly"] = True
+        if unset_integer:
+            attr_flags["integer"] = False
+        if unset_lower:
+            attr_flags["lowercase"] = False
+        if unset_upper:
+            attr_flags["uppercase"] = False
+        if unset_export:
+            attr_flags["exported"] = False
         if unset_array:
             attr_flags["array"] = False
         if unset_assoc:
@@ -12971,6 +13009,7 @@ class Runtime:
                     self._report_error(
                         f"{parsed_base}: cannot convert indexed to associative array",
                         line=self.current_line,
+                        context=cmd_name,
                     )
                     if self._bash_compat_level is None:
                         status = 1
@@ -12979,6 +13018,7 @@ class Runtime:
                     self._report_error(
                         f"{parsed_base}: cannot convert associative to indexed array",
                         line=self.current_line,
+                        context=cmd_name,
                     )
                     if self._bash_compat_level is None:
                         status = 1
@@ -12987,8 +13027,9 @@ class Runtime:
                     unset_assoc and "assoc" in existing_attrs
                 ):
                     self._report_error(
-                        f"{cmd_name}: {parsed_base}: cannot destroy array variables in this way",
+                        f"{parsed_base}: cannot destroy array variables in this way",
                         line=self.current_line,
+                        context=cmd_name,
                     )
                     status = 1
                     continue
@@ -13117,6 +13158,7 @@ class Runtime:
                     self._report_error(
                         f"{name}: cannot convert indexed to associative array",
                         line=self.current_line,
+                        context=cmd_name,
                     )
                     if self._bash_compat_level is None:
                         status = 1
@@ -13125,6 +13167,7 @@ class Runtime:
                     self._report_error(
                         f"{name}: cannot convert associative to indexed array",
                         line=self.current_line,
+                        context=cmd_name,
                     )
                     if self._bash_compat_level is None:
                         status = 1
@@ -13133,8 +13176,9 @@ class Runtime:
                     unset_assoc and "assoc" in existing_attrs
                 ):
                     self._report_error(
-                        f"{cmd_name}: {name}: cannot destroy array variables in this way",
+                        f"{name}: cannot destroy array variables in this way",
                         line=self.current_line,
+                        context=cmd_name,
                     )
                     status = 1
                     continue
