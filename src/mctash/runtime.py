@@ -1269,8 +1269,8 @@ class Runtime:
             else:
                 argc_vals = [str(len(self.positional))]
                 argv_vals = list(reversed(self.positional))
-            self._typed_vars["BASH_ARGC"] = argc_vals
-            self._typed_vars["BASH_ARGV"] = argv_vals
+            self._store_typed_var("BASH_ARGC", ShellArray(argc_vals, {"array"}))
+            self._store_typed_var("BASH_ARGV", ShellArray(argv_vals, {"array"}))
             self._set_var_attrs("BASH_ARGC", array=True)
             self._set_var_attrs("BASH_ARGV", array=True)
             self._set_subscript_projection("BASH_ARGC", argc_vals[0] if argc_vals else "")
@@ -1285,8 +1285,8 @@ class Runtime:
                 self.source_stack = [name]
             self._sync_root_frame()
             if self._bash_compat_level is not None:
-                self._typed_vars["BASH_SOURCE"] = [name]
-                self._typed_vars["BASH_LINENO"] = ["0"]
+                self._store_typed_var("BASH_SOURCE", ShellArray([name], {"array"}))
+                self._store_typed_var("BASH_LINENO", ShellArray(["0"], {"array"}))
                 self._set_var_attrs("BASH_SOURCE", array=True)
                 self._set_var_attrs("BASH_LINENO", array=True)
                 self._set_subscript_projection("BASH_SOURCE", name)
