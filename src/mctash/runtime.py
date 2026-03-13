@@ -3907,11 +3907,111 @@ class Runtime:
         return ""
 
     def _asdl_rhs_compound_entries(self, rhs_word: dict[str, Any]) -> list[AssignmentEntry] | None:
-        raw = self._asdl_word_to_text(rhs_word)
-        raw_entries = self._parse_compound_assignment_rhs_entries(raw)
-        if raw_entries is None:
+        parts = rhs_word.get("parts") or []
+        if not isinstance(parts, list):
             return None
-        return [AssignmentEntry(text=t, explicit_index_syntax=e, expanded=False) for t, e in raw_entries]
+
+        chunks: list[tuple[str, bool]] = []
+        for part in parts:
+            if not isinstance(part, dict):
+                continue
+            t = part.get("type")
+            txt = self._asdl_word_part_to_text(part)
+            if txt == "":
+                continue
+            protected = t in {
+                "word_part.SingleQuoted",
+                "word_part.DoubleQuoted",
+                "word_part.CommandSub",
+                "word_part.ArithSub",
+                "word_part.BracedVarSub",
+            }
+            chunks.append((txt, protected))
+
+        if not chunks:
+            return None
+
+        out: list[AssignmentEntry] = []
+        cur: list[str] = []
+        bracket_depth = 0
+        started = False
+        closed = False
+
+        def flush_token() -> None:
+            tok = "".join(cur)
+            cur.clear()
+            if tok == "":
+                return
+            out.append(
+                AssignmentEntry(
+                    text=tok,
+                    explicit_index_syntax=(re.match(r"^\[(.*)\](\+?=)(.*)$", tok) is not None),
+                    expanded=False,
+                )
+            )
+
+        for text, protected in chunks:
+            if protected:
+                if not started:
+                    return None
+                if closed and text.strip() != "":
+                    return None
+                if not closed:
+                    cur.append(text)
+                continue
+
+            i = 0
+            while i < len(text):
+                ch = text[i]
+                if not started:
+                    if ch.isspace():
+                        i += 1
+                        continue
+                    if ch != "(":
+                        return None
+                    started = True
+                    i += 1
+                    continue
+                if closed:
+                    if not ch.isspace():
+                        return None
+                    i += 1
+                    continue
+
+                if ch == "\\" and i + 1 < len(text):
+                    cur.append(ch)
+                    cur.append(text[i + 1])
+                    i += 2
+                    continue
+
+                if ch == "[":
+                    bracket_depth += 1
+                    cur.append(ch)
+                    i += 1
+                    continue
+                if ch == "]":
+                    if bracket_depth > 0:
+                        bracket_depth -= 1
+                    cur.append(ch)
+                    i += 1
+                    continue
+
+                if bracket_depth == 0 and ch == ")":
+                    flush_token()
+                    closed = True
+                    i += 1
+                    continue
+                if bracket_depth == 0 and ch.isspace():
+                    flush_token()
+                    i += 1
+                    continue
+
+                cur.append(ch)
+                i += 1
+
+        if (not started) or (not closed):
+            return None
+        return out
 
     def _asdl_rhs_assignment_ir(
         self, rhs: dict[str, Any] | None
