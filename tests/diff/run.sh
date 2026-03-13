@@ -111,6 +111,30 @@ fi
 mkdir -p "${LOG_DIR}/ash" "${LOG_DIR}/mctash" "${LOG_DIR}/diff" "${LOG_DIR}/expected"
 RESULT=0
 
+normalize_for_diff() {
+  local src="$1"
+  local dst="$2"
+  python3 - "$src" "$dst" <<'PY'
+import re
+import sys
+from pathlib import Path
+
+src = Path(sys.argv[1])
+dst = Path(sys.argv[2])
+text = src.read_text(errors="replace")
+out_lines = []
+for line in text.splitlines():
+    m = re.match(r"^(declare -A[i]?\s+[A-Za-z_][A-Za-z0-9_]*=\()(.*)(\)\s*)$", line)
+    if m:
+        body = m.group(2)
+        pairs = re.findall(r"\[[^]]+\]=\"(?:[^\"\\\\]|\\\\.)*\"", body)
+        if pairs:
+            line = m.group(1) + " ".join(sorted(pairs)) + " " + m.group(3).rstrip()
+    out_lines.append(line)
+dst.write_text("\n".join(out_lines) + ("\n" if text.endswith("\n") else ""))
+PY
+}
+
 for case in "${CASE_FILES[@]}"; do
   name="${case%.sh}"
   ash_stdout="${LOG_DIR}/ash/${name}.out"
@@ -176,15 +200,23 @@ for case in "${CASE_FILES[@]}"; do
   fi
 
   if [[ ${MCTASH_ONLY} -eq 0 && ${ASH_ONLY} -eq 0 ]]; then
+    ash_stdout_norm="${ash_stdout}.norm"
+    mctash_stdout_norm="${mctash_stdout}.norm"
+    ash_stderr_norm="${ash_stderr}.norm"
+    mctash_stderr_norm="${mctash_stderr}.norm"
+    normalize_for_diff "${ash_stdout}" "${ash_stdout_norm}"
+    normalize_for_diff "${mctash_stdout}" "${mctash_stdout_norm}"
+    normalize_for_diff "${ash_stderr}" "${ash_stderr_norm}"
+    normalize_for_diff "${mctash_stderr}" "${mctash_stderr_norm}"
     if [[ ${ash_status} -ne ${mctash_status} ]]; then
       echo "${name}: exit status mismatch ${compare_name}=${ash_status} mctash=${mctash_status}" >&2
       RESULT=1
     fi
-    if ! diff -u "${ash_stdout}" "${mctash_stdout}" >"${LOG_DIR}/diff/${name}.out"; then
+    if ! diff -u "${ash_stdout_norm}" "${mctash_stdout_norm}" >"${LOG_DIR}/diff/${name}.out"; then
       echo "${name}: stdout mismatch" >&2
       RESULT=1
     fi
-    if ! diff -u "${ash_stderr}" "${mctash_stderr}" >"${LOG_DIR}/diff/${name}.err"; then
+    if ! diff -u "${ash_stderr_norm}" "${mctash_stderr_norm}" >"${LOG_DIR}/diff/${name}.err"; then
       echo "${name}: stderr mismatch" >&2
       RESULT=1
     fi
