@@ -10674,6 +10674,10 @@ class Runtime:
         return output.rstrip("\n")
 
     def _expand_arith(self, expr: str, context: str | None = None) -> str:
+        try:
+            expr = self._expand_assignment_word(expr)
+        except Exception:
+            pass
         expr = self._materialize_random_in_arith(expr)
         try:
             return str(self._eval_arith_expr(expr))
@@ -11529,8 +11533,15 @@ class Runtime:
         while i < len(folded_words):
             tok = folded_words[i]
             if eligible is not None:
-                if i >= len(eligible) or not eligible[i]:
+                if i >= len(eligible):
                     return None
+                if not eligible[i]:
+                    # Structured-word eligibility can be false for assignment
+                    # words that contain command substitution/arithmetic in
+                    # subscripts (e.g. array[$(cmd)-1]=x). Keep recognizing
+                    # clear lexical assignment forms here.
+                    if re.match(r"^[A-Za-z_][A-Za-z0-9_]*(?:\[[^]]*\])?\+?=", tok) is None:
+                        return None
             m_comp = re.match(r"^([A-Za-z_][A-Za-z0-9_]*)(\+?=)\((.*)$", tok)
             if m_comp is not None:
                 name = m_comp.group(1)
