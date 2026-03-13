@@ -11617,7 +11617,7 @@ class Runtime:
             for raw in values:
                 m = re.match(r"^\[(.*)\](\+?=)(.*)$", str(raw))
                 if m is None:
-                    val = self._expand_assignment_word(str(raw))
+                    val = self._coerce_var_value(name, self._expand_assignment_word(str(raw)))
                     if op == "+=":
                         out_map["0"] = str(out_map.get("0", "")) + val
                     else:
@@ -11625,7 +11625,7 @@ class Runtime:
                     continue
                 key = str(self._eval_assoc_subscript_key(m.group(1)))
                 inner_op = m.group(2)
-                rhs = self._expand_assignment_word(m.group(3))
+                rhs = self._coerce_var_value(name, self._expand_assignment_word(m.group(3)))
                 if inner_op == "+=" and op == "+=":
                     out_map[key] = str(out_map.get(key, "")) + rhs
                 else:
@@ -11644,12 +11644,11 @@ class Runtime:
             tok = str(raw)
             m = re.match(r"^\[(.*)\](\+?=)(.*)$", tok)
             if m is None:
-                expanded_items = fields_to_text_list(self._legacy_word_to_expansion_fields(tok, assignment=False))
+                expanded_items = fields_to_text_list(self._legacy_word_to_expansion_fields(tok, assignment=True))
                 if not expanded_items:
                     expanded_items = [""]
                 for val in expanded_items:
-                    if integer_mode:
-                        val = str(self._to_int_arith(val if val != "" else "0"))
+                    val = self._coerce_var_value(name, val)
                     while next_idx < len(out_vals) and out_vals[next_idx] is not None:
                         next_idx += 1
                     if next_idx >= len(out_vals):
@@ -11677,8 +11676,7 @@ class Runtime:
             if idx >= len(out_vals):
                 out_vals.extend([None] * (idx + 1 - len(out_vals)))
             rhs = self._expand_assignment_word(rhs_raw)
-            if integer_mode:
-                rhs = str(self._to_int_arith(rhs if rhs != "" else "0"))
+            rhs = self._coerce_var_value(name, rhs)
             if inner_op == "+=" and op == "+=":
                 old = "" if out_vals[idx] is None else str(out_vals[idx])
                 if integer_mode:
