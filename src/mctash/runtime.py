@@ -1006,6 +1006,13 @@ class Runtime:
         self._compiled_cache: Dict[tuple[str, str], Callable[["Runtime"], int]] = {}
         self._compile_fallback_seen: set[str] = set()
         self._compiled_depth: int = 0
+        self._legacy_path_hits: Dict[str, int] = {}
+        self._strict_asdl_only: bool = self.env.get("MCTASH_STRICT_ASDL", "").strip().lower() in {
+            "1",
+            "true",
+            "yes",
+            "on",
+        }
         # POSIX shells initialize IFS by default; many parameter-expansion
         # operator-word edge cases depend on IFS being set.
         self.env.setdefault("IFS", " \t\n")
@@ -1297,9 +1304,17 @@ class Runtime:
             pass
 
     def run(self, script: Script) -> int:
+        self._mark_legacy_path("runtime.run.ast_script")
+        if self._strict_asdl_only:
+            raise RuntimeError(
+                "strict ASDL mode: Runtime.run(Script) is disabled; execute via ASDL list items (_eval_source/_run_source)"
+            )
         if self._exec_backend_requested == "compiled" and not self._compiled_backend_enabled:
             self._compile_note("compile-disabled-by-config")
         return self._exec_list(script.body)
+
+    def _mark_legacy_path(self, key: str) -> None:
+        self._legacy_path_hits[key] = self._legacy_path_hits.get(key, 0) + 1
 
     def _install_signal_handlers(self) -> None:
         for name in ["HUP", "INT", "QUIT", "TERM", "USR1", "USR2", "WINCH", "CHLD", "PIPE", "ALRM", "SYS"]:
@@ -7521,6 +7536,12 @@ class Runtime:
         body_asdl = self.functions_asdl.get(name)
         if body is None and body_asdl is None:
             return 127
+        if body_asdl is None and body is not None:
+            self._mark_legacy_path("function.ast_body")
+            if self._strict_asdl_only:
+                raise RuntimeError(
+                    f"strict ASDL mode: function `{name}` is only available as legacy AST body"
+                )
         saved_positional = list(self.positional)
         self.set_positional_args(args)
         self.local_stack.append({})

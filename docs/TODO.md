@@ -16,3 +16,9 @@ These are intentionally deferred review items from the subprocess/bashiﬁcation
 3. Remove host-shell dependency in pipeline failure placeholders.
    - Current use: `["sh", "-c", "exit 127"]` and `["sh", "-c", "exit 126"]`.
    - Replace with native/internal placeholder process strategy.
+
+## ASDL-Native Closure
+
+Track execution/expansion legacy-lane shutdown in:
+
+- `docs/plans/014-asdl-native-execution-closure.md`
