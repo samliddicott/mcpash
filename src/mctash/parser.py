@@ -779,6 +779,23 @@ class Parser:
                     if (
                         argv
                         and argv[0].text in {"declare", "typeset", "local", "readonly", "export"}
+                        and word_text in {"=", "+="}
+                    ):
+                        nxt = self._peek()
+                        if nxt is not None and nxt.kind == "OP" and nxt.value == "(":
+                            raise ParseError(f"syntax error near unexpected token `(' at {self._where(nxt)}")
+                    if (
+                        argv
+                        and argv[0].text in {"declare", "typeset", "local", "readonly", "export"}
+                        and not self._is_assignment(word_text)
+                        and re.fullmatch(r".*\+?=", word_text)
+                    ):
+                        nxt = self._peek()
+                        if nxt is not None and nxt.kind == "OP" and nxt.value == "(":
+                            raise ParseError(f"syntax error near unexpected token `(' at {self._where(nxt)}")
+                    if (
+                        argv
+                        and argv[0].text in {"declare", "typeset", "local", "readonly", "export"}
                         and self._is_assignment(word_text)
                     ):
                         _, _, rhs = self._split_assignment(word_text)
