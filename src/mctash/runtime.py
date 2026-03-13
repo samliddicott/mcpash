@@ -12785,13 +12785,18 @@ class Runtime:
                     expanded_arr_value = self._expand_assignment_word(rhs_for_expand)
                     cur = self._typed_vars.get(name)
                     base_list: list[object]
-                    if op == "+=" and isinstance(cur, list):
+                    if isinstance(cur, list):
                         base_list = list(cur)
-                        if base_list:
+                        if not base_list:
+                            base_list = [None]
+                        if op == "+=":
                             first = "" if base_list[0] is None else str(base_list[0])
                             base_list[0] = self._coerce_value_with_attrs(first + expanded_arr_value, effective_attrs)
                         else:
-                            base_list = [self._coerce_value_with_attrs(expanded_arr_value, effective_attrs)]
+                            # Bash-compatible scalar assignment to an indexed
+                            # array target updates element 0 and preserves the
+                            # rest of the array.
+                            base_list[0] = self._coerce_value_with_attrs(expanded_arr_value, effective_attrs)
                     else:
                         base_list = [self._coerce_value_with_attrs(expanded_arr_value, effective_attrs)]
                     self._typed_vars[name] = base_list
