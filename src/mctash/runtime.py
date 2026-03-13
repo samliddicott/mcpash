@@ -10394,29 +10394,26 @@ class Runtime:
         if start < 0:
             start = 0
         if start > n:
-            return []
+            start = n
+
+        # Bash sparse-array slicing semantics for ${a[@]:off:len} are based on
+        # starting index in index-space, then collecting set elements.
+        set_vals: list[str] = []
+        for i in range(start, len(values)):
+            v = values[i]
+            if v is not None:
+                set_vals.append(str(v))
+
         if not has_len:
-            end = n
-        else:
-            try:
-                ln = int(self._expand_arith(len_text, context="subscript"))
-            except Exception:
-                ln = 0
-            if ln >= 0:
-                end = start + ln
-            else:
-                end = n + ln
-            if end < start:
-                end = start
-            if end > n:
-                end = n
-        out: list[str] = []
-        for i in range(start, end):
-            if 0 <= i < len(values):
-                v = values[i]
-                if v is not None:
-                    out.append(str(v))
-        return out
+            return set_vals
+
+        try:
+            ln = int(self._expand_arith(len_text, context="subscript"))
+        except Exception:
+            ln = 0
+        if ln <= 0:
+            return []
+        return set_vals[:ln]
 
     def _replace_pattern(self, value: str, spec: str) -> str:
         global_replace = False
@@ -16289,7 +16286,7 @@ class Runtime:
             self._last_eval_hard_error = True
         except RuntimeError as e:
             msg = str(e)
-            print(msg, file=sys.stderr)
+            self._emit_runtime_error(msg, context=parse_context)
             status = self._runtime_error_status(msg)
         return status
 
@@ -16411,7 +16408,7 @@ class Runtime:
             status = int(e.code) if e.code is not None else 0
         except RuntimeError as e:
             msg = str(e)
-            print(msg, file=sys.stderr)
+            self._emit_runtime_error(msg, context="command substitution")
             status = self._runtime_error_status(msg)
             hard_error = True
         finally:
@@ -16465,6 +16462,13 @@ class Runtime:
             line_s = where.split(":", 1)[0]
             return text, int(line_s) if line_s.isdigit() else self.current_line
         return msg, None
+
+    def _emit_runtime_error(self, msg: str, *, line: int | None = None, context: str | None = None) -> None:
+        # Preserve diagnostics already carrying explicit file/line context.
+        if ": line " in msg and ":" in msg:
+            print(msg, file=sys.stderr)
+            return
+        self._report_error(msg, line=line if line is not None else self.current_line, context=context)
 
     def _has_unterminated_quote(self, source: str) -> bool:
         in_single = False
