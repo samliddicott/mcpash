@@ -3307,22 +3307,86 @@ class Runtime:
         for w in words[1:]:
             if not isinstance(w, dict):
                 continue
-            raw = self._asdl_word_to_text(w)
-            # Preserve declaration assignment words as raw lexical units so
-            # _run_declare can apply assignment-context expansion itself.
-            if re.match(r"^[A-Za-z_][A-Za-z0-9_]*(?:\[[^]]*\])?\+?=", raw):
-                m = re.match(r"^([^=]+?)(\+?=)(.*)$", raw)
-                if m is None:
-                    out.append(raw)
-                    continue
-                lhs = m.group(1)
-                op = m.group(2)
-                rhs = m.group(3)
-                out.append(f"{lhs}{op}{self._expand_assignment_word(rhs)}")
+            assign = self._asdl_word_to_declare_assignment(w)
+            if assign is not None:
+                lhs, op, rhs_word, raw = assign
+                out.append(f"{lhs}{op}{self._expand_asdl_assignment_scalar(rhs_word)}")
                 raw_by_idx[len(out) - 2] = raw
                 continue
             out.extend(self._expand_asdl_word_fields(w, split_glob=True))
         return out, raw_by_idx
+
+    def _asdl_word_to_declare_assignment(
+        self, word: dict[str, Any]
+    ) -> tuple[str, str, dict[str, Any], str] | None:
+        if not isinstance(word, dict) or word.get("type") != "word.Compound":
+            return None
+        parts = word.get("parts") or []
+        if not isinstance(parts, list) or not parts:
+            return None
+        lhs_parts: list[dict[str, Any]] = []
+        rhs_parts: list[dict[str, Any]] = []
+        bracket_depth = 0
+        found = False
+        op = "="
+
+        for part in parts:
+            if not isinstance(part, dict):
+                return None
+            if found:
+                rhs_parts.append(part)
+                continue
+            t = part.get("type")
+            if t != "word_part.Literal":
+                lhs_parts.append(part)
+                continue
+            lit = str(part.get("tval", ""))
+            i = 0
+            split_at: int | None = None
+            plus_assign = False
+            while i < len(lit):
+                ch = lit[i]
+                if ch == "\\" and i + 1 < len(lit):
+                    i += 2
+                    continue
+                if ch == "[":
+                    bracket_depth += 1
+                    i += 1
+                    continue
+                if ch == "]":
+                    if bracket_depth > 0:
+                        bracket_depth -= 1
+                    i += 1
+                    continue
+                if ch == "=" and bracket_depth == 0:
+                    split_at = i
+                    if i > 0 and lit[i - 1] == "+":
+                        plus_assign = True
+                    break
+                i += 1
+
+            if split_at is None:
+                lhs_parts.append(part)
+                continue
+
+            lhs_end = split_at - 1 if plus_assign else split_at
+            lhs_lit = lit[:lhs_end]
+            rhs_lit = lit[split_at + 1 :]
+            if lhs_lit:
+                lhs_parts.append({"type": "word_part.Literal", "tval": lhs_lit})
+            if rhs_lit:
+                rhs_parts.append({"type": "word_part.Literal", "tval": rhs_lit})
+            found = True
+            op = "+=" if plus_assign else "="
+
+        if not found:
+            return None
+        lhs_word = {"type": "word.Compound", "parts": lhs_parts}
+        rhs_word = {"type": "word.Compound", "parts": rhs_parts}
+        lhs = self._asdl_word_to_text(lhs_word)
+        if not (self._is_valid_name(lhs) or self._parse_subscripted_name(lhs) is not None):
+            return None
+        return lhs, op, rhs_word, self._asdl_word_to_text(word)
 
     def _asdl_word_can_expand_case_natively_safe(self, word: dict[str, Any]) -> bool:
         if not isinstance(word, dict) or word.get("type") != "word.Compound":
