@@ -11929,6 +11929,23 @@ class Runtime:
     def _argv_assignment_words(
         self, argv: list[str], eligible: list[bool] | None = None
     ) -> list[tuple[str, str, object, bool]] | None:
+        def _split_assignment_token(tok: str) -> tuple[str, str, str] | None:
+            # Right-to-left split to handle '=' inside associative subscripts
+            # that were flattened from quoted source forms.
+            for pos in range(len(tok) - 1, 0, -1):
+                if tok[pos] != "=":
+                    continue
+                lhs = tok[:pos]
+                op = "="
+                if lhs.endswith("+"):
+                    lhs = lhs[:-1]
+                    op = "+="
+                if not lhs:
+                    continue
+                if self._is_valid_name(lhs) or self._parse_subscripted_name(lhs) is not None:
+                    return lhs, op, tok[pos + 1 :]
+            return None
+
         words = list(argv)
         # Join indexed assignment forms that may be split by spaces inside the
         # subscript expression, e.g. `a[7 + 8]=x`.
@@ -12033,12 +12050,10 @@ class Runtime:
                 i += 1
                 continue
 
-            m = re.match(r"^([^=]+?)(\+?=)(.*)$", tok)
-            if m is None:
+            split = _split_assignment_token(tok)
+            if split is None:
                 return None
-            name = m.group(1)
-            op = m.group(2)
-            value = m.group(3)
+            name, op, value = split
             parsed_sub = self._parse_subscripted_name(name)
             if not (self._is_valid_name(name) or parsed_sub is not None):
                 return None
@@ -13135,7 +13150,7 @@ class Runtime:
                             parts.append(f"[{key_expr}]={_dq(str(v))}")
                         print(f"declare {assoc_flag} {name}=({' '.join(parts)} )", flush=True)
                     else:
-                        if explicit_print or name in {"BASH_ALIASES", "BASH_CMDS"}:
+                        if name in {"BASH_ALIASES", "BASH_CMDS"}:
                             print(f"declare {assoc_flag} {name}=()", flush=True)
                         else:
                             print(f"declare {assoc_flag} {name}", flush=True)
