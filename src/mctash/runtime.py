@@ -1047,6 +1047,7 @@ class Runtime:
         self._compile_debug: bool = self.env.get("MCTASH_COMPILE_DEBUG", "").strip().lower() in {"1", "true", "yes", "on"}
         self._declare_raw_assign_by_arg: dict[int, str] = {}
         self._declare_parsed_subscript_by_arg: dict[int, tuple[str, str]] = {}
+        self._declare_compound_entries_by_arg: dict[int, list[AssignmentEntry]] = {}
         self._compiled_cache: Dict[tuple[str, str], Callable[["Runtime"], int]] = {}
         self._compile_fallback_seen: set[str] = set()
         self._compiled_depth: int = 0
@@ -3303,11 +3304,12 @@ class Runtime:
 
     def _expand_asdl_declare_argv(
         self, node: dict[str, Any], cmd_name: str
-    ) -> tuple[list[str], dict[int, str], dict[int, tuple[str, str]]]:
+    ) -> tuple[list[str], dict[int, str], dict[int, tuple[str, str]], dict[int, list[AssignmentEntry]]]:
         words = node.get("words") or []
         out: list[str] = [cmd_name]
         raw_by_idx: dict[int, str] = {}
         sub_by_idx: dict[int, tuple[str, str]] = {}
+        comp_by_idx: dict[int, list[AssignmentEntry]] = {}
         for w in words[1:]:
             if not isinstance(w, dict):
                 continue
@@ -3318,9 +3320,12 @@ class Runtime:
                 raw_by_idx[len(out) - 2] = raw
                 if parsed_sub is not None:
                     sub_by_idx[len(out) - 2] = parsed_sub
+                comp_entries = self._asdl_rhs_compound_entries(rhs_word)
+                if comp_entries is not None:
+                    comp_by_idx[len(out) - 2] = comp_entries
                 continue
             out.extend(self._expand_asdl_word_fields(w, split_glob=True))
-        return out, raw_by_idx, sub_by_idx
+        return out, raw_by_idx, sub_by_idx, comp_by_idx
 
     def _asdl_word_to_declare_assignment(
         self, word: dict[str, Any]
@@ -3680,10 +3685,13 @@ class Runtime:
 
         name = argv[0]
         if name in {"declare", "typeset", "local", "readonly", "export"}:
-            argv, raw_assign_by_idx, parsed_sub_by_idx = self._expand_asdl_declare_argv(node, name)
+            argv, raw_assign_by_idx, parsed_sub_by_idx, comp_entries_by_idx = self._expand_asdl_declare_argv(
+                node, name
+            )
         else:
             raw_assign_by_idx = {}
             parsed_sub_by_idx = {}
+            comp_entries_by_idx = {}
         assign_names = {str(a.get("name") or "") for a in assign_pairs}
         if self._has_function(name):
             saved_env = dict(self.env)
@@ -3716,8 +3724,10 @@ class Runtime:
             is_special = name in self.SPECIAL_BUILTINS
             saved_decl_meta = self._declare_raw_assign_by_arg
             saved_decl_sub = self._declare_parsed_subscript_by_arg
+            saved_decl_comp = self._declare_compound_entries_by_arg
             self._declare_raw_assign_by_arg = raw_assign_by_idx
             self._declare_parsed_subscript_by_arg = parsed_sub_by_idx
+            self._declare_compound_entries_by_arg = comp_entries_by_idx
             if is_special:
                 if self.options.get("posix", False):
                     saved_env = dict(self.env)
@@ -3738,6 +3748,7 @@ class Runtime:
                                 self.env[var_name] = saved_env[var_name]
                     self._declare_raw_assign_by_arg = saved_decl_meta
                     self._declare_parsed_subscript_by_arg = saved_decl_sub
+                    self._declare_compound_entries_by_arg = saved_decl_comp
                     return status
                 # Assignment prefixes before special builtins affect current shell state.
                 persist_assigns = True
@@ -3769,6 +3780,7 @@ class Runtime:
                     self.env = merged
                 self._declare_raw_assign_by_arg = saved_decl_meta
                 self._declare_parsed_subscript_by_arg = saved_decl_sub
+                self._declare_compound_entries_by_arg = saved_decl_comp
                 return status
             saved_env = self.env
             try:
@@ -3804,6 +3816,7 @@ class Runtime:
                 self.env = saved_env
                 self._declare_raw_assign_by_arg = saved_decl_meta
                 self._declare_parsed_subscript_by_arg = saved_decl_sub
+                self._declare_compound_entries_by_arg = saved_decl_comp
         if name in self._py_callables:
             saved_env = self.env
             try:
@@ -13347,6 +13360,7 @@ class Runtime:
         status = 0
         for spec_i, spec in enumerate(names):
             parsed_hint = self._declare_parsed_subscript_by_arg.get(spec_i)
+            comp_hint = self._declare_compound_entries_by_arg.get(spec_i)
             if "=" in spec:
                 name, value = spec.split("=", 1)
                 op = "="
@@ -13452,8 +13466,8 @@ class Runtime:
                 if "uppercase" in effective_attrs:
                     effective_attrs.discard("lowercase")
                 if is_assoc_target:
-                    comp_entries: list[AssignmentEntry] | None = None
-                    if (
+                    comp_entries: list[AssignmentEntry] | None = list(comp_hint) if comp_hint is not None else None
+                    if comp_entries is None and (
                         raw_value is not None
                         and raw_op == op
                         and raw_name == name
@@ -13479,8 +13493,8 @@ class Runtime:
                     self._set_subscript_projection(name, str(base.get("0", "")))
                     continue
                 if is_array_target:
-                    comp_entries: list[AssignmentEntry] | None = None
-                    if (
+                    comp_entries: list[AssignmentEntry] | None = list(comp_hint) if comp_hint is not None else None
+                    if comp_entries is None and (
                         raw_value is not None
                         and raw_op == op
                         and raw_name == name
