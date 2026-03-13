@@ -740,9 +740,9 @@ class Parser:
                     name, op, value = self._split_assignment(tok.value)
                     self._advance()
                     if value == "":
-                        comp = self._parse_compound_assignment_rhs()
-                        if comp is not None:
-                            value = comp
+                        parsed_rhs = self._parse_assignment_rhs_after_equals()
+                        if parsed_rhs is not None:
+                            value, _ = parsed_rhs
                     assignments.append(Assignment(name=name, value=value, op=op))
                     lst_assignments.append(
                         LstAssignment(
@@ -769,14 +769,24 @@ class Parser:
                             raise ParseError(f"syntax error near unexpected token `(' at {self._where(nxt)}")
                     if (
                         argv
+                        and argv[0].text == "let"
+                        and re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*=", word_text)
+                    ):
+                        parsed_rhs = self._parse_assignment_rhs_after_equals()
+                        if parsed_rhs is not None:
+                            rhs_text, _ = parsed_rhs
+                            word_text += rhs_text
+                    if (
+                        argv
                         and argv[0].text in {"declare", "typeset", "local", "readonly", "export"}
                         and self._is_assignment(word_text)
                     ):
                         _, _, rhs = self._split_assignment(word_text)
                         if rhs == "":
-                            comp = self._parse_compound_assignment_rhs()
-                            if comp is not None:
-                                word_text = word_text + comp
+                            parsed_rhs = self._parse_assignment_rhs_after_equals()
+                            if parsed_rhs is not None:
+                                rhs_text, _ = parsed_rhs
+                                word_text = word_text + rhs_text
                         elif rhs.startswith("("):
                             depth = rhs.count("(") - rhs.count(")")
                             while depth > 0:
@@ -1077,7 +1087,7 @@ class Parser:
             name = name[:-1]
         return name, op, value
 
-    def _parse_compound_assignment_rhs(self) -> str | None:
+    def _parse_assignment_rhs_after_equals(self) -> tuple[str, bool] | None:
         tok = self._peek()
         if tok is None:
             return None
@@ -1099,7 +1109,7 @@ class Parser:
                             if cur is None or cur.index >= end_index:
                                 break
                             self._advance()
-                        return src[start_index:end_index]
+                        return src[start_index:end_index], True
                 i += 1
             raise ParseError("syntax error: missing ')' in compound assignment")
         if tok.kind != "OP" or tok.value != "(":
@@ -1120,7 +1130,38 @@ class Parser:
                 if depth == 0:
                     end_index = cur.index + len(cur.value)
                     self._advance()
-                    return self.reader.source[start_index:end_index]
+                    src = self.reader.source
+                    rhs_text = src[start_index:end_index]
+                    is_compound = True
+                    # If text is immediately continued by adjacent tokens, this
+                    # is a scalar expression (e.g. a=(4*3)/2), not a compound
+                    # assignment literal.
+                    scan_end = end_index
+                    while True:
+                        nxt = self._peek()
+                        if nxt is None or nxt.index != scan_end:
+                            break
+                        if nxt.kind == "OP" and nxt.value in {
+                            "\n",
+                            ";",
+                            "&",
+                            "|",
+                            "<",
+                            ">",
+                            ">>",
+                            "<>",
+                            "<<",
+                            "<<-",
+                            "<<<",
+                            ">&",
+                            "<&",
+                        }:
+                            break
+                        rhs_text += nxt.value
+                        scan_end = nxt.index + len(nxt.value)
+                        self._advance()
+                        is_compound = False
+                    return rhs_text, is_compound
                 self._advance()
                 continue
             if cur.kind == "OP" and cur.value == "\n":
