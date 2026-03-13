@@ -485,16 +485,64 @@ def _find_braced_end(text: str, start: int) -> int:
 
 
 def _split_braced(inner: str) -> Tuple[str | None, str | None, str | None]:
-    transform_ops = {"Q", "P", "A", "a", "E", "U", "u", "L"}
+    transform_ops = {"Q", "P", "A", "a", "E", "U", "u", "L", "K"}
     def _consume_subscript(text: str, j: int) -> int:
         if j >= len(text) or text[j] != "[":
             return j
         k = j + 1
-        while k < len(text) and text[k] != "]":
+        depth = 1
+        in_single = False
+        in_double = False
+        while k < len(text):
+            ch = text[k]
+            if in_single:
+                if ch == "'":
+                    in_single = False
+                k += 1
+                continue
+            if in_double:
+                if ch == "\\" and k + 1 < len(text):
+                    k += 2
+                    continue
+                if ch == '"':
+                    in_double = False
+                k += 1
+                continue
+            if ch == "'":
+                in_single = True
+                k += 1
+                continue
+            if ch == '"':
+                in_double = True
+                k += 1
+                continue
+            if ch == "\\" and k + 1 < len(text):
+                k += 2
+                continue
+            if text.startswith("$((", k):
+                _, k = _extract_balanced(text, k + 3, "))")
+                continue
+            if text.startswith("$(", k):
+                _, k = _extract_balanced(text, k + 2, ")")
+                continue
+            if text.startswith("${", k):
+                end = _find_braced_end(text, k + 2)
+                if end == -1:
+                    return j
+                k = end + 1
+                continue
+            if ch == "[":
+                depth += 1
+                k += 1
+                continue
+            if ch == "]":
+                depth -= 1
+                k += 1
+                if depth == 0:
+                    return k
+                continue
             k += 1
-        if k >= len(text):
-            return j
-        return k + 1
+        return j
 
     def _parse_param_name(text: str) -> Tuple[str | None, int]:
         if not text:

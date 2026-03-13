@@ -9705,6 +9705,28 @@ class Runtime:
     def _dq_escape(value: str) -> str:
         return value.replace("\\", "\\\\").replace('"', '\\"')
 
+    @staticmethod
+    def _k_pair_key_quote(value: str) -> str:
+        if value and re.fullmatch(r"[A-Za-z0-9_./:=+-]+", value):
+            return value
+        return '"' + value.replace("\\", "\\\\").replace('"', '\\"') + '"'
+
+    def _k_pair_words_for_typed(self, typed: object, attrs: set[str]) -> list[str]:
+        words: list[str] = []
+        if isinstance(typed, list):
+            for i, v in enumerate(typed):
+                if v is None:
+                    continue
+                words.append(str(i))
+                words.append('"' + self._dq_escape(str(v)) + '"')
+            return words
+        if isinstance(typed, dict) and "assoc" in attrs:
+            for k, v in reversed(list(typed.items())):
+                words.append(self._k_pair_key_quote(str(k)))
+                words.append('"' + self._dq_escape(str(v)) + '"')
+            return words
+        return words
+
     def _typed_declare_A(self, name: str, typed: object) -> str:
         attrs = self._var_attrs.get(name, set())
         if isinstance(typed, list):
@@ -9866,6 +9888,8 @@ class Runtime:
 
     def _apply_param_transform(self, name: str, value: str, transform_op: str) -> str:
         if transform_op == "@Q":
+            return self._transform_q_quote(value)
+        if transform_op == "@K":
             return self._transform_q_quote(value)
         if transform_op == "@P":
             return self._expand_prompt_string(value)
@@ -10282,7 +10306,9 @@ class Runtime:
                             return decl.split(" ", 2) if decl.startswith("declare ") else [decl]
                         return []
                     return decl
-                if isinstance(op, str) and op.startswith("@"):
+                if op == "@K":
+                    vals = self._k_pair_words_for_typed(typed, attrs)
+                if isinstance(op, str) and op.startswith("@") and op != "@K":
                     vals = [self._apply_param_transform(base, v, op) for v in vals]
                 elif op in {",", ",,", "^", "^^"}:
                     vals = [self._apply_case_mod(v, op, arg_text) for v in vals]
@@ -12885,7 +12911,7 @@ class Runtime:
                 if "uppercase" in effective_attrs:
                     effective_attrs.discard("lowercase")
                 if is_assoc_target:
-                    assoc_values = self._parse_assoc_compound_assignment_rhs(value)
+                    assoc_values = self._parse_assoc_compound_assignment_rhs(rhs_for_expand)
                     if assoc_values is not None:
                         cur = self._typed_vars.get(name)
                         base: dict[str, str] = dict(cur) if (op == "+=" and isinstance(cur, dict)) else {}
@@ -12922,7 +12948,7 @@ class Runtime:
                             # the single expansion pass.
                             comp_entries = list(raw_entries)
                     if comp_entries is None:
-                        comp_entries = self._parse_compound_assignment_rhs_entries(value)
+                        comp_entries = self._parse_compound_assignment_rhs_entries(rhs_for_expand)
                     if comp_entries is not None:
                         self._assign_compound_var(name, op, comp_entries, attrs_override=effective_attrs)
                         attrs_apply = dict(attr_flags)
