@@ -1046,6 +1046,7 @@ class Runtime:
         )
         self._compile_debug: bool = self.env.get("MCTASH_COMPILE_DEBUG", "").strip().lower() in {"1", "true", "yes", "on"}
         self._declare_raw_assign_by_arg: dict[int, str] = {}
+        self._declare_parsed_subscript_by_arg: dict[int, tuple[str, str]] = {}
         self._compiled_cache: Dict[tuple[str, str], Callable[["Runtime"], int]] = {}
         self._compile_fallback_seen: set[str] = set()
         self._compiled_depth: int = 0
@@ -3300,25 +3301,30 @@ class Runtime:
             out.extend(self._expand_asdl_word_fields(w, split_glob=False))
         return out
 
-    def _expand_asdl_declare_argv(self, node: dict[str, Any], cmd_name: str) -> tuple[list[str], dict[int, str]]:
+    def _expand_asdl_declare_argv(
+        self, node: dict[str, Any], cmd_name: str
+    ) -> tuple[list[str], dict[int, str], dict[int, tuple[str, str]]]:
         words = node.get("words") or []
         out: list[str] = [cmd_name]
         raw_by_idx: dict[int, str] = {}
+        sub_by_idx: dict[int, tuple[str, str]] = {}
         for w in words[1:]:
             if not isinstance(w, dict):
                 continue
             assign = self._asdl_word_to_declare_assignment(w)
             if assign is not None:
-                lhs, op, rhs_word, raw = assign
+                lhs, op, rhs_word, raw, parsed_sub = assign
                 out.append(f"{lhs}{op}{self._expand_asdl_assignment_scalar(rhs_word)}")
                 raw_by_idx[len(out) - 2] = raw
+                if parsed_sub is not None:
+                    sub_by_idx[len(out) - 2] = parsed_sub
                 continue
             out.extend(self._expand_asdl_word_fields(w, split_glob=True))
-        return out, raw_by_idx
+        return out, raw_by_idx, sub_by_idx
 
     def _asdl_word_to_declare_assignment(
         self, word: dict[str, Any]
-    ) -> tuple[str, str, dict[str, Any], str] | None:
+    ) -> tuple[str, str, dict[str, Any], str, tuple[str, str] | None] | None:
         if not isinstance(word, dict) or word.get("type") != "word.Compound":
             return None
         parts = word.get("parts") or []
@@ -3384,9 +3390,10 @@ class Runtime:
         lhs_word = {"type": "word.Compound", "parts": lhs_parts}
         rhs_word = {"type": "word.Compound", "parts": rhs_parts}
         lhs = self._asdl_word_to_text(lhs_word)
-        if not (self._is_valid_name(lhs) or self._parse_subscripted_name(lhs) is not None):
+        parsed_sub = self._parse_subscripted_name(lhs)
+        if not (self._is_valid_name(lhs) or parsed_sub is not None):
             return None
-        return lhs, op, rhs_word, self._asdl_word_to_text(word)
+        return lhs, op, rhs_word, self._asdl_word_to_text(word), parsed_sub
 
     def _asdl_word_can_expand_case_natively_safe(self, word: dict[str, Any]) -> bool:
         if not isinstance(word, dict) or word.get("type") != "word.Compound":
@@ -3652,9 +3659,10 @@ class Runtime:
 
         name = argv[0]
         if name in {"declare", "typeset", "local", "readonly", "export"}:
-            argv, raw_assign_by_idx = self._expand_asdl_declare_argv(node, name)
+            argv, raw_assign_by_idx, parsed_sub_by_idx = self._expand_asdl_declare_argv(node, name)
         else:
             raw_assign_by_idx = {}
+            parsed_sub_by_idx = {}
         assign_names = {str(a.get("name") or "") for a in assign_pairs}
         if self._has_function(name):
             saved_env = dict(self.env)
@@ -3686,7 +3694,9 @@ class Runtime:
         if self._should_dispatch_builtin(argv):
             is_special = name in self.SPECIAL_BUILTINS
             saved_decl_meta = self._declare_raw_assign_by_arg
+            saved_decl_sub = self._declare_parsed_subscript_by_arg
             self._declare_raw_assign_by_arg = raw_assign_by_idx
+            self._declare_parsed_subscript_by_arg = parsed_sub_by_idx
             if is_special:
                 if self.options.get("posix", False):
                     saved_env = dict(self.env)
@@ -3706,6 +3716,7 @@ class Runtime:
                             elif var_name in saved_env and self.env.get(var_name, "") == "":
                                 self.env[var_name] = saved_env[var_name]
                     self._declare_raw_assign_by_arg = saved_decl_meta
+                    self._declare_parsed_subscript_by_arg = saved_decl_sub
                     return status
                 # Assignment prefixes before special builtins affect current shell state.
                 persist_assigns = True
@@ -3736,6 +3747,7 @@ class Runtime:
                                 merged.pop(k, None)
                     self.env = merged
                 self._declare_raw_assign_by_arg = saved_decl_meta
+                self._declare_parsed_subscript_by_arg = saved_decl_sub
                 return status
             saved_env = self.env
             try:
@@ -3770,6 +3782,7 @@ class Runtime:
             finally:
                 self.env = saved_env
                 self._declare_raw_assign_by_arg = saved_decl_meta
+                self._declare_parsed_subscript_by_arg = saved_decl_sub
         if name in self._py_callables:
             saved_env = self.env
             try:
@@ -4032,9 +4045,7 @@ class Runtime:
             return ""
         if node.get("type") == "rhs_word.Compound":
             word = node.get("word") or {}
-            if self._asdl_rhs_assignment_can_expand_natively(word):
-                return self._expand_asdl_assignment_scalar(word)
-            return self._expand_assignment_word(self._asdl_word_to_text(word))
+            return self._expand_asdl_assignment_scalar(word)
         return ""
 
     def _asdl_rhs_compound_entries(self, rhs_word: dict[str, Any]) -> list[AssignmentEntry] | None:
@@ -13304,6 +13315,7 @@ class Runtime:
 
         status = 0
         for spec_i, spec in enumerate(names):
+            parsed_hint = self._declare_parsed_subscript_by_arg.get(spec_i)
             if "=" in spec:
                 name, value = spec.split("=", 1)
                 op = "="
@@ -13322,7 +13334,7 @@ class Runtime:
                 rhs_for_expand = value
                 if raw_value is not None and raw_op == op and raw_name == name:
                     rhs_for_expand = raw_value
-                parsed_decl = self._parse_subscripted_name(name)
+                parsed_decl = parsed_hint if parsed_hint is not None and parsed_hint[0] == name.split("[", 1)[0] else self._parse_subscripted_name(name)
                 parsed_base = parsed_decl[0] if parsed_decl is not None else name
                 # `declare -a var[10]=x` accepts the indexed spelling but acts
                 # on the variable itself; subscript is ignored in this form.
@@ -13496,7 +13508,7 @@ class Runtime:
                 self._declare_var(name, expanded, local_scope=effective_local_scope, **attr_flags)
             else:
                 name = spec
-                parsed_decl = self._parse_subscripted_name(name)
+                parsed_decl = parsed_hint if parsed_hint is not None and parsed_hint[0] == name.split("[", 1)[0] else self._parse_subscripted_name(name)
                 parsed_base = parsed_decl[0] if parsed_decl is not None else name
                 if parsed_decl is not None:
                     name = parsed_base
