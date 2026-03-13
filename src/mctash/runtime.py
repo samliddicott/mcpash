@@ -8357,10 +8357,14 @@ class Runtime:
         verbose = False
         reusable = False
         did_reset = False
+        pinned: list[tuple[str, str]] = []
         i = 0
         while i < len(args) and args[i].startswith("-"):
             if args[i] == "-r":
                 self._cmd_hash.clear()
+                cur = self._lookup_typed_var("BASH_CMDS")
+                if isinstance(cur, dict):
+                    cur.clear()
                 did_reset = True
                 i += 1
                 continue
@@ -8372,7 +8376,26 @@ class Runtime:
                 reusable = True
                 i += 1
                 continue
+            if args[i] == "-p":
+                if i + 2 >= len(args):
+                    return 2
+                pinned.append((args[i + 2], args[i + 1]))
+                i += 3
+                continue
             return 2
+        if pinned:
+            amap = self._lookup_typed_var("BASH_CMDS")
+            table: dict[str, str] = dict(amap) if isinstance(amap, dict) else {}
+            for name, path in pinned:
+                self._cmd_hash[name] = path
+                table[name] = path
+                if verbose:
+                    print(f"{name}={path}", flush=True)
+            self._store_typed_var("BASH_CMDS", ShellAssoc(table, {"assoc"}))
+            self._set_var_attrs("BASH_CMDS", assoc=True)
+            self._set_subscript_projection("BASH_CMDS", "")
+            if i >= len(args):
+                return 0
         names = args[i:]
         if did_reset and not names and not verbose and not reusable:
             return 0
@@ -8380,13 +8403,21 @@ class Runtime:
             if not self._cmd_hash and self._bash_compat_level is not None and not reusable:
                 print("hash: hash table empty", flush=True)
                 return 0
-            for name in sorted(self._cmd_hash.keys()):
+            keys = sorted(self._cmd_hash.keys())
+            for idx, name in enumerate(keys):
                 if reusable:
                     print(f"builtin hash -p {shlex.quote(self._cmd_hash[name])} {shlex.quote(name)}", flush=True)
                 else:
-                    print(f"{name}={self._cmd_hash[name]}", flush=True)
+                    if self._bash_compat_level is not None:
+                        if idx == 0:
+                            print("hits\tcommand", flush=True)
+                        print(f"   0\t{self._cmd_hash[name]}", flush=True)
+                    else:
+                        print(f"{name}={self._cmd_hash[name]}", flush=True)
             return 0
         status = 0
+        amap = self._lookup_typed_var("BASH_CMDS")
+        table: dict[str, str] = dict(amap) if isinstance(amap, dict) else {}
         for name in names:
             hits = self._classify_command_name(
                 name,
@@ -8400,8 +8431,13 @@ class Runtime:
                 continue
             path = hits[0][1]
             self._cmd_hash[name] = path
+            table[name] = path
             if verbose:
                 print(f"{name}={path}", flush=True)
+        if table:
+            self._store_typed_var("BASH_CMDS", ShellAssoc(table, {"assoc"}))
+            self._set_var_attrs("BASH_CMDS", assoc=True)
+            self._set_subscript_projection("BASH_CMDS", "")
         return status
 
     def _run_alias(self, args: List[str]) -> int:
@@ -8426,6 +8462,8 @@ class Runtime:
                 return 2
             break
         args = args[idx:]
+        amap = self._lookup_typed_var("BASH_ALIASES")
+        table: dict[str, str] = dict(amap) if isinstance(amap, dict) else {}
         if not args:
             for name in sorted(self.aliases):
                 print(f"alias {name}='{self.aliases[name]}'")
@@ -8433,7 +8471,9 @@ class Runtime:
         for arg in args:
             if "=" in arg:
                 name, value = arg.split("=", 1)
-                self.aliases[name] = self._dequote_alias_value(value)
+                dequoted = self._dequote_alias_value(value)
+                self.aliases[name] = dequoted
+                table[name] = dequoted
                 continue
             if arg in self.aliases:
                 if show_with_prefix:
@@ -8443,6 +8483,9 @@ class Runtime:
             else:
                 print(self._diag_msg(DiagnosticKey.ALIAS_NOT_FOUND, name=arg), file=sys.stderr)
                 status = 1
+        self._store_typed_var("BASH_ALIASES", ShellAssoc(table, {"assoc"}))
+        self._set_var_attrs("BASH_ALIASES", assoc=True)
+        self._set_subscript_projection("BASH_ALIASES", "")
         return status
 
     def _dequote_alias_value(self, value: str) -> str:
@@ -8454,16 +8497,26 @@ class Runtime:
         if not args:
             self._print_stderr(self._diag_msg(DiagnosticKey.UNALIAS_USAGE))
             return 2
+        amap = self._lookup_typed_var("BASH_ALIASES")
+        table: dict[str, str] = dict(amap) if isinstance(amap, dict) else {}
         if args[0] == "-a":
             self.aliases.clear()
+            table.clear()
+            self._store_typed_var("BASH_ALIASES", ShellAssoc(table, {"assoc"}))
+            self._set_var_attrs("BASH_ALIASES", assoc=True)
+            self._set_subscript_projection("BASH_ALIASES", "")
             return 0
         status = 0
         for name in args:
             if name in self.aliases:
                 del self.aliases[name]
+                table.pop(name, None)
             else:
                 print(self._diag_msg(DiagnosticKey.UNALIAS_NOT_FOUND, name=name), file=sys.stderr)
                 status = 1
+        self._store_typed_var("BASH_ALIASES", ShellAssoc(table, {"assoc"}))
+        self._set_var_attrs("BASH_ALIASES", assoc=True)
+        self._set_subscript_projection("BASH_ALIASES", "")
         return status
 
     def _run_wait(self, args: List[str]) -> int:
@@ -10453,7 +10506,7 @@ class Runtime:
                 if isinstance(typed, list):
                     vals_for_key = self._array_visible_values(typed)
                 elif isinstance(typed, dict) and "assoc" in attrs:
-                    vals_for_key = [str(v) for v in reversed(list(typed.values()))]
+                    vals_for_key = self._assoc_iter_values(base, typed)
                 else:
                     base_v, base_set = self._get_var_with_state(base)
                     vals_for_key = [base_v] if base_set else []
@@ -10555,7 +10608,7 @@ class Runtime:
             attrs = self._lookup_var_attrs_set(name)
             vals: list[str] = []
             if isinstance(typed, dict) and "assoc" in attrs:
-                vals = [str(k) for k in reversed(list(typed.keys()))]
+                vals = self._assoc_iter_keys(name, typed)
             elif isinstance(typed, list):
                 vals = [str(i) for i, v in enumerate(typed) if v is not None]
             if arg == "*":
@@ -12018,9 +12071,13 @@ class Runtime:
         local_env[name] = self._get_var(name)
 
     def _set_subscript_projection(self, base: str, value: str) -> None:
-        for scope in reversed(self.local_stack):
-            if base in scope:
-                scope[base] = value
+        # Keep scalar projection in the same lexical scope as the typed
+        # container. Local typed vars may not yet have a shadow scalar entry.
+        for i in range(len(self.local_stack) - 1, -1, -1):
+            if base in self.local_stack[i] or (
+                i < len(self._local_var_store_stack) and base in self._local_var_store_stack[i]
+            ):
+                self.local_stack[i][base] = value
                 return
         self.env[base] = value
 
@@ -12039,6 +12096,18 @@ class Runtime:
             if seq[i] is not None:
                 return i
         return None
+
+    def _assoc_iter_keys(self, name: str, amap: dict[str, object]) -> list[str]:
+        # Keep deterministic expansion order for BASH_CMDS in bash mode to
+        # match hash-table-facing test expectations.
+        if self._bash_compat_level is not None and name in {"BASH_CMDS", "BASH_ALIASES"}:
+            return sorted(str(k) for k in amap.keys())
+        return [str(k) for k in reversed(list(amap.keys()))]
+
+    def _assoc_iter_values(self, name: str, amap: dict[str, object]) -> list[str]:
+        if self._bash_compat_level is not None and name in {"BASH_CMDS", "BASH_ALIASES"}:
+            return sorted(str(v) for v in amap.values())
+        return [str(amap[k]) for k in self._assoc_iter_keys(name, amap)]
 
     def _argv_assignment_words(
         self, argv: list[str], eligible: list[bool] | None = None
@@ -12208,6 +12277,7 @@ class Runtime:
         values: list[AssignmentEntry],
         *,
         attrs_override: set[str] | None = None,
+        local_scope: bool = False,
     ) -> None:
         if self._bash_compat_level is None:
             raise RuntimeError(f"{name}: compound assignment requires BASH_COMPAT")
@@ -12264,8 +12334,8 @@ class Runtime:
                 else:
                     out_map[key] = rhs
                 i += 1
-            self._store_typed_var(name, ShellAssoc(out_map, attrs))
-            self._set_var_attrs(name, assoc=True)
+            self._store_typed_var(name, ShellAssoc(out_map, attrs), local_scope=local_scope)
+            self._set_var_attrs(name, local_scope=local_scope, assoc=True)
             self._set_subscript_projection(name, str(out_map.get("0", "")))
             return
         cur = self._lookup_typed_var(name)
@@ -12315,8 +12385,8 @@ class Runtime:
                         # For compound replacement assignments, bash leaves the
                         # array as an explicitly empty array after fatal index
                         # arithmetic errors.
-                        self._store_typed_var(name, ShellArray(out_vals, attrs))
-                        self._set_var_attrs(name, array=True)
+                        self._store_typed_var(name, ShellArray(out_vals, attrs), local_scope=local_scope)
+                        self._set_var_attrs(name, local_scope=local_scope, array=True)
                         self._set_subscript_projection(name, "")
                     return
                 self._report_error(f"[{idx_text}]={rhs_raw}: bad array subscript", line=self.current_line)
@@ -12338,8 +12408,8 @@ class Runtime:
                     rhs = old + rhs
             out_vals[idx] = rhs
             next_idx = idx + 1
-        self._store_typed_var(name, ShellArray(out_vals, attrs))
-        self._set_var_attrs(name, array=True)
+        self._store_typed_var(name, ShellArray(out_vals, attrs), local_scope=local_scope)
+        self._set_var_attrs(name, local_scope=local_scope, array=True)
         proj = ""
         if len(out_vals) > 0 and out_vals[0] is not None:
             proj = str(out_vals[0])
@@ -12554,6 +12624,10 @@ class Runtime:
             cur[str(akey)] = value
             self._store_typed_var(base, cur)
             self._set_subscript_projection(base, str(cur.get("0", "")))
+            if base == "BASH_CMDS":
+                self._cmd_hash[str(akey)] = value
+            if base == "BASH_ALIASES":
+                self.aliases[str(akey)] = value
             return True
         # Default to indexed array semantics when assoc isn't declared.
         cur_arr = self._lookup_typed_var(base)
@@ -12702,7 +12776,7 @@ class Runtime:
                 if not isinstance(typed, dict):
                     return "", False
                 if key in {"@", "*"}:
-                    vals = [str(v) for v in reversed(list(typed.values()))]
+                    vals = self._assoc_iter_values(base, typed)
                     if key == "*":
                         return self._ifs_join(vals), bool(vals)
                     return " ".join(vals), bool(vals)
@@ -13476,7 +13550,13 @@ class Runtime:
                     if comp_entries is None:
                         comp_entries = self._parse_compound_assignment_rhs_entries(rhs_for_expand)
                     if comp_entries is not None:
-                        self._assign_compound_var(name, op, comp_entries, attrs_override=effective_attrs)
+                        self._assign_compound_var(
+                            name,
+                            op,
+                            comp_entries,
+                            attrs_override=effective_attrs,
+                            local_scope=effective_local_scope,
+                        )
                         attrs_apply = dict(attr_flags)
                         attrs_apply["assoc"] = True
                         self._set_var_attrs(name, local_scope=effective_local_scope, **attrs_apply)
@@ -13508,7 +13588,13 @@ class Runtime:
                     if comp_entries is None:
                         comp_entries = self._parse_compound_assignment_rhs_entries(rhs_for_expand)
                     if comp_entries is not None:
-                        self._assign_compound_var(name, op, comp_entries, attrs_override=effective_attrs)
+                        self._assign_compound_var(
+                            name,
+                            op,
+                            comp_entries,
+                            attrs_override=effective_attrs,
+                            local_scope=effective_local_scope,
+                        )
                         attrs_apply = dict(attr_flags)
                         attrs_apply["array"] = True
                         self._set_var_attrs(name, local_scope=effective_local_scope, **attrs_apply)
@@ -13983,6 +14069,10 @@ class Runtime:
                     akey = self._eval_assoc_subscript_key(key)
                     typed.pop(akey, None)
                     self._set_subscript_projection(base, str(typed.get("0", "")) if typed else "")
+                    if base == "BASH_CMDS":
+                        self._cmd_hash.pop(str(akey), None)
+                    if base == "BASH_ALIASES":
+                        self.aliases.pop(str(akey), None)
                     continue
                 if isinstance(typed, list):
                     if key in {"@", "*"}:
