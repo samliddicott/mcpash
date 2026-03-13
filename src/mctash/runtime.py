@@ -9943,10 +9943,26 @@ class Runtime:
         return value.replace("\\", "\\\\").replace('"', '\\"')
 
     @staticmethod
-    def _k_pair_key_quote(value: str) -> str:
+    def _dq_escape_key(value: str, *, subscript: bool = False) -> str:
+        out = (
+            value.replace("\\", "\\\\")
+            .replace('"', '\\"')
+            .replace("$", "\\$")
+            .replace("`", "\\`")
+        )
+        return out
+
+    @classmethod
+    def _k_pair_key_quote(cls, value: str) -> str:
         if value and re.fullmatch(r"[A-Za-z0-9_./:=+-]+", value):
             return value
-        return '"' + value.replace("\\", "\\\\").replace('"', '\\"') + '"'
+        return '"' + cls._dq_escape_key(value) + '"'
+
+    @classmethod
+    def _declare_assoc_key_expr(cls, value: str) -> str:
+        if value and re.fullmatch(r"[A-Za-z0-9_./:=+-]+", value):
+            return value
+        return '"' + cls._dq_escape_key(value, subscript=True) + '"'
 
     def _k_pair_words_for_typed(self, typed: object, attrs: set[str]) -> list[str]:
         words: list[str] = []
@@ -9979,7 +9995,7 @@ class Runtime:
             elems: list[str] = []
             for k, v in typed.items():
                 elems.append(
-                    f"[{self._transform_q_quote(str(k))}]=\"{self._dq_escape(str(v))}\""
+                    f"[{self._declare_assoc_key_expr(str(k))}]=\"{self._dq_escape(str(v))}\""
                 )
             if elems:
                 return f"declare -A {name}=(" + " ".join(elems) + ")"
@@ -13335,15 +13351,11 @@ class Runtime:
                     if isinstance(typed, dict) and typed:
                         parts = []
                         for k, v in typed.items():
-                            k_s = str(k)
-                            if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", k_s) or re.fullmatch(r"[0-9]+", k_s):
-                                key_expr = k_s
-                            else:
-                                key_expr = _dq(k_s)
+                            key_expr = self._declare_assoc_key_expr(str(k))
                             parts.append(f"[{key_expr}]={_dq(str(v))}")
                         print(f"declare {assoc_flag} {name}=({' '.join(parts)} )", flush=True)
                     else:
-                        if name in {"BASH_ALIASES", "BASH_CMDS"}:
+                        if isinstance(typed, dict) or name in {"BASH_ALIASES", "BASH_CMDS"}:
                             print(f"declare {assoc_flag} {name}=()", flush=True)
                         else:
                             print(f"declare {assoc_flag} {name}", flush=True)
@@ -14172,9 +14184,14 @@ class Runtime:
         return status
 
     def _eval_assoc_subscript_key(self, key: str) -> str:
+        key_text = key
+        # In double-quoted subscript text, backslash only escapes $, `, ", \,
+        # and newline. Preserve literal `\]` across assignment-word expansion.
+        if len(key_text) >= 2 and key_text[0] == key_text[-1] == '"':
+            key_text = '"' + key_text[1:-1].replace("\\]", "\\\\]") + '"'
         if self._shopts.get("assoc_expand_once", False):
-            return self._expand_assoc_key_once(key)
-        return self._expand_assignment_word(key)
+            return self._expand_assoc_key_once(key_text)
+        return self._expand_assignment_word(key_text)
 
     def _expand_assoc_key_once(self, key: str) -> str:
         """Single-pass assoc key expansion (no command/arithmetic substitution)."""
