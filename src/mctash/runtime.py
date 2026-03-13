@@ -1515,6 +1515,10 @@ class Runtime:
         return f"{prefix}: {msg}"
 
     def _report_error(self, msg: str, line: int | None = None, context: str | None = None) -> None:
+        prefix = f"{self.script_name}:"
+        if isinstance(msg, str) and msg.startswith(prefix):
+            self._print_stderr(msg)
+            return
         self._print_stderr(self._format_error(msg, line=line, context=context))
 
     def _print_stderr(self, msg: str) -> None:
@@ -5731,10 +5735,10 @@ class Runtime:
     def _asdl_case_pattern_from_word(self, node: dict[str, Any]) -> str:
         if not isinstance(node, dict) or node.get("type") != "word.Compound":
             return ""
-        return self._pattern_from_structured_fields(
-            self._expand_asdl_assignment_fields(node),
-            for_case=True,
-        )
+        # Case-pattern words are quote-removed with pattern-escape semantics
+        # where backslashes remain significant for glob literals. Reuse the
+        # word-text pattern pipeline here to preserve \x vs \\x behavior.
+        return self._pattern_from_word(self._asdl_word_to_text(node), for_case=True)
 
     def _escape_case_pattern_literal(self, text: str) -> str:
         out: list[str] = []
@@ -11148,6 +11152,10 @@ class Runtime:
             raise ArithExpansionFailure(2)
         except ArithExpansionFailure:
             raise
+        except RuntimeError:
+            # Preserve explicit runtime diagnostics from variable assignment/
+            # attribute checks reached during arithmetic evaluation.
+            raise
         except Exception:
             # Expanded arithmetic text can become syntactically invalid for
             # associative-key forms (e.g. key values containing apostrophes or
@@ -13129,8 +13137,55 @@ class Runtime:
         return self._case_pattern_matches(text, pattern)
 
     def _pattern_from_word(self, text: str, for_case: bool = False) -> str:
+        if for_case:
+            try:
+                return self._pattern_from_case_word_parts(text)
+            except Exception:
+                # Fallback to legacy pipeline on parser edge cases.
+                pass
         fields = self._legacy_word_to_expansion_fields(text, assignment=True)
         return self._pattern_from_structured_fields(fields, for_case=for_case)
+
+    def _pattern_from_case_word_parts(self, text: str) -> str:
+        segments: list[ExpansionSegment] = []
+        for part in parse_word_parts(text):
+            kind = part.kind
+            quoted = bool(part.quoted)
+            value = ""
+            if kind == "LIT":
+                value = part.value
+            elif kind == "PARAM":
+                val = self._expand_param(part.value, quoted)
+                if isinstance(val, list):
+                    value = self._ifs_join([str(v) for v in val])
+                else:
+                    value = str(val)
+            elif kind == "BRACED":
+                val = self._expand_braced_param(part.value, part.op, part.arg, quoted, arg_fields=None)
+                if isinstance(val, list):
+                    value = self._ifs_join([str(v) for v in val])
+                else:
+                    value = self._scalarize_assignment_expansion(val)
+            elif kind == "CMD":
+                value = self._expand_command_subst_text(part.value)
+            elif kind == "CMD_BQ":
+                value = self._expand_command_subst_text(part.value, backtick=True)
+            elif kind == "ARITH":
+                value = self._expand_arith(part.value)
+            else:
+                value = part.value
+            segments.append(
+                ExpansionSegment(
+                    text=value,
+                    quoted=quoted,
+                    glob_active=(not quoted),
+                    split_active=False,
+                    source_kind=f"case.{kind}",
+                )
+            )
+        if not segments:
+            return ""
+        return self._pattern_from_structured_fields([ExpansionField(segments)], for_case=True)
 
     def _pattern_from_structured_fields(self, fields: list[ExpansionField], *, for_case: bool = False) -> str:
         # Parameter-op and case-pattern helpers can pass ASDL-derived structured
