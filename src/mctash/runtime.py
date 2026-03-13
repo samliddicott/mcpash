@@ -14462,8 +14462,7 @@ class Runtime:
             if parsed is not None:
                 base, key = parsed
                 attrs = self._lookup_var_attrs_set(base)
-                typed = self._lookup_typed_var(base)
-                if "assoc" in attrs and isinstance(typed, dict):
+                if "assoc" in attrs:
                     rendered_name, ok = self._validate_assoc_name_for_builtin(base, key)
                     if not ok:
                         self._report_error(
@@ -15509,8 +15508,7 @@ class Runtime:
             if parsed is not None:
                 base, key = parsed
                 attrs = self._lookup_var_attrs_set(base)
-                typed = self._lookup_typed_var(base)
-                if "assoc" in attrs and isinstance(typed, dict):
+                if "assoc" in attrs:
                     rendered_name, ok = self._validate_assoc_name_for_builtin(base, key)
                     if not ok:
                         self._report_error(
