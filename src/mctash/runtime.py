@@ -2834,7 +2834,7 @@ class Runtime:
                             )
                         )
                         return 1
-                    if name in self._py_ties:
+                    if self._has_scalar_tie(name):
                         if comp_vals is not None:
                             raise RuntimeError(f"{name}: cannot assign array value to tied variable")
                         self._assign_shell_var_op(name, op, value)
@@ -2876,7 +2876,7 @@ class Runtime:
                     continue
                 self._drop_typed_var(n)
             self.env.update(local_env)
-            for tied_name in self._py_ties:
+            for tied_name in self._iter_tied_names():
                 self.env[tied_name] = self._get_var(tied_name)
             if self._cmd_sub_used:
                 status = self._cmd_sub_status
@@ -3418,7 +3418,7 @@ class Runtime:
                         raise SystemExit(2)
                     comp_vals = comp_entries if self._bash_compat_level is not None else None
                     is_compound = comp_vals is not None
-                    if name in self._py_ties:
+                    if self._has_scalar_tie(name):
                         if is_compound:
                             raise RuntimeError(f"{name}: cannot assign array value to tied variable")
                         op = str(assign.get("op") or "=")
@@ -3474,7 +3474,7 @@ class Runtime:
                     break
                 comp_vals = comp_entries if self._bash_compat_level is not None else None
                 is_compound = comp_vals is not None
-                if name in self._py_ties:
+                if self._has_scalar_tie(name):
                     if is_compound:
                         raise RuntimeError(f"{name}: cannot assign array value to tied variable")
                     op = str(assign.get("op") or "=")
@@ -3527,7 +3527,7 @@ class Runtime:
             self.env.update(local_env)
             if "RANDOM" in assigned_names and "RANDOM" in local_env:
                 self._seed_random(local_env["RANDOM"])
-            for tied_name in self._py_ties:
+            for tied_name in self._iter_tied_names():
                 self.env[tied_name] = self._get_var(tied_name)
             if self._cmd_sub_used:
                 status = self._cmd_sub_status
@@ -3556,7 +3556,7 @@ class Runtime:
                         self._assign_shell_var_op(name, op, str(value))
                     local_env[name.split("[", 1)[0]] = self._get_var(name.split("[", 1)[0])
                 saved_env.update(local_env)
-                for tied_name in self._py_ties:
+                for tied_name in self._iter_tied_names():
                     saved_env[tied_name] = self._get_var(tied_name)
                 return 0
             finally:
@@ -6397,7 +6397,7 @@ class Runtime:
                                     )
                                 )
                                 return 1
-                        if name in self._py_ties:
+                        if self._has_scalar_tie(name):
                             if comp_vals is not None:
                                 raise RuntimeError(f"{name}: cannot assign array value to tied variable")
                             if op == "+=":
@@ -6466,7 +6466,7 @@ class Runtime:
                                 )
                             )
                             return 1
-                    if name in self._py_ties:
+                    if self._has_scalar_tie(name):
                         if comp_vals is not None:
                             raise RuntimeError(f"{name}: cannot assign array value to tied variable")
                         if op == "+=":
@@ -6506,7 +6506,7 @@ class Runtime:
                         continue
                     self._drop_typed_var(n)
                 self.env.update(local_env)
-                for tied_name in self._py_ties:
+                for tied_name in self._iter_tied_names():
                     self.env[tied_name] = self._get_var(tied_name)
                 if self._cmd_sub_used:
                     status = self._cmd_sub_status
@@ -6545,7 +6545,7 @@ class Runtime:
                         base = var_name.split("[", 1)[0]
                         local_env[base] = self._get_var(base)
                     saved_env2.update(local_env)
-                    for tied_name in self._py_ties:
+                    for tied_name in self._iter_tied_names():
                         saved_env2[tied_name] = self._get_var(tied_name)
                     return 0
                 finally:
@@ -12735,7 +12735,6 @@ class Runtime:
         if isinstance(obj, ShellScalar) and obj.tie is not None:
             if callable(obj.tie.setter):
                 obj.tie.setter(self._shell_to_tie_value(value, obj.tie.tie_type))
-                self.env[name] = self._get_var(name)
                 return
             raise RuntimeError(f"{name}: tied variable is read-only")
         value = self._coerce_var_value(name, value)
@@ -13784,7 +13783,6 @@ class Runtime:
         if isinstance(obj, ShellScalar) and obj.tie is not None:
             if callable(obj.tie.setter):
                 obj.tie.setter(self._shell_to_tie_value(value, obj.tie.tie_type))
-                self.env[name] = self._get_var(name)
                 return
             raise RuntimeError(f"{name}: tied variable is read-only")
         value = self._coerce_var_value(name, value)
@@ -14848,6 +14846,23 @@ class Runtime:
         obj = self._lookup_var_obj(name)
         if isinstance(obj, ShellScalar):
             obj.tie = None
+
+    def _has_scalar_tie(self, name: str) -> bool:
+        obj = self._lookup_var_obj(name)
+        if isinstance(obj, ShellScalar) and obj.tie is not None:
+            return True
+        return name in self._py_ties
+
+    def _iter_tied_names(self) -> list[str]:
+        names: set[str] = set(self._py_ties.keys())
+        for name, obj in self._global_var_store.items():
+            if isinstance(obj, ShellScalar) and obj.tie is not None:
+                names.add(name)
+        for scope in self._local_var_store_stack:
+            for name, obj in scope.items():
+                if isinstance(obj, ShellScalar) and obj.tie is not None:
+                    names.add(name)
+        return sorted(names)
 
     def _get_var_attrs(self, name: str) -> dict[str, bool]:
         attrs = self._lookup_var_attrs_set(name)
