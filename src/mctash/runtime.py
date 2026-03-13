@@ -11883,6 +11883,13 @@ class Runtime:
             except ArithExpansionFailure:
                 # Fatal arithmetic syntax in explicit index: keep previous
                 # variable value instead of partially applying later entries.
+                if op != "+=":
+                    # For compound replacement assignments, bash leaves the
+                    # array as an explicitly empty array after fatal index
+                    # arithmetic errors.
+                    self._typed_vars[name] = out_vals
+                    self._set_var_attrs(name, array=True)
+                    self._set_subscript_projection(name, "")
                 return
             except RuntimeError:
                 self._report_error(f"[{idx_text}]={rhs_raw}: bad array subscript", line=self.current_line)
