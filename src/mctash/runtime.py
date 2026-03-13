@@ -1073,6 +1073,7 @@ class Runtime:
         self._py_globals["bash"] = self._py_globals["sh"]
         self._py_globals["shell"] = self._py_globals["sh"]
         self._sync_root_frame()
+        self._sync_funcname_array()
         # Align with ash test assumptions: shell starts with only stdio fds open.
         if threading.current_thread() is threading.main_thread():
             try:
@@ -1235,6 +1236,12 @@ class Runtime:
             self._frame_stack[0] = root
         else:
             self._frame_stack.append(root)
+
+    def _sync_funcname_array(self) -> None:
+        vals = list(reversed(self._call_stack))
+        self._store_typed_var("FUNCNAME", ShellArray(vals, {"array"}))
+        self._set_var_attrs("FUNCNAME", array=True)
+        self._set_subscript_projection("FUNCNAME", vals[0] if vals else "")
 
     def _get_shared_store(self) -> _SharedVarStore:
         current = self._get_var("MCTASH_SHARED_FILE")
@@ -7663,6 +7670,7 @@ class Runtime:
         self._local_typed_vars_stack.append({})
         self._local_var_attrs_stack.append({})
         self._call_stack.append(name)
+        self._sync_funcname_array()
         saved_loop_depth = self._loop_depth
         if self._bash_compat_level is not None and self._bash_compat_level >= 44:
             # bash compat>=44: function body should not inherit caller loop control
@@ -7680,6 +7688,7 @@ class Runtime:
         finally:
             self._loop_depth = saved_loop_depth
             self._call_stack.pop()
+            self._sync_funcname_array()
             self._local_var_attrs_stack.pop()
             self._local_typed_vars_stack.pop()
             self.local_stack.pop()
