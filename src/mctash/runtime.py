@@ -9955,6 +9955,41 @@ class Runtime:
         return "'" + value.replace("'", "'\"'\"'") + "'"
 
     @staticmethod
+    def _printf_q_quote(value: str) -> str:
+        if value == "":
+            return "''"
+        if re.fullmatch(r"[A-Za-z0-9_@%+=:,./-]+", value):
+            return value
+        out: list[str] = []
+        for ch in value:
+            code = ord(ch)
+            if ch == "\\":
+                out.append("\\\\")
+            elif ch == "'":
+                out.append("\\'")
+            elif ch == "\a":
+                out.append("\\a")
+            elif ch == "\b":
+                out.append("\\b")
+            elif ch == "\x1b":
+                out.append("\\e")
+            elif ch == "\f":
+                out.append("\\f")
+            elif ch == "\n":
+                out.append("\\n")
+            elif ch == "\r":
+                out.append("\\r")
+            elif ch == "\t":
+                out.append("\\t")
+            elif ch == "\v":
+                out.append("\\v")
+            elif 0x20 <= code < 0x7F:
+                out.append(ch)
+            else:
+                out.append(f"\\{code:03o}")
+        return "$'" + "".join(out) + "'"
+
+    @staticmethod
     def _dq_escape(value: str) -> str:
         return value.replace("\\", "\\\\").replace('"', '\\"')
 
@@ -15124,7 +15159,7 @@ class Runtime:
                         except Exception:
                             out.append(str(val))
                     elif spec == "q":
-                        out.append(self._transform_q_quote(str(val)))
+                        out.append(self._printf_q_quote(str(val)))
                     elif spec == "b":
                         out.append(self._decode_backslash_escapes(str(val)))
                     elif spec == "c":
