@@ -69,13 +69,19 @@ These are expected string/regex boundaries and are not ASDL-divergence work:
 
 ## Checklist
 
-- [ ] Remove ASDL-path dependence on `parse_legacy_word` (`src/mctash/runtime.py:4608`).
-- [ ] Replace declare assignment flatten+regex with structured ASDL assignment IR (`src/mctash/runtime.py:3310`).
-- [ ] Restrict `_argv_assignment_words` regex parser to non-ASDL fallback (`src/mctash/runtime.py:11921`).
-- [ ] Introduce structured subscript refs in ASDL execution and reduce `_parse_subscripted_name` semantic usage (`src/mctash/runtime.py:11870`).
-- [ ] Finish ASDL-native RHS expansion in declare/local/export/readonly lanes (`src/mctash/runtime.py:3973`, `src/mctash/runtime.py:13244`).
+- [x] Remove ASDL-path dependence on `parse_legacy_word` (`src/mctash/runtime.py:4608`).
+  - Implemented as strict-mode guard (`MCTASH_STRICT_ASDL`) on legacy word reparse path.
+- [x] Replace declare assignment flatten+regex with structured ASDL assignment IR (`src/mctash/runtime.py:3310`).
+  - `declare` argument assignment extraction now scans structured word parts.
+- [x] Restrict `_argv_assignment_words` regex parser to non-ASDL fallback (`src/mctash/runtime.py:11921`).
+  - ASDL assignment-only detection added first; regex parser retained as fallback and strict-mode guarded.
+- [x] Introduce structured subscript refs in ASDL execution and reduce `_parse_subscripted_name` semantic usage (`src/mctash/runtime.py:11870`).
+  - Parsed subscript metadata now passed from ASDL declare scanner into `_run_declare`.
+- [x] Finish ASDL-native RHS expansion in declare/local/export/readonly lanes (`src/mctash/runtime.py:3973`, `src/mctash/runtime.py:13244`).
+  - `rhs_word.Compound` now always expands via ASDL assignment scalar path.
 - [ ] Consolidate compound assignment parsing onto IR from ASDL (`src/mctash/runtime.py:12336`).
-- [ ] Add guard: fail-fast debug mode if ASDL lane falls back to legacy reparse in targeted paths.
+- [x] Add guard: fail-fast debug mode if ASDL lane falls back to legacy reparse in targeted paths.
+  - Strict guards added for legacy word reparse and regex argv-assignment parser.
 
 ## Suggested Execution Order
 
