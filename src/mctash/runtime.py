@@ -10082,6 +10082,10 @@ class Runtime:
                     if isinstance(typed, dict) and "assoc" in attrs:
                         return str(len(vals_for_key))
                     return str(len(vals_for_key))
+                sub_value, sub_set = self._get_var_with_state(name)
+                if self.options.get("u", False) and not sub_set:
+                    raise RuntimeError(f"unbound variable: {name}")
+                return str(len(sub_value))
             if key in {"@", "*"}:
                 vals: list[str] = vals_for_key
                 if op is None:
@@ -11817,6 +11821,9 @@ class Runtime:
                 label = name or key or "array"
                 raise RuntimeError(f"{label}: bad array subscript")
             return None
+        m_arith_wrap = re.fullmatch(r"\$\(\((.*)\)\)", text, re.DOTALL)
+        if m_arith_wrap is not None:
+            text = m_arith_wrap.group(1).strip()
         m_name = re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", text)
         if m_name is not None and self.options.get("u", False):
             _, is_set = self._get_var_with_state(m_name.group(0))
@@ -11894,7 +11901,13 @@ class Runtime:
                     return str(typed[akey]), True
                 return "", False
             if not isinstance(typed, list):
-                return "", False
+                scalar_value, scalar_set = self._get_var_with_state(base)
+                if not scalar_set:
+                    return "", False
+                idx = self._eval_index_subscript(key, [], strict=True, name=base, empty_is_zero=True)
+                if idx is None or idx != 0:
+                    return "", False
+                return scalar_value, True
             if key in {"@", "*"}:
                 vals = self._array_visible_values(typed)
                 if key == "*":
