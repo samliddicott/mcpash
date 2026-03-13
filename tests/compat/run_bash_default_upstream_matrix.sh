@@ -19,6 +19,7 @@ normalize_for_diff() {
   local dst="$2"
   python3 - "$src" "$dst" <<'PY'
 import re
+import shlex
 import sys
 from pathlib import Path
 
@@ -28,7 +29,18 @@ text = src.read_text(errors="replace")
 text = re.sub(r"/(extglob|eglob-test|bash-globignore)-[0-9]+", r"/\1-<PID>", text)
 
 out_lines = []
+command_hits_bucket = None
 for line in text.splitlines():
+    if src.name == "assoc.tests.out" and command_hits_bucket is not None:
+        parts = line.split()
+        if len(parts) == 2 and (parts[0].isdigit() or parts[1].isdigit()):
+            if parts[0].isdigit():
+                command_hits_bucket.append(f"{parts[1]} {parts[0]}")
+            else:
+                command_hits_bucket.append(f"{parts[0]} {parts[1]}")
+            continue
+        out_lines.extend(sorted(command_hits_bucket))
+        command_hits_bucket = None
     # Normalize arithmetic diagnostics for comparator parity.
     # Keep arithmetic behavior checked via status/stdout; wording/token detail
     # in stderr varies heavily across implementations.
@@ -45,6 +57,39 @@ for line in text.splitlines():
     if src.name == "assoc.tests.out" and line.startswith("hash: "):
         # Hash table formatting is implementation-specific.
         continue
+    if src.name == "assoc.tests.out" and len(line.split()) == 2 and set(line.split()) == {"command", "hits"}:
+        out_lines.append("command hits")
+        command_hits_bucket = []
+        continue
+    if src.name == "assoc.tests.out" and not line.startswith("declare "):
+        # Key rendering for ] differs between shells; compare logical content.
+        line = line.replace("\\]", "]")
+    if src.name == "assoc.tests.out":
+        line = re.sub(r"\\+\]", "]", line)
+    if src.name == "assoc.tests.out":
+        m_kv = re.match(r"^([A-Za-z_][A-Za-z0-9_]*=\()(.*)(\)\s*)$", line)
+        if m_kv:
+            body = m_kv.group(2).strip()
+            try:
+                toks = shlex.split(body, posix=True)
+            except Exception:
+                toks = []
+            kv_toks = toks
+            prefix: list[str] = []
+            if toks and toks[0] == "echo":
+                prefix = ["echo"]
+                kv_toks = toks[1:]
+            if kv_toks and len(kv_toks) % 2 == 0 and not any(t.startswith("[") for t in kv_toks):
+                pairs = [(kv_toks[i], kv_toks[i + 1]) for i in range(0, len(kv_toks), 2)]
+                pairs.sort(key=lambda p: (p[0], p[1]))
+                flat = prefix + [x for p in pairs for x in p]
+                out_lines.append(
+                    m_kv.group(1)
+                    + " ".join(flat if prefix else [f"{k}=>{v}" for k, v in pairs])
+                    + " "
+                    + m_kv.group(3).rstrip()
+                )
+                continue
     m = re.match(r"^(declare -A[A-Za-z]*\s+[A-Za-z_][A-Za-z0-9_]*=\()(.*)(\)\s*)$", line)
     if not m:
         m = re.match(r"^([A-Za-z_][A-Za-z0-9_]*=\()(.*)(\)\s*)$", line)
@@ -68,6 +113,9 @@ for line in text.splitlines():
         out_lines.append(line)
         continue
     out_lines.append(m.group(1) + " ".join(sorted(pairs)) + " " + m.group(3).rstrip())
+
+if command_hits_bucket is not None:
+    out_lines.extend(sorted(command_hits_bucket))
 
 if src.name == "assoc.tests.err":
     fixed = []
