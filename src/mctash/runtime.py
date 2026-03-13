@@ -2743,7 +2743,7 @@ class Runtime:
                     op = str(pair.get("op", "="))
                     rhs = pair.get("rhs") or {}
                     try:
-                        value = self._expand_asdl_rhs_assignment(rhs)
+                        value, comp_entries, bad_tok = self._asdl_rhs_assignment_ir(rhs)
                     except CommandSubstFailure as e:
                         return e.code
                     except ArithExpansionFailure as e:
@@ -2755,19 +2755,15 @@ class Runtime:
                         if self._diag.style == "bash":
                             return 1
                         raise SystemExit(2)
-                    comp_vals = self._parse_compound_assignment_rhs(self._asdl_rhs_word_to_text(rhs))
-                    if comp_vals is not None and self._bash_compat_level is None:
-                        comp_vals = None
-                    if comp_vals is None:
-                        bad_tok = self._compound_assignment_unexpected_token(self._asdl_rhs_word_to_text(rhs))
-                        if bad_tok is not None:
-                            self._print_stderr(
-                                self._format_error(
-                                    f"syntax error near unexpected token `{bad_tok}'",
-                                    line=self.current_line,
-                                )
+                    comp_vals = comp_entries if self._bash_compat_level is not None else None
+                    if comp_vals is None and bad_tok is not None:
+                        self._print_stderr(
+                            self._format_error(
+                                f"syntax error near unexpected token `{bad_tok}'",
+                                line=self.current_line,
                             )
-                            return 1
+                        )
+                        return 1
                     if name in self._py_ties:
                         if comp_vals is not None:
                             raise RuntimeError(f"{name}: cannot assign array value to tied variable")
@@ -3339,7 +3335,7 @@ class Runtime:
                 self._apply_persistent_redirects(redirects)
                 for assign in assign_pairs:
                     try:
-                        value = self._expand_asdl_rhs_assignment(assign.get("val") or {})
+                        value, comp_entries, _bad_tok = self._asdl_rhs_assignment_ir(assign.get("val") or {})
                     except CommandSubstFailure as e:
                         return e.code
                     except ArithExpansionFailure as e:
@@ -3350,12 +3346,8 @@ class Runtime:
                         msg = self._diag_msg(DiagnosticKey.READONLY_VAR, name=name)
                         print(self._format_error(msg, line=self.current_line), file=sys.stderr)
                         raise SystemExit(2)
-                    is_compound = False
-                    comp_vals: list[str] | None = None
-                    if self._bash_compat_level is not None:
-                        rhs_text = self._asdl_rhs_word_to_text(assign.get("val") or {})
-                        comp_vals = self._parse_compound_assignment_rhs(rhs_text)
-                        is_compound = comp_vals is not None
+                    comp_vals = comp_entries if self._bash_compat_level is not None else None
+                    is_compound = comp_vals is not None
                     if name in self._py_ties:
                         if is_compound:
                             raise RuntimeError(f"{name}: cannot assign array value to tied variable")
@@ -3398,7 +3390,7 @@ class Runtime:
             self.env = local_env
             for assign in assign_pairs:
                 try:
-                    value = self._expand_asdl_rhs_assignment(assign.get("val") or {})
+                    value, comp_entries, _bad_tok = self._asdl_rhs_assignment_ir(assign.get("val") or {})
                 except CommandSubstFailure as e:
                     return e.code
                 except ArithExpansionFailure as e:
@@ -3410,12 +3402,8 @@ class Runtime:
                     print(self._format_error(msg, line=self.current_line), file=sys.stderr)
                     assignment_error_status = 1
                     break
-                is_compound = False
-                comp_vals: list[str] | None = None
-                if self._bash_compat_level is not None:
-                    rhs_text = self._asdl_rhs_word_to_text(assign.get("val") or {})
-                    comp_vals = self._parse_compound_assignment_rhs(rhs_text)
-                    is_compound = comp_vals is not None
+                comp_vals = comp_entries if self._bash_compat_level is not None else None
+                is_compound = comp_vals is not None
                 if name in self._py_ties:
                     if is_compound:
                         raise RuntimeError(f"{name}: cannot assign array value to tied variable")
@@ -3895,6 +3883,39 @@ class Runtime:
                 return self._expand_asdl_assignment_scalar(word)
             return self._expand_assignment_word(self._asdl_word_to_text(word))
         return ""
+
+    def _asdl_rhs_compound_entries(self, rhs_word: dict[str, Any]) -> list[tuple[str, bool]] | None:
+        # Build entry IR from ASDL lexical source, then expand per-entry with
+        # assignment-context rules. This avoids reparsing expanded text (which
+        # can incorrectly reinterpret data-originated `[idx]=...` as syntax).
+        raw = self._asdl_word_to_text(rhs_word)
+        raw_entries = self._parse_compound_assignment_rhs_entries(raw)
+        if raw_entries is None:
+            return None
+        out: list[tuple[str, bool]] = []
+        for raw_tok, explicit_idx_syntax in raw_entries:
+            expanded_items = fields_to_text_list(
+                self._legacy_word_to_expansion_fields(raw_tok, assignment=False)
+            )
+            if not expanded_items:
+                expanded_items = [""]
+            for item in expanded_items:
+                out.append((item, explicit_idx_syntax))
+        return out
+
+    def _asdl_rhs_assignment_ir(
+        self, rhs: dict[str, Any] | None
+    ) -> tuple[str, list[tuple[str, bool]] | None, str | None]:
+        scalar = self._expand_asdl_rhs_assignment(rhs)
+        if not isinstance(rhs, dict) or rhs.get("type") != "rhs_word.Compound":
+            return scalar, None, None
+        word = rhs.get("word") or {}
+        comp_entries = self._asdl_rhs_compound_entries(word)
+        if comp_entries is not None:
+            return scalar, comp_entries, None
+        raw = self._asdl_word_to_text(word)
+        bad_tok = self._compound_assignment_unexpected_token(raw)
+        return scalar, None, bad_tok
 
     def _asdl_rhs_assignment_can_expand_natively(self, word: dict[str, Any]) -> bool:
         if not isinstance(word, dict) or word.get("type") != "word.Compound":
