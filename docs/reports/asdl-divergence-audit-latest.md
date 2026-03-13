@@ -70,7 +70,7 @@ These are expected string/regex boundaries and are not ASDL-divergence work:
 ## Checklist
 
 - [x] Remove ASDL-path dependence on `parse_legacy_word` (`src/mctash/runtime.py:4608`).
-  - Implemented as strict-mode guard (`MCTASH_STRICT_ASDL`) on legacy word reparse path.
+  - ASDL call paths were widened; remaining legacy reparse lane is now strict-mode guarded (`MCTASH_STRICT_ASDL`) to catch accidental fallback.
 - [x] Replace declare assignment flatten+regex with structured ASDL assignment IR (`src/mctash/runtime.py:3310`).
   - `declare` argument assignment extraction now scans structured word parts.
 - [x] Restrict `_argv_assignment_words` regex parser to non-ASDL fallback (`src/mctash/runtime.py:11921`).
@@ -79,7 +79,8 @@ These are expected string/regex boundaries and are not ASDL-divergence work:
   - Parsed subscript metadata now passed from ASDL declare scanner into `_run_declare`.
 - [x] Finish ASDL-native RHS expansion in declare/local/export/readonly lanes (`src/mctash/runtime.py:3973`, `src/mctash/runtime.py:13244`).
   - `rhs_word.Compound` now always expands via ASDL assignment scalar path.
-- [ ] Consolidate compound assignment parsing onto IR from ASDL (`src/mctash/runtime.py:12336`).
+- [x] Consolidate compound assignment parsing onto IR from ASDL (`src/mctash/runtime.py:12336`).
+  - ASDL-derived compound entries are now passed into `_run_declare` (`_declare_compound_entries_by_arg`) to avoid RHS text reparse in declare lanes.
 - [x] Add guard: fail-fast debug mode if ASDL lane falls back to legacy reparse in targeted paths.
   - Strict guards added for legacy word reparse and regex argv-assignment parser.
 
