@@ -1129,6 +1129,7 @@ class Runtime:
         self.env.setdefault("BASH_ARGC", "()")
         self.env.setdefault("BASH_ARGV", "()")
         self.env.setdefault("BASH_CMDS", "()")
+        self.env.setdefault("BASH_ALIASES", "()")
         self.env.setdefault("PS4", "+ ")
         try:
             self.env.setdefault("UID", str(os.getuid()))
@@ -1149,10 +1150,16 @@ class Runtime:
             self._store_typed_var("DIRSTACK", ShellArray([], {"array"}))
         if self._lookup_typed_var("FUNCNAME") is None:
             self._store_typed_var("FUNCNAME", ShellArray([], {"array"}))
+        if self._lookup_typed_var("BASH_ALIASES") is None:
+            self._store_typed_var("BASH_ALIASES", ShellAssoc({}, {"assoc"}))
+        if self._lookup_typed_var("BASH_CMDS") is None:
+            self._store_typed_var("BASH_CMDS", ShellAssoc({}, {"assoc"}))
         self._set_var_attrs("BASH_SOURCE", array=True)
         self._set_var_attrs("BASH_LINENO", array=True)
         self._set_var_attrs("DIRSTACK", array=True)
         self._set_var_attrs("FUNCNAME", array=True)
+        self._set_var_attrs("BASH_ALIASES", assoc=True)
+        self._set_var_attrs("BASH_CMDS", assoc=True)
 
     @staticmethod
     def _parse_bash_compat_level(raw: str) -> int | None:
@@ -12886,6 +12893,7 @@ class Runtime:
         show_funcs = False
         show_func_defs = False
         print_vars = False
+        explicit_print = False
         declare_array = False
         declare_assoc = False
         declare_integer = False
@@ -12937,6 +12945,7 @@ class Runtime:
                         )
                         return 2
                     print_vars = True
+                    explicit_print = True
                 elif ch == "a":
                     if enable:
                         declare_array = True
@@ -13116,7 +13125,10 @@ class Runtime:
                             parts.append(f"[{key_expr}]={_dq(str(v))}")
                         print(f"declare {assoc_flag} {name}=({' '.join(parts)} )", flush=True)
                     else:
-                        print(f"declare {assoc_flag} {name}", flush=True)
+                        if explicit_print or name in {"BASH_ALIASES", "BASH_CMDS"}:
+                            print(f"declare {assoc_flag} {name}=()", flush=True)
+                        else:
+                            print(f"declare {assoc_flag} {name}", flush=True)
                 elif "array" in attrs:
                     typed = self._lookup_typed_var(name)
                     af = ["a"]
@@ -13434,6 +13446,16 @@ class Runtime:
                     pre_value, pre_is_set = self._get_var_with_state(name)
                     if attrs_apply:
                         self._set_var_attrs(name, local_scope=effective_local_scope, **attrs_apply)
+                    if attrs_apply.get("assoc") and not isinstance(self._lookup_typed_var(name), dict):
+                        amap: dict[str, str] = {}
+                        if pre_is_set:
+                            amap["0"] = pre_value
+                        self._store_typed_var(
+                            name,
+                            ShellAssoc(amap, self._lookup_var_attrs_set(name)),
+                            local_scope=effective_local_scope,
+                        )
+                        self._set_subscript_projection(name, pre_value if pre_is_set else "")
                     if attrs_apply.get("array") and not isinstance(self._lookup_typed_var(name), list):
                         self._store_typed_var(
                             name,
@@ -13643,7 +13665,7 @@ class Runtime:
                         parts = [f"[{k}]={_dq(str(v))}" for k, v in typed.items()]
                         print(f"{decl_prefix} -Ar {name}=({' '.join(parts)} )")
                     else:
-                        print(f"{decl_prefix} -Ar {name}")
+                        print(f"{decl_prefix} -Ar {name}=()")
                     continue
                 if "array" in attrs:
                     if show_assoc and not show_array:

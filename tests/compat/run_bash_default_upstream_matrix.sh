@@ -38,8 +38,21 @@ for line in text.splitlines():
         continue
     if line == "a[b[c]d]: bad array subscript":
         continue
-    m = re.match(r"^(declare -A[i]?\s+[A-Za-z_][A-Za-z0-9_]*=\()(.*)(\)\s*)$", line)
+    m = re.match(r"^(declare -A[A-Za-z]*\s+[A-Za-z_][A-Za-z0-9_]*=\()(.*)(\)\s*)$", line)
     if not m:
+        # In assoc corpus, value-order expansion of associative arrays is not
+        # specified; compare as multisets to avoid hash-order false mismatches.
+        if src.name == "assoc.tests.out":
+            toks = line.split()
+            if (
+                len(toks) > 1
+                and not line.startswith("declare ")
+                and "=" not in line
+                and all(re.fullmatch(r"[\^./A-Za-z0-9_-]+", t or "") for t in toks)
+                and any(("/" in t) or t in {".", "/"} or t.startswith("^") for t in toks)
+            ):
+                out_lines.append(" ".join(sorted(toks)))
+                continue
         out_lines.append(line)
         continue
     body = m.group(2)
@@ -48,6 +61,22 @@ for line in text.splitlines():
         out_lines.append(line)
         continue
     out_lines.append(m.group(1) + " ".join(sorted(pairs)) + " " + m.group(3).rstrip())
+
+if src.name == "assoc.tests.err":
+    fixed = []
+    bucket = []
+    pat = re.compile(r"^(\./assoc9\.sub: line 36: unset: `dict\[.*\]': not a valid identifier)$")
+    for ln in out_lines:
+        if pat.match(ln):
+            bucket.append(ln)
+            continue
+        if bucket:
+            fixed.extend(sorted(bucket))
+            bucket = []
+        fixed.append(ln)
+    if bucket:
+        fixed.extend(sorted(bucket))
+    out_lines = fixed
 
 dst.write_text("\n".join(out_lines) + ("\n" if text.endswith("\n") else ""))
 PY
@@ -147,6 +176,25 @@ core_cases=(
 if [[ -n "${BASH_DEFAULT_UPSTREAM_CASES:-}" ]]; then
   # Space-separated override for focused debugging.
   read -r -a core_cases <<<"${BASH_DEFAULT_UPSTREAM_CASES}"
+fi
+
+case_filter=()
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --case)
+      [[ $# -ge 2 ]] || { echo "--case requires value" >&2; exit 2; }
+      case_filter+=("$2")
+      shift 2
+      ;;
+    *)
+      echo "unknown arg: $1" >&2
+      exit 2
+      ;;
+  esac
+done
+
+if [[ ${#case_filter[@]} -gt 0 ]]; then
+  core_cases=("${case_filter[@]}")
 fi
 
 summary="$RDIR/summary.tsv"
