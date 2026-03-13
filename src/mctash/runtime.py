@@ -11644,7 +11644,7 @@ class Runtime:
             tok = str(raw)
             m = re.match(r"^\[(.*)\](\+?=)(.*)$", tok)
             if m is None:
-                expanded_items = fields_to_text_list(self._legacy_word_to_expansion_fields(tok, assignment=True))
+                expanded_items = fields_to_text_list(self._legacy_word_to_expansion_fields(tok, assignment=False))
                 if not expanded_items:
                     expanded_items = [""]
                 for val in expanded_items:
@@ -11812,6 +11812,23 @@ class Runtime:
         empty_is_zero: bool = False,
     ) -> int | None:
         text = (key or "").strip()
+        if text == "":
+            if empty_is_zero:
+                return 0
+            if strict:
+                label = name or key or "array"
+                raise RuntimeError(f"{label}: bad array subscript")
+            return None
+        try:
+            # Bash performs expansions on array subscript text before arithmetic
+            # evaluation (parameter/command/tilde, then arithmetic context).
+            text = self._expand_assignment_word(text)
+        except Exception:
+            if strict:
+                label = name or key or "array"
+                raise RuntimeError(f"{label}: bad array subscript")
+            return None
+        text = text.strip()
         if text == "":
             if empty_is_zero:
                 return 0
