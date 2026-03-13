@@ -11966,22 +11966,120 @@ class Runtime:
         if inner.strip() == "":
             return []
         vals: list[AssignmentEntry] = []
-        reader = TokenReader(inner)
-        ctx = LexContext(reserved_words=set(), allow_reserved=False, allow_newline=False)
-        tokens: list[Token] = []
-        while True:
-            tok = reader.next(ctx)
-            if tok is None:
+
+        def consume_balanced(start: int, opener: str, closer: str) -> int:
+            depth = 1
+            i = start + len(opener)
+            in_single = False
+            in_double = False
+            while i < len(inner):
+                ch = inner[i]
+                if in_single:
+                    if ch == "'":
+                        in_single = False
+                    i += 1
+                    continue
+                if in_double:
+                    if ch == "\\" and i + 1 < len(inner):
+                        i += 2
+                        continue
+                    if ch == '"':
+                        in_double = False
+                    i += 1
+                    continue
+                if ch == "'":
+                    in_single = True
+                    i += 1
+                    continue
+                if ch == '"':
+                    in_double = True
+                    i += 1
+                    continue
+                if ch == "\\" and i + 1 < len(inner):
+                    i += 2
+                    continue
+                if inner.startswith(opener, i):
+                    depth += 1
+                    i += len(opener)
+                    continue
+                if inner.startswith(closer, i):
+                    depth -= 1
+                    i += len(closer)
+                    if depth == 0:
+                        return i
+                    continue
+                i += 1
+            return start
+
+        i = 0
+        while i < len(inner):
+            while i < len(inner) and inner[i].isspace():
+                i += 1
+            if i >= len(inner):
                 break
-            if tok.kind != "WORD":
-                return None
-            tokens.append(tok)
-        for i, tok in enumerate(tokens):
-            start = tok.index
-            end = tokens[i + 1].index if i + 1 < len(tokens) else len(inner)
-            # Preserve original lexical spelling (quotes/escapes included) so
-            # expansion keeps compound-entry quoting boundaries.
-            lexeme = inner[start:end].strip()
+            start = i
+            bracket_depth = 0
+            in_single = False
+            in_double = False
+            while i < len(inner):
+                ch = inner[i]
+                if in_single:
+                    if ch == "'":
+                        in_single = False
+                    i += 1
+                    continue
+                if in_double:
+                    if ch == "\\" and i + 1 < len(inner):
+                        i += 2
+                        continue
+                    if ch == '"':
+                        in_double = False
+                    i += 1
+                    continue
+                if ch == "'":
+                    in_single = True
+                    i += 1
+                    continue
+                if ch == '"':
+                    in_double = True
+                    i += 1
+                    continue
+                if ch == "\\" and i + 1 < len(inner):
+                    i += 2
+                    continue
+                if inner.startswith("$((", i):
+                    nxt = consume_balanced(i, "$((", "))")
+                    if nxt == i:
+                        return None
+                    i = nxt
+                    continue
+                if inner.startswith("$(", i):
+                    nxt = consume_balanced(i, "$(", ")")
+                    if nxt == i:
+                        return None
+                    i = nxt
+                    continue
+                if inner.startswith("${", i):
+                    nxt = consume_balanced(i, "${", "}")
+                    if nxt == i:
+                        return None
+                    i = nxt
+                    continue
+                if ch == "[":
+                    bracket_depth += 1
+                    i += 1
+                    continue
+                if ch == "]":
+                    if bracket_depth > 0:
+                        bracket_depth -= 1
+                    i += 1
+                    continue
+                if bracket_depth == 0 and ch.isspace():
+                    break
+                i += 1
+            lexeme = inner[start:i].strip()
+            if lexeme == "":
+                continue
             vals.append(
                 AssignmentEntry(
                     text=lexeme,
@@ -12919,17 +13017,20 @@ class Runtime:
                 if "uppercase" in effective_attrs:
                     effective_attrs.discard("lowercase")
                 if is_assoc_target:
-                    assoc_values = self._parse_assoc_compound_assignment_rhs(rhs_for_expand)
-                    if assoc_values is not None:
-                        cur = self._typed_vars.get(name)
-                        base: dict[str, str] = dict(cur) if (op == "+=" and isinstance(cur, dict)) else {}
-                        for k, v in assoc_values.items():
-                            base[k] = self._coerce_value_with_attrs(str(v), effective_attrs)
-                        self._typed_vars[name] = base
+                    comp_entries: list[AssignmentEntry] | None = None
+                    if (
+                        raw_value is not None
+                        and raw_op == op
+                        and raw_name == name
+                    ):
+                        comp_entries = self._parse_compound_assignment_rhs_entries(raw_value)
+                    if comp_entries is None:
+                        comp_entries = self._parse_compound_assignment_rhs_entries(rhs_for_expand)
+                    if comp_entries is not None:
+                        self._assign_compound_var(name, op, comp_entries, attrs_override=effective_attrs)
                         attrs_apply = dict(attr_flags)
                         attrs_apply["assoc"] = True
                         self._set_var_attrs(name, **attrs_apply)
-                        self._set_subscript_projection(name, str(base.get("0", "")))
                         continue
                     expanded_assoc_value = self._expand_assignment_word(rhs_for_expand)
                     cur = self._typed_vars.get(name)
