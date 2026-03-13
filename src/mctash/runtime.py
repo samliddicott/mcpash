@@ -12098,6 +12098,12 @@ class Runtime:
                         continue
                     key_raw = raw if entry.expanded else self._expand_assignment_word(raw)
                     key = str(key_raw)
+                    if key == "":
+                        self._report_error('"": bad array subscript', line=self.current_line)
+                        i += 1
+                        if i < len(normalized):
+                            i += 1
+                        continue
                     if i + 1 < len(normalized):
                         nxt = normalized[i + 1]
                         val_raw = nxt.text if nxt.expanded else self._expand_assignment_word(nxt.text)
@@ -12109,6 +12115,10 @@ class Runtime:
                     out_map[key] = val
                     continue
                 key = str(self._eval_assoc_subscript_key(m.group(1)))
+                if key == "":
+                    self._report_error('"": bad array subscript', line=self.current_line)
+                    i += 1
+                    continue
                 if key in {"*", "@"}:
                     self._report_error(f"{raw}: invalid associative array key", line=self.current_line)
                     i += 1
@@ -13247,6 +13257,13 @@ class Runtime:
                     )
                     return 1
                 existing_attrs = self._lookup_var_attrs_set(parsed_base)
+                if parsed_base in self.readonly_vars and not declare_readonly:
+                    self._report_error(
+                        self._diag_msg(DiagnosticKey.READONLY_VAR, name=parsed_base),
+                        line=self.current_line,
+                    )
+                    status = 1
+                    continue
                 if declare_assoc and "array" in existing_attrs and "assoc" not in existing_attrs:
                     self._report_error(
                         f"{parsed_base}: cannot convert indexed to associative array",
@@ -13276,6 +13293,19 @@ class Runtime:
                     status = 1
                     continue
                 if parsed_decl is not None:
+                    if "assoc" in existing_attrs or declare_assoc:
+                        rendered_name, ok = self._validate_assoc_name_for_builtin(parsed_base, parsed_decl[1])
+                        if not ok:
+                            bad_ident = spec
+                            if isinstance(raw_spec, str) and raw_spec:
+                                bad_ident = raw_spec.replace('"', "")
+                            self._report_error(
+                                f"`{bad_ident}': not a valid identifier",
+                                line=self.current_line,
+                                context=cmd_name,
+                            )
+                            status = 1
+                            continue
                     expanded_sub = self._expand_assignment_word(rhs_for_expand)
                     if op == "+=":
                         cur, is_set = self._get_var_with_state(name)
@@ -13502,6 +13532,13 @@ class Runtime:
                 if name not in entries:
                     entries[name] = value
             for name in sorted(entries):
+                obj = self._lookup_var_obj(name)
+                if isinstance(obj, ShellAssoc):
+                    print(self._format_set_assoc(name, obj))
+                    continue
+                if isinstance(obj, ShellArray):
+                    print(self._format_set_array(name, obj))
+                    continue
                 print(f"{name}={self._quote_set_value(entries[name])}")
             return 0
         if args[0] == "--":
@@ -13566,6 +13603,32 @@ class Runtime:
         if re.fullmatch(r"[A-Za-z0-9_./+-][A-Za-z0-9_./+#-]*", value):
             return value
         return "'" + value.replace("'", "'\"'\"'") + "'"
+
+    def _quote_set_double(self, value: str) -> str:
+        return str(value).replace("\\", "\\\\").replace('"', '\\"').replace("$", "\\$").replace("`", "\\`")
+
+    def _format_set_assoc(self, name: str, amap: dict[str, str]) -> str:
+        if not amap:
+            return f"{name}=()"
+        parts: list[str] = []
+        for k, v in amap.items():
+            k_s = str(k)
+            if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", k_s) or re.fullmatch(r"[0-9]+", k_s):
+                k_expr = k_s
+            else:
+                k_expr = f'"{self._quote_set_double(k_s)}"'
+            parts.append(f'[{k_expr}]="{self._quote_set_double(str(v))}"')
+        return f"{name}=({' '.join(parts)} )"
+
+    def _format_set_array(self, name: str, arr: list[object]) -> str:
+        parts: list[str] = []
+        for i, v in enumerate(arr):
+            if v is None:
+                continue
+            parts.append(f'[{i}]="{self._quote_set_double(str(v))}"')
+        if not parts:
+            return f"{name}=()"
+        return f"{name}=({' '.join(parts)} )"
 
     def _run_export(self, args: List[str]) -> int:
         unexport = False
@@ -13764,11 +13827,8 @@ class Runtime:
                 typed = self._lookup_typed_var(base)
                 attrs = self._lookup_var_attrs_set(base)
                 if isinstance(typed, dict) and "assoc" in attrs:
-                    if (
-                        not self._shopts.get("assoc_expand_once", False)
-                        and any(ch in key for ch in {'"', "'", "`", "\\"})
-                    ):
-                        rendered = f"{base}[{self._eval_assoc_subscript_key(key)}]"
+                    rendered, ok = self._validate_assoc_name_for_builtin(base, key)
+                    if not ok:
                         self._report_error(
                             f"`{rendered}': not a valid identifier",
                             line=self.current_line,
@@ -13899,6 +13959,10 @@ class Runtime:
         rendered = f"{base}[{expanded}]"
         if self._shopts.get("assoc_expand_once", False):
             return rendered, True
+        if any(ch in k for ch in {'"', "\\", "`", "'"}):
+            return rendered, False
+        if "[" in expanded:
+            return rendered, False
         if "'" in expanded:
             return rendered, False
         return rendered, True
