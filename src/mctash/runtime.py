@@ -12691,22 +12691,29 @@ class Runtime:
                     self._set_subscript_projection(name, str(base.get("0", "")))
                     continue
                 if is_array_target:
-                    comp_entries = self._parse_compound_assignment_rhs_entries(value)
+                    comp_entries: list[tuple[str, bool]] | None = None
+                    if (
+                        raw_value is not None
+                        and raw_op == op
+                        and raw_name == name
+                    ):
+                        raw_entries = self._parse_compound_assignment_rhs_entries(raw_value)
+                        if raw_entries is not None:
+                            # Expand each raw compound element in assignment
+                            # context while preserving whether [idx]=rhs syntax
+                            # was explicit in source.
+                            comp_entries = []
+                            for raw_tok, explicit_idx_syntax in raw_entries:
+                                expanded_items = fields_to_text_list(
+                                    self._legacy_word_to_expansion_fields(raw_tok, assignment=False)
+                                )
+                                if not expanded_items:
+                                    expanded_items = [""]
+                                for item in expanded_items:
+                                    comp_entries.append((item, explicit_idx_syntax))
+                    if comp_entries is None:
+                        comp_entries = self._parse_compound_assignment_rhs_entries(value)
                     if comp_entries is not None:
-                        # Preserve explicit [idx]=rhs syntax provenance from
-                        # raw declaration word when available; expanded text
-                        # like `"$b"` -> `[0]=bar` must remain plain value.
-                        if (
-                            raw_value is not None
-                            and raw_op == op
-                            and raw_name == name
-                        ):
-                            raw_entries = self._parse_compound_assignment_rhs_entries(raw_value)
-                            if raw_entries is not None and len(raw_entries) == len(comp_entries):
-                                comp_entries = [
-                                    (comp_entries[i][0], raw_entries[i][1])
-                                    for i in range(len(comp_entries))
-                                ]
                         self._assign_compound_var(name, op, comp_entries, attrs_override=effective_attrs)
                         attrs_apply = dict(attr_flags)
                         attrs_apply["array"] = True
