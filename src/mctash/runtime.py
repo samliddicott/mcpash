@@ -16415,6 +16415,15 @@ class Runtime:
                     err_context = None
                     report_line -= 1
                 self._report_error(text, line=report_line, context=err_context)
+                if (
+                    self._diag.style == "bash"
+                    and "syntax error near unexpected token" in text
+                    and parse_context not in {"eval", "command substitution"}
+                    and report_line > 0
+                ):
+                    src_lines = source.splitlines()
+                    if report_line <= len(src_lines):
+                        self._print_stderr(self._format_error(f"`{src_lines[report_line - 1]}'", line=report_line))
                 if self._diag.style == "bash" and parse_context in {"eval", "command substitution"}:
                     src_for_diag = source
                     if (
