@@ -266,7 +266,7 @@ class _PyVarsMapping(MutableMapping[str, object]):
             removed = True
         if not removed:
             raise KeyError(key)
-        self._rt._var_attrs.pop(key, None)
+        self._rt._store_var_attrs_set(key, set())
         self._rt._drop_typed_var(key)
 
     def __iter__(self) -> Iterator[str]:
@@ -2424,7 +2424,7 @@ class Runtime:
             cmd_env = self._exported_env_view(self.env)
             for scope in self.local_stack:
                 for k, v in scope.items():
-                    if k in self.env and "exported" in self._var_attrs.get(k, set()):
+                    if k in self.env and "exported" in self._lookup_var_attrs_set(k):
                         cmd_env[k] = v
             for assign in (cmd.get("more_env") or []):
                 name = str(assign.get("name") or "")
@@ -2701,7 +2701,7 @@ class Runtime:
                 self._user_fds.add(read_fd)
             if write_fd >= 3:
                 self._user_fds.add(write_fd)
-            self._typed_vars[name] = [str(read_fd), str(write_fd)]
+            self._store_typed_var(name, ShellArray([str(read_fd), str(write_fd)], {"array"}))
             self._set_var_attrs(name, array=True)
             self._set_subscript_projection(name, str(read_fd))
             self._set_var(f"{name}_PID", str(proc.pid))
@@ -2846,7 +2846,7 @@ class Runtime:
                 attrs = self._structured_var_attrs(n)
                 if "array" in attrs or "assoc" in attrs:
                     continue
-                self._typed_vars.pop(n, None)
+                self._drop_typed_var(n)
             self.env.update(local_env)
             for tied_name in self._py_ties:
                 self.env[tied_name] = self._get_var(tied_name)
@@ -3416,7 +3416,7 @@ class Runtime:
                         attrs = self._structured_var_attrs(n)
                         if "array" in attrs or "assoc" in attrs:
                             continue
-                        self._typed_vars.pop(n, None)
+                        self._drop_typed_var(n)
                     saved_env.clear()
                     saved_env.update(self.env)
                 return 0
@@ -3495,7 +3495,7 @@ class Runtime:
                 attrs = self._structured_var_attrs(n)
                 if "array" in attrs or "assoc" in attrs:
                     continue
-                self._typed_vars.pop(n, None)
+                self._drop_typed_var(n)
             self.env.update(local_env)
             if "RANDOM" in assigned_names and "RANDOM" in local_env:
                 self._seed_random(local_env["RANDOM"])
@@ -3682,7 +3682,7 @@ class Runtime:
             exec_env = {
                 k: v
                 for k, v in local_env.items()
-                if "exported" in self._var_attrs.get(k, set())
+                if "exported" in self._lookup_var_attrs_set(k)
             }
             for env_pair in assign_pairs:
                 name = str(env_pair.get("name") or "")
@@ -3690,7 +3690,7 @@ class Runtime:
                     exec_env[name] = local_env.get(name, "")
             for scope in self.local_stack:
                 for k, v in scope.items():
-                    if k in self.env and "exported" in self._var_attrs.get(k, set()):
+                    if k in self.env and "exported" in self._lookup_var_attrs_set(k):
                         exec_env[k] = v
             saved_line = self.current_line
             end_line = self._asdl_simple_command_end_line(node)
@@ -5857,7 +5857,7 @@ class Runtime:
             cmd_env = self._exported_env_view(self.env)
             for scope in self.local_stack:
                 for k, v in scope.items():
-                    if k in self.env and "exported" in self._var_attrs.get(k, set()):
+                    if k in self.env and "exported" in self._lookup_var_attrs_set(k):
                         cmd_env[k] = v
             for assign in cmd.assignments:
                 value = self._expand_assignment_word(assign.value)
@@ -6398,7 +6398,7 @@ class Runtime:
                             attrs = self._structured_var_attrs(n)
                             if "array" in attrs or "assoc" in attrs:
                                 continue
-                            self._typed_vars.pop(n, None)
+                            self._drop_typed_var(n)
                         saved_env.clear()
                         saved_env.update(self.env)
                     return 0
@@ -6476,7 +6476,7 @@ class Runtime:
                     attrs = self._structured_var_attrs(n)
                     if "array" in attrs or "assoc" in attrs:
                         continue
-                    self._typed_vars.pop(n, None)
+                    self._drop_typed_var(n)
                 self.env.update(local_env)
                 for tied_name in self._py_ties:
                     self.env[tied_name] = self._get_var(tied_name)
@@ -6651,7 +6651,7 @@ class Runtime:
                 exec_env = {
                     k: v
                     for k, v in local_env.items()
-                    if "exported" in self._var_attrs.get(k, set())
+                    if "exported" in self._lookup_var_attrs_set(k)
                 }
                 for assign in node.assignments:
                     exec_env[assign.name] = local_env.get(assign.name, "")
@@ -6659,7 +6659,7 @@ class Runtime:
                 # commands, but only when that name is already exported.
                 for scope in self.local_stack:
                     for k, v in scope.items():
-                        if k in self.env and "exported" in self._var_attrs.get(k, set()):
+                        if k in self.env and "exported" in self._lookup_var_attrs_set(k):
                             exec_env[k] = v
                 return self._run_external(argv, exec_env, node.redirects)
             except RuntimeError as e:
@@ -9692,7 +9692,7 @@ class Runtime:
             return "~" + user
 
     def _param_attr_letters(self, name: str) -> str:
-        attrs = self._var_attrs.get(name, set())
+        attrs = self._lookup_var_attrs_set(name)
         letters: list[str] = []
         if "assoc" in attrs:
             letters.append("A")
@@ -9751,7 +9751,7 @@ class Runtime:
         return words
 
     def _typed_declare_A(self, name: str, typed: object) -> str:
-        attrs = self._var_attrs.get(name, set())
+        attrs = self._lookup_var_attrs_set(name)
         if isinstance(typed, list):
             elems: list[str] = []
             for i, v in enumerate(typed):
@@ -9899,10 +9899,10 @@ class Runtime:
             return "set -- " + " ".join(self._transform_q_quote(a) for a in self.positional)
         if name.isdigit() or name in {"#", "?", "$", "!", "-", "LINENO", "PPID"}:
             return ""
-        typed_decl = self._typed_declare_A(name, self._typed_vars.get(name))
+        typed_decl = self._typed_declare_A(name, self._lookup_typed_var(name))
         if typed_decl:
             return typed_decl
-        attrs = self._var_attrs.get(name, set())
+        attrs = self._lookup_var_attrs_set(name)
         if "assoc" in attrs:
             return f"declare -A {name}"
         if "array" in attrs:
@@ -10285,8 +10285,8 @@ class Runtime:
             raise RuntimeError(self._format_error("syntax error: bad substitution", line=self.current_line))
         if parsed_sub is not None:
             base, key = parsed_sub
-            typed = self._typed_vars.get(base)
-            attrs = self._var_attrs.get(base, set())
+            typed = self._lookup_typed_var(base)
+            attrs = self._lookup_var_attrs_set(base)
             vals_for_key: list[str] = []
             if key in {"@", "*"}:
                 if isinstance(typed, list):
@@ -10390,8 +10390,8 @@ class Runtime:
                 raise RuntimeError(f"unbound variable: {name}")
             return str(len(value))
         if op == "__keys__":
-            typed = self._typed_vars.get(name)
-            attrs = self._var_attrs.get(name, set())
+            typed = self._lookup_typed_var(name)
+            attrs = self._lookup_var_attrs_set(name)
             vals: list[str] = []
             if isinstance(typed, dict) and "assoc" in attrs:
                 vals = [str(k) for k in reversed(list(typed.keys()))]
@@ -11330,8 +11330,8 @@ class Runtime:
         if node[0] == "sub":
             base = str(node[1])
             idx = self._arith_eval_node(node[2])
-            attrs = self._var_attrs.get(base, set())
-            typed = self._typed_vars.get(base)
+            attrs = self._lookup_var_attrs_set(base)
+            typed = self._lookup_typed_var(base)
             if "assoc" in attrs:
                 cur_map = dict(typed) if isinstance(typed, dict) else {}
                 key = str(idx)
@@ -11367,7 +11367,7 @@ class Runtime:
 
     def _arith_get_subscript_int(self, base: str, idx: int) -> int:
         attrs = self._lookup_var_attrs_set(base)
-        typed = self._typed_vars.get(base)
+        typed = self._lookup_typed_var(base)
         if "assoc" in attrs and isinstance(typed, dict):
             raw = str(typed.get(str(idx), ""))
             if raw == "":
@@ -12251,7 +12251,7 @@ class Runtime:
         if self._bash_compat_level is None:
             raise RuntimeError(f"{name}: indexed assignment requires BASH_COMPAT")
         base, key = parsed
-        attrs = self._var_attrs.get(base, set())
+        attrs = self._lookup_var_attrs_set(base)
         if "assoc" in attrs:
             if base in self.readonly_vars:
                 raise RuntimeError(
@@ -13436,7 +13436,7 @@ class Runtime:
             break
         if print_only and idx >= len(args):
             for name in sorted(self.env.keys()):
-                if "exported" not in self._var_attrs.get(name, set()):
+                if "exported" not in self._lookup_var_attrs_set(name):
                     continue
                 print(f'declare -x {name}="{self.env.get(name, "")}"')
             return 0
@@ -13497,11 +13497,11 @@ class Runtime:
             def _dq(value: str) -> str:
                 return '"' + value.replace("\\", "\\\\").replace('"', '\\"').replace("$", "\\$") + '"'
             for name in sorted(self.readonly_vars):
-                attrs = set(self._var_attrs.get(name, set()))
+                attrs = self._lookup_var_attrs_set(name)
                 if "assoc" in attrs:
                     if show_array and not show_assoc:
                         continue
-                    typed = self._typed_vars.get(name)
+                    typed = self._lookup_typed_var(name)
                     decl_prefix = "readonly" if self.options.get("posix", False) else "declare"
                     if isinstance(typed, dict) and typed:
                         parts = [f"[{k}]={_dq(str(v))}" for k, v in typed.items()]
@@ -13512,7 +13512,7 @@ class Runtime:
                 if "array" in attrs:
                     if show_assoc and not show_array:
                         continue
-                    typed = self._typed_vars.get(name)
+                    typed = self._lookup_typed_var(name)
                     if isinstance(typed, list) and any(v is not None for v in typed):
                         parts = []
                         for i, v in enumerate(typed):
@@ -13603,15 +13603,15 @@ class Runtime:
             parsed = self._parse_subscripted_name(name)
             if parsed is not None:
                 base, key = parsed
-                typed = self._typed_vars.get(base)
-                attrs = self._var_attrs.get(base, set())
+                typed = self._lookup_typed_var(base)
+                attrs = self._lookup_var_attrs_set(base)
                 if isinstance(typed, dict) and "assoc" in attrs:
                     if key in {"@", "*"}:
                         # bash COMPAT <=51: unset A[@] removes the whole assoc
                         # variable; 5.2+ may target key '@' instead.
                         if self._compat_at_most(51):
-                            self._typed_vars.pop(base, None)
-                            self._var_attrs.pop(base, None)
+                            self._drop_typed_var(base)
+                            self._store_var_attrs_set(base, set())
                             self.env.pop(base, None)
                             continue
                     akey = self._eval_assoc_subscript_key(key)
@@ -13620,14 +13620,11 @@ class Runtime:
                     continue
                 if isinstance(typed, list):
                     if key in {"@", "*"}:
-                        self._typed_vars.pop(base, None)
-                        attrs_now = set(self._var_attrs.get(base, set()))
+                        self._drop_typed_var(base)
+                        attrs_now = self._lookup_var_attrs_set(base)
                         attrs_now.discard("array")
                         attrs_now.discard("assoc")
-                        if attrs_now:
-                            self._var_attrs[base] = attrs_now
-                        else:
-                            self._var_attrs.pop(base, None)
+                        self._store_var_attrs_set(base, attrs_now)
                         self.env.pop(base, None)
                         continue
                     m_name = re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", key)
@@ -13647,19 +13644,19 @@ class Runtime:
                 base_exists = (
                     base in self.env
                     or any(base in scope for scope in self.local_stack)
-                    or base in self._var_attrs
-                    or base in self._typed_vars
+                    or bool(self._lookup_var_attrs_set(base))
+                    or (self._lookup_typed_var(base) is not None)
                 )
                 if base_exists:
                     self._report_error(f"{base}: not an array variable", line=self.current_line, context="unset")
                     status = 1 if self._diag.style == "bash" else 2
                 continue
             had_var = False
-            if name in self._typed_vars or name in self._var_attrs:
+            if (self._lookup_typed_var(name) is not None) or bool(self._lookup_var_attrs_set(name)):
                 had_var = True
             else:
                 _, had_var = self._get_var_with_state(name)
-            self._typed_vars.pop(name, None)
+            self._drop_typed_var(name)
             removed_local = False
             for scope in reversed(self.local_stack):
                 if name in scope:
@@ -13670,7 +13667,7 @@ class Runtime:
                 continue
             if name in self.env:
                 del self.env[name]
-            self._var_attrs.pop(name, None)
+            self._store_var_attrs_set(name, set())
             if name == "OPTIND":
                 self._getopts_state = None
             if not had_var and not explicit_vars_mode:
@@ -13726,24 +13723,24 @@ class Runtime:
             self.env["RANDOM"] = str(value)
             return
         value = self._coerce_var_value(name, value)
-        attrs = self._var_attrs.get(name, set())
+        attrs = self._lookup_var_attrs_set(name)
         if "assoc" in attrs:
-            cur = self._typed_vars.get(name)
+            cur = self._lookup_typed_var(name)
             amap = dict(cur) if isinstance(cur, dict) else {}
             amap["0"] = value
-            self._typed_vars[name] = amap
+            self._store_typed_var(name, ShellAssoc(amap, attrs))
             self._set_subscript_projection(name, str(amap.get("0", "")))
             return
         if "array" in attrs:
-            cur = self._typed_vars.get(name)
+            cur = self._lookup_typed_var(name)
             arr = list(cur) if isinstance(cur, list) else []
             if not arr:
                 arr = [None]
             arr[0] = value
-            self._typed_vars[name] = arr
+            self._store_typed_var(name, ShellArray(arr, attrs))
             self._set_subscript_projection(name, value)
             return
-        self._typed_vars.pop(name, None)
+        self._drop_typed_var(name)
         tied = self._py_ties.get(name)
         if tied is not None:
             _, setter, tie_type = tied
@@ -13764,9 +13761,9 @@ class Runtime:
         parsed = self._parse_subscripted_name(name)
         if parsed is not None:
             base, key = parsed
-            attrs = self._var_attrs.get(base, set())
+            attrs = self._lookup_var_attrs_set(base)
             if "assoc" in attrs:
-                cur = self._typed_vars.get(base)
+                cur = self._lookup_typed_var(base)
                 amap = dict(cur) if isinstance(cur, dict) else {}
                 akey = str(self._eval_assoc_subscript_key(key))
                 old = str(amap.get(akey, ""))
@@ -13778,10 +13775,10 @@ class Runtime:
                 else:
                     merged = old + value
                 amap[akey] = merged
-                self._typed_vars[base] = amap
+                self._store_typed_var(base, ShellAssoc(amap, attrs))
                 self._set_subscript_projection(base, str(amap.get("0", "")))
                 return
-            cur_arr = self._typed_vars.get(base)
+            cur_arr = self._lookup_typed_var(base)
             arr = list(cur_arr) if isinstance(cur_arr, list) else []
             idx = self._eval_index_subscript(key, arr, strict=True, name=name)
             if idx is None:
@@ -13798,7 +13795,7 @@ class Runtime:
                 merged = old + value
             self._assign_shell_var(name, merged)
             return
-        attrs = self._var_attrs.get(name, set())
+        attrs = self._lookup_var_attrs_set(name)
         if "integer" in attrs:
             merged = str(
                 self._to_int_arith(self._get_var(name) if self._get_var(name) != "" else "0")
@@ -14820,7 +14817,7 @@ class Runtime:
         return {
             k: v
             for k, v in env.items()
-            if "exported" in self._var_attrs.get(k, set())
+            if "exported" in self._lookup_var_attrs_set(k)
         }
 
     def _declare_var(self, name: str, value: str = "", local_scope: bool = False, **flags: object) -> None:
@@ -15267,7 +15264,7 @@ class Runtime:
 
         if array_name is not None:
             fields = self._split_ifs(text)
-            self._typed_vars[array_name] = list(fields)
+            self._store_typed_var(array_name, ShellArray(list(fields), {"array"}))
             self._set_var_attrs(array_name, array=True)
             self._set_subscript_projection(array_name, fields[0] if fields else "")
             return 0 if ok else 1
@@ -15400,7 +15397,7 @@ class Runtime:
                     pass
             return 1
 
-        current = self._typed_vars.get(array_name)
+        current = self._lookup_typed_var(array_name)
         arr: list[object] = list(current) if isinstance(current, list) else []
         if origin > len(arr):
             arr.extend([None] * (origin - len(arr)))
@@ -15410,7 +15407,7 @@ class Runtime:
                 arr.append(item)
             else:
                 arr[pos] = item
-        self._typed_vars[array_name] = arr
+        self._store_typed_var(array_name, ShellArray(arr, {"array"}))
         self._set_var_attrs(array_name, array=True)
         vis = self._array_visible_values(arr)
         self._set_subscript_projection(array_name, vis[0] if vis else "")
@@ -16820,8 +16817,8 @@ class Runtime:
         parsed = self._parse_subscripted_name(expr)
         if parsed is not None:
             base, key = parsed
-            attrs = self._var_attrs.get(base, set())
-            typed = self._typed_vars.get(base)
+            attrs = self._lookup_var_attrs_set(base)
+            typed = self._lookup_typed_var(base)
             if key in {"@", "*"}:
                 if "assoc" in attrs and isinstance(typed, dict):
                     return len(typed) > 0
@@ -16836,7 +16833,7 @@ class Runtime:
                 i_key = self._eval_index_subscript(key, typed, strict=False, name=base)
                 return i_key is not None and 0 <= i_key < len(typed) and typed[i_key] is not None
             return False
-        attrs = self._var_attrs.get(expr, set())
+        attrs = self._lookup_var_attrs_set(expr)
         if "assoc" in attrs:
             return False
         if "array" in attrs:
