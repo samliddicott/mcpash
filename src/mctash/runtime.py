@@ -61,7 +61,7 @@ from .expand import (
     _split_braced,
 )
 from .expansion_model import ExpansionField, ExpansionSegment, fields_to_text_list
-from .lexer import LexContext, LexError, TokenReader
+from .lexer import LexContext, LexError, Token, TokenReader
 from .parser import ParseError, Parser
 from .asdl_map import AsdlMappingError, lst_list_item_to_asdl, word as lst_word_to_asdl_word
 from .word_parser import parse_word as parse_legacy_word
@@ -3900,23 +3900,14 @@ class Runtime:
         return ""
 
     def _asdl_rhs_compound_entries(self, rhs_word: dict[str, Any]) -> list[tuple[str, bool]] | None:
-        # Build entry IR from ASDL lexical source, then expand per-entry with
-        # assignment-context rules. This avoids reparsing expanded text (which
-        # can incorrectly reinterpret data-originated `[idx]=...` as syntax).
+        # Build entry IR from ASDL lexical source. Keep entries as raw lexical
+        # tokens (with quote/escape spelling) and explicit-index provenance.
+        # Expansion is then performed exactly once by _assign_compound_var().
         raw = self._asdl_word_to_text(rhs_word)
         raw_entries = self._parse_compound_assignment_rhs_entries(raw)
         if raw_entries is None:
             return None
-        out: list[tuple[str, bool]] = []
-        for raw_tok, explicit_idx_syntax in raw_entries:
-            expanded_items = fields_to_text_list(
-                self._legacy_word_to_expansion_fields(raw_tok, assignment=False)
-            )
-            if not expanded_items:
-                expanded_items = [""]
-            for item in expanded_items:
-                out.append((item, explicit_idx_syntax))
-        return out
+        return raw_entries
 
     def _asdl_rhs_assignment_ir(
         self, rhs: dict[str, Any] | None
@@ -11811,13 +11802,21 @@ class Runtime:
         vals: list[tuple[str, bool]] = []
         reader = TokenReader(inner)
         ctx = LexContext(reserved_words=set(), allow_reserved=False, allow_newline=False)
+        tokens: list[Token] = []
         while True:
             tok = reader.next(ctx)
             if tok is None:
                 break
             if tok.kind != "WORD":
                 return None
-            vals.append((tok.value, re.match(r"^\[(.*)\](\+?=)(.*)$", tok.value) is not None))
+            tokens.append(tok)
+        for i, tok in enumerate(tokens):
+            start = tok.index
+            end = tokens[i + 1].index if i + 1 < len(tokens) else len(inner)
+            # Preserve original lexical spelling (quotes/escapes included) so
+            # expansion keeps compound-entry quoting boundaries.
+            lexeme = inner[start:end].strip()
+            vals.append((lexeme, re.match(r"^\[(.*)\](\+?=)(.*)$", lexeme) is not None))
         return vals
 
     def _parse_compound_assignment_rhs(self, rhs: str) -> list[str] | None:
@@ -12778,18 +12777,10 @@ class Runtime:
                     ):
                         raw_entries = self._parse_compound_assignment_rhs_entries(raw_value)
                         if raw_entries is not None:
-                            # Expand each raw compound element in assignment
-                            # context while preserving whether [idx]=rhs syntax
-                            # was explicit in source.
-                            comp_entries = []
-                            for raw_tok, explicit_idx_syntax in raw_entries:
-                                expanded_items = fields_to_text_list(
-                                    self._legacy_word_to_expansion_fields(raw_tok, assignment=False)
-                                )
-                                if not expanded_items:
-                                    expanded_items = [""]
-                                for item in expanded_items:
-                                    comp_entries.append((item, explicit_idx_syntax))
+                            # Keep raw compound-entry lexemes and explicit
+                            # index provenance; _assign_compound_var() performs
+                            # the single expansion pass.
+                            comp_entries = list(raw_entries)
                     if comp_entries is None:
                         comp_entries = self._parse_compound_assignment_rhs_entries(value)
                     if comp_entries is not None:
