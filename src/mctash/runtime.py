@@ -12030,6 +12030,11 @@ class Runtime:
     def _argv_assignment_words(
         self, argv: list[str], eligible: list[bool] | None = None
     ) -> list[tuple[str, str, object, bool]] | None:
+        self._mark_legacy_path("assign.argv_regex")
+        if self._strict_asdl_only:
+            raise RuntimeError(
+                "strict ASDL mode: argv regex assignment parser is disabled"
+            )
         def _split_assignment_token(tok: str) -> tuple[str, str, str] | None:
             # Right-to-left split to handle '=' inside associative subscripts
             # that were flattened from quoted source forms.
