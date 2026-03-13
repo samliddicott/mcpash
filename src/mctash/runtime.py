@@ -3395,6 +3395,22 @@ class Runtime:
             return None
         return lhs, op, rhs_word, self._asdl_word_to_text(word), parsed_sub
 
+    def _asdl_all_assignment_words(
+        self, words: list[dict[str, Any]]
+    ) -> list[tuple[str, str, object, bool]] | None:
+        out: list[tuple[str, str, object, bool]] = []
+        for w in words:
+            assign = self._asdl_word_to_declare_assignment(w)
+            if assign is None:
+                return None
+            lhs, op, rhs_word, _raw, _parsed = assign
+            comp_entries = self._asdl_rhs_compound_entries(rhs_word)
+            if comp_entries is not None and self._bash_compat_level is not None:
+                out.append((lhs, op, comp_entries, True))
+                continue
+            out.append((lhs, op, self._expand_asdl_assignment_scalar(rhs_word), False))
+        return out
+
     def _asdl_word_can_expand_case_natively_safe(self, word: dict[str, Any]) -> bool:
         if not isinstance(word, dict) or word.get("type") != "word.Compound":
             return False
@@ -3630,7 +3646,12 @@ class Runtime:
         words_src = node.get("words") or []
         if isinstance(words_src, list) and len(words_src) == len(argv):
             eligible = [self._asdl_word_is_plain_assignment_candidate(w) for w in words_src]
-        argv_assigns = None if (argv and argv[0] in declaration_cmds) else self._argv_assignment_words(argv, eligible=eligible)
+        argv_assigns = None
+        if not (argv and argv[0] in declaration_cmds):
+            if isinstance(words_src, list):
+                argv_assigns = self._asdl_all_assignment_words([w for w in words_src if isinstance(w, dict)])
+            if argv_assigns is None:
+                argv_assigns = self._argv_assignment_words(argv, eligible=eligible)
         if argv_assigns is not None:
             saved_env = self.env
             try:
@@ -4680,6 +4701,11 @@ class Runtime:
         return fields
 
     def _legacy_word_to_expansion_fields(self, text: str, *, assignment: bool = False) -> list[ExpansionField]:
+        self._mark_legacy_path("word.legacy_reparse")
+        if self._strict_asdl_only:
+            raise RuntimeError(
+                "strict ASDL mode: legacy word reparse is disabled (parse_legacy_word path)"
+            )
         lst_word = parse_legacy_word(text)
         asdl_word = lst_word_to_asdl_word(lst_word)
         if assignment:
