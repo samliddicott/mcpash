@@ -11183,6 +11183,7 @@ class Runtime:
         ops = (
             "<<=",
             ">>=",
+            "**",
             "++",
             "--",
             "<=",
@@ -11415,7 +11416,15 @@ class Runtime:
                 op = self.take()
                 node = self._parse_unary()
                 return ("unary", op, node)
-            return self._parse_postfix()
+            return self._parse_power()
+
+        def _parse_power(self) -> Any:
+            node = self._parse_postfix()
+            if self.peek() == "**":
+                self.take()
+                # Right-associative exponentiation.
+                node = ("bin", "**", node, self._parse_unary())
+            return node
 
         def _parse_postfix(self) -> Any:
             node = self._parse_primary()
@@ -11470,32 +11479,32 @@ class Runtime:
             child = node[2]
             if op == "++":
                 old, setter = self._arith_resolve_lvalue(child)
-                new = old + 1
+                new = self._arith_narrow_int(old + 1)
                 setter(new)
                 return new
             if op == "--":
                 old, setter = self._arith_resolve_lvalue(child)
-                new = old - 1
+                new = self._arith_narrow_int(old - 1)
                 setter(new)
                 return new
             v = self._arith_eval_node(child)
             if op == "+":
                 return v
             if op == "-":
-                return -v
+                return self._arith_narrow_int(-v)
             if op == "!":
                 return 0 if v else 1
             if op == "~":
-                return ~v
+                return self._arith_narrow_int(~v)
             raise ValueError("unknown unary op")
         if t == "post":
             op = str(node[1])
             old, setter = self._arith_resolve_lvalue(node[2])
             if op == "++":
-                setter(old + 1)
+                setter(self._arith_narrow_int(old + 1))
                 return old
             if op == "--":
-                setter(old - 1)
+                setter(self._arith_narrow_int(old - 1))
                 return old
             raise ValueError("unknown postfix op")
         if t == "assign":
@@ -11505,29 +11514,29 @@ class Runtime:
             if op == "=":
                 out = rhs
             elif op == "+=":
-                out = old + rhs
+                out = self._arith_narrow_int(old + rhs)
             elif op == "-=":
-                out = old - rhs
+                out = self._arith_narrow_int(old - rhs)
             elif op == "*=":
-                out = old * rhs
+                out = self._arith_narrow_int(old * rhs)
             elif op == "/=":
                 if rhs == 0:
                     raise ZeroDivisionError()
-                out = int(old / rhs)
+                out = self._arith_narrow_int(int(old / rhs))
             elif op == "%=":
                 if rhs == 0:
                     raise ZeroDivisionError()
-                out = old % rhs
+                out = self._arith_narrow_int(old % rhs)
             elif op == "<<=":
-                out = old << rhs
+                out = self._arith_narrow_int(old << rhs)
             elif op == ">>=":
-                out = old >> rhs
+                out = self._arith_narrow_int(old >> rhs)
             elif op == "&=":
-                out = old & rhs
+                out = self._arith_narrow_int(old & rhs)
             elif op == "^=":
-                out = old ^ rhs
+                out = self._arith_narrow_int(old ^ rhs)
             elif op == "|=":
-                out = old | rhs
+                out = self._arith_narrow_int(old | rhs)
             else:
                 raise ValueError("unknown assignment op")
             setter(out)
@@ -11552,23 +11561,23 @@ class Runtime:
             left = self._arith_eval_node(node[2])
             right = self._arith_eval_node(node[3])
             if op == "+":
-                return left + right
+                return self._arith_narrow_int(left + right)
             if op == "-":
-                return left - right
+                return self._arith_narrow_int(left - right)
             if op == "*":
-                return left * right
+                return self._arith_narrow_int(left * right)
             if op == "/":
                 if right == 0:
                     raise ZeroDivisionError()
-                return int(left / right)
+                return self._arith_narrow_int(int(left / right))
             if op == "%":
                 if right == 0:
                     raise ZeroDivisionError()
-                return left % right
+                return self._arith_narrow_int(left % right)
             if op == "<<":
-                return left << right
+                return self._arith_narrow_int(left << right)
             if op == ">>":
-                return left >> right
+                return self._arith_narrow_int(left >> right)
             if op == "<":
                 return 1 if left < right else 0
             if op == "<=":
@@ -11582,13 +11591,26 @@ class Runtime:
             if op == "!=":
                 return 1 if left != right else 0
             if op == "&":
-                return left & right
+                return self._arith_narrow_int(left & right)
             if op == "^":
-                return left ^ right
+                return self._arith_narrow_int(left ^ right)
             if op == "|":
-                return left | right
+                return self._arith_narrow_int(left | right)
+            if op == "**":
+                if right < 0:
+                    raise ValueError("negative exponent")
+                return self._arith_narrow_int(left**right)
             raise ValueError("unknown binary op")
         raise ValueError("invalid arithmetic node type")
+
+    def _arith_narrow_int(self, value: int) -> int:
+        if self._bash_compat_level is None:
+            return int(value)
+        mask = (1 << 64) - 1
+        v = int(value) & mask
+        if v >= (1 << 63):
+            v -= (1 << 64)
+        return v
 
     def _arith_resolve_lvalue(self, node: Any) -> tuple[int, Callable[[int], None]]:
         if not isinstance(node, tuple) or not node:
@@ -11732,7 +11754,8 @@ class Runtime:
             alpha = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ@_"
             out = 0
             for ch in digits:
-                d = alpha.find(ch)
+                key = ch.lower() if (base <= 36 and "A" <= ch <= "Z") else ch
+                d = alpha.find(key)
                 if d < 0 or d >= base:
                     raise ValueError("invalid based literal")
                 out = out * base + d
