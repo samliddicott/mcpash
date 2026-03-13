@@ -9370,6 +9370,8 @@ class Runtime:
     def _expand_assignment_word(self, text: str) -> str:
         if self._is_process_subst(text):
             return self._process_substitute(text)
+        if text.startswith("~"):
+            text = self._tilde_expand(text)
         fields = self._legacy_word_to_expansion_fields(text, assignment=True)
         texts = fields_to_text_list(fields)
         return texts[0] if texts else ""
@@ -12603,6 +12605,9 @@ class Runtime:
                     if raw_name.endswith("+"):
                         raw_op = "+="
                         raw_name = raw_name[:-1]
+                rhs_for_expand = value
+                if raw_value is not None and raw_op == op and raw_name == name:
+                    rhs_for_expand = raw_value
                 parsed_decl = self._parse_subscripted_name(name)
                 parsed_base = parsed_decl[0] if parsed_decl is not None else name
                 # `declare -a var[10]=x` accepts the indexed spelling but acts
@@ -12643,7 +12648,7 @@ class Runtime:
                     status = 1
                     continue
                 if parsed_decl is not None:
-                    expanded_sub = self._expand_assignment_word(value)
+                    expanded_sub = self._expand_assignment_word(rhs_for_expand)
                     if op == "+=":
                         cur, is_set = self._get_var_with_state(name)
                         expanded_sub = (cur if is_set else "") + expanded_sub
@@ -12679,7 +12684,7 @@ class Runtime:
                         self._set_var_attrs(name, **attrs_apply)
                         self._set_subscript_projection(name, str(base.get("0", "")))
                         continue
-                    expanded_assoc_value = self._expand_assignment_word(value)
+                    expanded_assoc_value = self._expand_assignment_word(rhs_for_expand)
                     cur = self._typed_vars.get(name)
                     base = dict(cur) if (op == "+=" and isinstance(cur, dict)) else {}
                     merged = (str(base.get("0", "")) + expanded_assoc_value) if op == "+=" else expanded_assoc_value
@@ -12719,7 +12724,7 @@ class Runtime:
                         attrs_apply["array"] = True
                         self._set_var_attrs(name, **attrs_apply)
                         continue
-                    expanded_arr_value = self._expand_assignment_word(value)
+                    expanded_arr_value = self._expand_assignment_word(rhs_for_expand)
                     cur = self._typed_vars.get(name)
                     base_list: list[object]
                     if op == "+=" and isinstance(cur, list):
@@ -12737,7 +12742,7 @@ class Runtime:
                     self._set_var_attrs(name, **attrs_apply)
                     self._set_subscript_projection(name, str(base_list[0]) if base_list else "")
                     continue
-                expanded = self._expand_assignment_word(value)
+                expanded = self._expand_assignment_word(rhs_for_expand)
                 integer_target = "integer" in target_attrs
                 if op == "+=":
                     if integer_target:
