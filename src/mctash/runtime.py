@@ -28,7 +28,7 @@ import uuid
 import resource
 from contextlib import contextmanager, redirect_stdout
 from collections.abc import MutableMapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, Iterable, Iterator, List, Optional, Tuple
 
 from .ast_nodes import (
@@ -113,6 +113,20 @@ class AssignmentEntry:
     text: str
     explicit_index_syntax: bool
     expanded: bool = False
+
+
+@dataclass
+class TieBinding:
+    getter: Any
+    setter: Any
+    tie_type: str | None = None
+
+
+@dataclass
+class ShellScalar:
+    value: str = ""
+    attrs: set[str] = field(default_factory=set)
+    tie: TieBinding | None = None
 
 
 class ShellArray(list):
@@ -653,9 +667,11 @@ class _PyBridge:
                 return
             raise ValueError(f"unsupported tie type: {tie_type}")
         self._rt._py_ties[name] = (getter, setter, tie_type)
+        self._rt._set_scalar_tie(name, getter, setter, tie_type)
 
     def untie(self, name: str) -> None:
         self._rt._py_ties.pop(name, None)
+        self._rt._clear_scalar_tie(name)
 
 
 class Runtime:
@@ -937,8 +953,7 @@ class Runtime:
         self.functions_source: Dict[str, str] = {}
         self.aliases: Dict[str, str] = {}
         self.local_stack: List[Dict[str, str]] = []
-        self._local_typed_vars_stack: List[Dict[str, object]] = []
-        self._local_var_attrs_stack: List[Dict[str, set[str]]] = []
+        self._local_var_store_stack: List[Dict[str, object]] = []
         self.script_name: str = ""
         self.options: Dict[str, bool] = {"h": True, "B": True}
         self.readonly_vars: set[str] = set()
@@ -988,7 +1003,10 @@ class Runtime:
         self._pipeline_input_latency: float | None = None
         self._test_mode: bool = self.env.get("MCTASH_TEST_MODE", "") == "1"
         self._py_import_counter: int = 0
-        self._var_attrs: Dict[str, set[str]] = {k: {"exported"} for k in self.env.keys()}
+        self._global_var_store: Dict[str, object] = {
+            k: ShellScalar(value=str(v), attrs={"exported"}) for k, v in self.env.items()
+        }
+        self._var_attrs: Dict[str, set[str]] = {}
         self._typed_vars: Dict[str, object] = {}
         self.disabled_builtins: set[str] = set()
         self._dir_stack: list[str] = [self.env.get("PWD", os.getcwd())]
@@ -1072,6 +1090,7 @@ class Runtime:
         self._py_globals["sh"] = _PyBridge(self)
         self._py_globals["bash"] = self._py_globals["sh"]
         self._py_globals["shell"] = self._py_globals["sh"]
+        self._set_scalar_tie("RANDOM", self._next_random, self._seed_random, "integer")
         self._sync_root_frame()
         self._sync_funcname_array()
         # Align with ash test assumptions: shell starts with only stdio fds open.
@@ -7667,8 +7686,7 @@ class Runtime:
         saved_positional = list(self.positional)
         self.set_positional_args(args)
         self.local_stack.append({})
-        self._local_typed_vars_stack.append({})
-        self._local_var_attrs_stack.append({})
+        self._local_var_store_stack.append({})
         self._call_stack.append(name)
         self._sync_funcname_array()
         saved_loop_depth = self._loop_depth
@@ -7689,8 +7707,7 @@ class Runtime:
             self._loop_depth = saved_loop_depth
             self._call_stack.pop()
             self._sync_funcname_array()
-            self._local_var_attrs_stack.pop()
-            self._local_typed_vars_stack.pop()
+            self._local_var_store_stack.pop()
             self.local_stack.pop()
             self.set_positional_args(saved_positional)
         return status
@@ -11654,12 +11671,23 @@ class Runtime:
             raise RuntimeError(self._format_error(f"{target}: {e.strerror}", line=self.current_line))
 
     def _get_var(self, name: str) -> str:
-        if name == "RANDOM":
-            return self._next_random()
         parsed = self._parse_subscripted_name(name)
         if parsed is not None:
             v, is_set = self._get_var_with_state(name)
             return v if is_set else ""
+        obj = self._lookup_var_obj(name)
+        if isinstance(obj, ShellScalar):
+            if obj.tie is not None:
+                try:
+                    return self._tie_value_to_shell(obj.tie.getter, obj.tie.tie_type)
+                except Exception:
+                    return ""
+            for scope in reversed(self.local_stack):
+                if name in scope:
+                    return scope[name]
+            if name in self.env:
+                return self.env[name]
+            return obj.value
         tied = self._py_ties.get(name)
         if tied is not None:
             getter, _, tie_type = tied
@@ -11678,65 +11706,86 @@ class Runtime:
                 return True
         return False
 
-    def _lookup_typed_var(self, name: str) -> object | None:
-        for scope in reversed(self._local_typed_vars_stack):
+    def _lookup_var_obj(self, name: str) -> object | None:
+        for scope in reversed(self._local_var_store_stack):
             if name in scope:
                 return scope[name]
-        return self._typed_vars.get(name)
+        return self._global_var_store.get(name)
 
-    def _store_typed_var(self, name: str, value: object, *, local_scope: bool = False) -> None:
-        if local_scope and self._local_typed_vars_stack:
-            self._local_typed_vars_stack[-1][name] = value
+    def _store_var_obj(self, name: str, obj: object, *, local_scope: bool = False) -> None:
+        if local_scope and self._local_var_store_stack:
+            self._local_var_store_stack[-1][name] = obj
             return
-        for scope in reversed(self._local_typed_vars_stack):
+        for scope in reversed(self._local_var_store_stack):
             if name in scope:
-                scope[name] = value
+                scope[name] = obj
                 return
-        if self._has_local_name(name) and self._local_typed_vars_stack:
-            self._local_typed_vars_stack[-1][name] = value
+        if self._has_local_name(name) and self._local_var_store_stack:
+            self._local_var_store_stack[-1][name] = obj
             return
-        self._typed_vars[name] = value
+        self._global_var_store[name] = obj
 
-    def _drop_typed_var(self, name: str, *, local_scope: bool = False) -> None:
-        if local_scope and self._local_typed_vars_stack:
-            self._local_typed_vars_stack[-1].pop(name, None)
+    def _drop_var_obj(self, name: str, *, local_scope: bool = False) -> None:
+        if local_scope and self._local_var_store_stack:
+            self._local_var_store_stack[-1].pop(name, None)
             return
-        for scope in reversed(self._local_typed_vars_stack):
+        for scope in reversed(self._local_var_store_stack):
             if name in scope:
                 scope.pop(name, None)
                 return
-        self._typed_vars.pop(name, None)
+        self._global_var_store.pop(name, None)
+
+    def _lookup_typed_var(self, name: str) -> object | None:
+        obj = self._lookup_var_obj(name)
+        if isinstance(obj, (ShellArray, ShellAssoc)):
+            return obj
+        return None
+
+    def _store_typed_var(self, name: str, value: object, *, local_scope: bool = False) -> None:
+        if isinstance(value, ShellArray):
+            self._store_var_obj(name, value, local_scope=local_scope)
+            return
+        if isinstance(value, ShellAssoc):
+            self._store_var_obj(name, value, local_scope=local_scope)
+            return
+        if isinstance(value, list):
+            self._store_var_obj(name, ShellArray(value), local_scope=local_scope)
+            return
+        if isinstance(value, dict):
+            self._store_var_obj(name, ShellAssoc(value), local_scope=local_scope)
+            return
+        self._store_var_obj(name, value, local_scope=local_scope)
+
+    def _drop_typed_var(self, name: str, *, local_scope: bool = False) -> None:
+        obj = self._lookup_var_obj(name)
+        if isinstance(obj, (ShellArray, ShellAssoc)):
+            self._drop_var_obj(name, local_scope=local_scope)
+        elif isinstance(obj, ShellScalar):
+            # Keep scalar metadata object; typed drop is no-op for scalar.
+            return
 
     def _lookup_var_attrs_set(self, name: str) -> set[str]:
-        for scope in reversed(self._local_var_attrs_stack):
-            if name in scope:
-                return set(scope[name])
-        return set(self._var_attrs.get(name, set()))
+        obj = self._lookup_var_obj(name)
+        if isinstance(obj, (ShellScalar, ShellArray, ShellAssoc)):
+            return set(getattr(obj, "attrs", set()))
+        return set()
 
     def _store_var_attrs_set(self, name: str, attrs: set[str], *, local_scope: bool = False) -> None:
-        if local_scope and self._local_var_attrs_stack:
-            if attrs:
-                self._local_var_attrs_stack[-1][name] = set(attrs)
-            else:
-                self._local_var_attrs_stack[-1].pop(name, None)
-            return
-        for scope in reversed(self._local_var_attrs_stack):
-            if name in scope:
-                if attrs:
-                    scope[name] = set(attrs)
-                else:
-                    scope.pop(name, None)
-                return
-        if self._has_local_name(name) and self._local_var_attrs_stack:
-            if attrs:
-                self._local_var_attrs_stack[-1][name] = set(attrs)
-            else:
-                self._local_var_attrs_stack[-1].pop(name, None)
+        obj = self._lookup_var_obj(name)
+        if isinstance(obj, (ShellScalar, ShellArray, ShellAssoc)):
+            obj.attrs = set(attrs)  # type: ignore[attr-defined]
+            if not attrs and isinstance(obj, ShellScalar) and obj.tie is None:
+                self._drop_var_obj(name, local_scope=local_scope)
             return
         if attrs:
-            self._var_attrs[name] = set(attrs)
-        else:
-            self._var_attrs.pop(name, None)
+            value = ""
+            for scope in reversed(self.local_stack):
+                if name in scope:
+                    value = scope[name]
+                    break
+            else:
+                value = self.env.get(name, "")
+            self._store_var_obj(name, ShellScalar(value=value, attrs=set(attrs)), local_scope=local_scope)
 
     def _parse_subscripted_name(self, name: str) -> tuple[str, str] | None:
         m = re.fullmatch(r"([A-Za-z_][A-Za-z0-9_]*)\[(.*)\]", name)
@@ -12411,8 +12460,9 @@ class Runtime:
         return idx
 
     def _get_var_with_state(self, name: str) -> tuple[str, bool]:
-        if name == "RANDOM":
-            return self._next_random(), True
+        obj0 = self._lookup_var_obj(name)
+        if isinstance(obj0, ShellScalar) and obj0.tie is not None:
+            return self._get_var(name), True
         parsed = self._parse_subscripted_name(name)
         if parsed is not None:
             if self._bash_compat_level is None:
@@ -12679,10 +12729,13 @@ class Runtime:
             raise RuntimeError(
                 self._format_error(self._diag_msg(DiagnosticKey.READONLY_VAR, name=name), line=self.current_line)
             )
-        if name == "RANDOM":
-            self._seed_random(value)
-            self.env["RANDOM"] = str(value)
-            return
+        obj = self._lookup_var_obj(name)
+        if isinstance(obj, ShellScalar) and obj.tie is not None:
+            if callable(obj.tie.setter):
+                obj.tie.setter(self._shell_to_tie_value(value, obj.tie.tie_type))
+                self.env[name] = self._get_var(name)
+                return
+            raise RuntimeError(f"{name}: tied variable is read-only")
         value = self._coerce_var_value(name, value)
         attrs = self._lookup_var_attrs_set(name)
         if "assoc" in attrs:
@@ -12923,9 +12976,7 @@ class Runtime:
                 all_names: set[str] = set(self.env.keys()) | set(self._var_attrs.keys()) | set(self._typed_vars.keys())
                 for scope in self.local_stack:
                     all_names.update(scope.keys())
-                for scope in self._local_var_attrs_stack:
-                    all_names.update(scope.keys())
-                for scope in self._local_typed_vars_stack:
+                for scope in self._local_var_store_stack:
                     all_names.update(scope.keys())
                 all_names.update(self.readonly_vars)
                 filtered: list[str] = []
@@ -13727,10 +13778,13 @@ class Runtime:
             return
         if name in self.readonly_vars:
             raise RuntimeError(self._diag_msg(DiagnosticKey.READONLY_VAR, name=name))
-        if name == "RANDOM":
-            self._seed_random(value)
-            self.env["RANDOM"] = str(value)
-            return
+        obj = self._lookup_var_obj(name)
+        if isinstance(obj, ShellScalar) and obj.tie is not None:
+            if callable(obj.tie.setter):
+                obj.tie.setter(self._shell_to_tie_value(value, obj.tie.tie_type))
+                self.env[name] = self._get_var(name)
+                return
+            raise RuntimeError(f"{name}: tied variable is read-only")
         value = self._coerce_var_value(name, value)
         attrs = self._lookup_var_attrs_set(name)
         if "assoc" in attrs:
@@ -14423,13 +14477,13 @@ class Runtime:
             self._clear_structured_python_exception_vars()
         for name in untie_vars:
             self._py_ties.pop(name, None)
+            self._clear_scalar_tie(name)
         for name in tie_vars:
             self._py_globals[name] = self._get_var(name)
-            self._py_ties[name] = (
-                (lambda n=name: self._py_globals.get(n, "")),
-                (lambda v, n=name: self._py_globals.__setitem__(n, v)),
-                "scalar",
-            )
+            getter = (lambda n=name: self._py_globals.get(n, ""))
+            setter = (lambda v, n=name: self._py_globals.__setitem__(n, v))
+            self._py_ties[name] = (getter, setter, "scalar")
+            self._set_scalar_tie(name, getter, setter, "scalar")
 
         if not payload and (tie_vars or untie_vars):
             return 0
@@ -14771,6 +14825,27 @@ class Runtime:
                     out[k] = v
             return out
         return value
+
+    def _set_scalar_tie(
+        self,
+        name: str,
+        getter: Any,
+        setter: Any,
+        tie_type: str | None = None,
+    ) -> None:
+        obj = self._lookup_var_obj(name)
+        if isinstance(obj, ShellScalar):
+            obj.tie = TieBinding(getter=getter, setter=setter, tie_type=tie_type)
+            return
+        value = self.env.get(name, "")
+        tied = ShellScalar(value=value, attrs=self._lookup_var_attrs_set(name))
+        tied.tie = TieBinding(getter=getter, setter=setter, tie_type=tie_type)
+        self._store_var_obj(name, tied)
+
+    def _clear_scalar_tie(self, name: str) -> None:
+        obj = self._lookup_var_obj(name)
+        if isinstance(obj, ShellScalar):
+            obj.tie = None
 
     def _get_var_attrs(self, name: str) -> dict[str, bool]:
         attrs = self._lookup_var_attrs_set(name)
