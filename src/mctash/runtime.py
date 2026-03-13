@@ -10925,11 +10925,14 @@ class Runtime:
         return output.rstrip("\n")
 
     def _expand_arith(self, expr: str, context: str | None = None) -> str:
-        try:
-            expr = self._expand_assignment_word(expr)
-        except Exception:
-            pass
-        expr = self._materialize_random_in_arith(expr)
+        raw_expr = expr
+        expanded_expr = expr
+        if "\\$" not in expr:
+            try:
+                expanded_expr = self._expand_assignment_word(expr)
+            except Exception:
+                expanded_expr = expr
+        expr = self._materialize_random_in_arith(expanded_expr)
         try:
             return str(self._eval_arith_expr(expr))
         except ZeroDivisionError:
@@ -10943,6 +10946,16 @@ class Runtime:
         except ArithExpansionFailure:
             raise
         except Exception:
+            # Expanded arithmetic text can become syntactically invalid for
+            # associative-key forms (e.g. key values containing apostrophes or
+            # shell metacharacters). Retry with the raw arithmetic source, now
+            # that the arithmetic parser understands $name tokens and assoc
+            # subscript key resolution.
+            if expanded_expr != raw_expr:
+                try:
+                    return str(self._eval_arith_expr(self._materialize_random_in_arith(raw_expr)))
+                except Exception:
+                    pass
             if context != "subscript":
                 self._report_error(
                     self._diag_msg(DiagnosticKey.ARITH_SYNTAX_ERROR),
@@ -11007,6 +11020,13 @@ class Runtime:
             "^",
             "|",
         )
+
+        def _starts_op(pos: int) -> bool:
+            for op in ops:
+                if expr.startswith(op, pos):
+                    return True
+            return False
+
         while i < n:
             ch = expr[i]
             if ch.isspace():
@@ -11021,16 +11041,38 @@ class Runtime:
                 tokens.append(matched_op)
                 i += len(matched_op)
                 continue
-            if ch.isalpha() or ch == "_":
+            if ch == "\\" and i + 1 < n:
+                if expr[i + 1] == "$":
+                    j = i + 2
+                    while j < n and (expr[j].isalnum() or expr[j] == "_"):
+                        j += 1
+                    tokens.append(expr[i:j])
+                    i = j
+                    continue
+                tokens.append(expr[i : i + 2])
+                i += 2
+                continue
+            if ch == "$":
+                if i + 1 < n and expr[i + 1] == "{":
+                    j = i + 2
+                    while j < n and expr[j] != "}":
+                        j += 1
+                    if j < n and expr[j] == "}":
+                        inner = expr[i + 2 : j]
+                        if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", inner):
+                            tokens.append(inner)
+                            i = j + 1
+                            continue
                 j = i + 1
                 while j < n and (expr[j].isalnum() or expr[j] == "_"):
                     j += 1
-                tokens.append(expr[i:j])
-                i = j
-                continue
-            if ch.isdigit():
+                if j > i + 1:
+                    tokens.append(expr[i + 1 : j])
+                    i = j
+                    continue
+            if ch.isalpha() or ch == "_" or ch.isdigit():
                 j = i + 1
-                while j < n and (expr[j].isalnum() or expr[j] in {"#", "_", "@", "."}):
+                while j < n and (not expr[j].isspace()) and (not _starts_op(j)):
                     j += 1
                 tokens.append(expr[i:j])
                 i = j
@@ -11214,6 +11256,8 @@ class Runtime:
             return self._arith_get_var_int(str(node[1]), seen=set())
         if t == "sub":
             base = str(node[1])
+            if "assoc" in self._lookup_var_attrs_set(base):
+                return self._arith_get_subscript_int(base, node[2])
             idx = self._arith_eval_node(node[2])
             return self._arith_get_subscript_int(base, idx)
         if t == "comma":
@@ -11357,12 +11401,11 @@ class Runtime:
             return cur, _set
         if node[0] == "sub":
             base = str(node[1])
-            idx = self._arith_eval_node(node[2])
             attrs = self._lookup_var_attrs_set(base)
             typed = self._lookup_typed_var(base)
             if "assoc" in attrs:
                 cur_map = dict(typed) if isinstance(typed, dict) else {}
-                key = str(idx)
+                key = self._arith_assoc_key_from_node(node[2])
                 old_raw = str(cur_map.get(key, ""))
                 try:
                     old = self._arith_parse_number(old_raw)
@@ -11373,6 +11416,7 @@ class Runtime:
                     self._assign_shell_var(f"{base}[{key}]", str(v))
 
                 return old, _set
+            idx = self._arith_eval_node(node[2])
             cur_arr = list(typed) if isinstance(typed, list) else []
             if idx < 0:
                 max_idx = self._array_max_index(cur_arr)
@@ -11393,17 +11437,30 @@ class Runtime:
             return old, _set
         raise ValueError("invalid lvalue")
 
-    def _arith_get_subscript_int(self, base: str, idx: int) -> int:
+    def _arith_assoc_key_from_node(self, node: Any) -> str:
+        if isinstance(node, tuple) and node:
+            t = node[0]
+            if t == "var":
+                return self._get_var(str(node[1]))
+            if t == "num":
+                raw = str(node[1])
+                raw = raw.replace("\\$", "$").replace("\\]", "]").replace("\\\\", "\\")
+                return raw
+        return str(self._arith_eval_node(node))
+
+    def _arith_get_subscript_int(self, base: str, idx_or_node: Any) -> int:
         attrs = self._lookup_var_attrs_set(base)
         typed = self._lookup_typed_var(base)
         if "assoc" in attrs and isinstance(typed, dict):
-            raw = str(typed.get(str(idx), ""))
+            key = self._arith_assoc_key_from_node(idx_or_node)
+            raw = str(typed.get(key, ""))
             if raw == "":
                 return 0
             try:
                 return self._arith_parse_number(raw)
             except Exception:
                 return self._arith_get_var_int(raw, seen={base})
+        idx = int(idx_or_node)
         if isinstance(typed, list):
             if idx < 0:
                 max_idx = self._array_max_index(typed)
@@ -11448,6 +11505,8 @@ class Runtime:
             return self._arith_get_var_int(str(node[1]), seen=seen)
         if isinstance(node, tuple) and node and node[0] == "sub":
             base = str(node[1])
+            if "assoc" in self._lookup_var_attrs_set(base):
+                return self._arith_get_subscript_int(base, node[2])
             idx = self._arith_eval_node_with_seen(node[2], seen)
             return self._arith_get_subscript_int(base, idx)
         if isinstance(node, tuple) and node and node[0] == "num":
