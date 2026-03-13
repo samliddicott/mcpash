@@ -11770,6 +11770,10 @@ class Runtime:
                 continue
             try:
                 idx = self._eval_index_subscript(idx_expr, out_vals, strict=True, name=name)
+            except ArithExpansionFailure:
+                # Fatal arithmetic syntax in explicit index: keep previous
+                # variable value instead of partially applying later entries.
+                return
             except RuntimeError:
                 self._report_error(f"[{idx_text}]={rhs_raw}: bad array subscript", line=self.current_line)
                 continue
@@ -11986,8 +11990,20 @@ class Runtime:
             idx = int(self._expand_arith(text, context="subscript"))
         except ArithExpansionFailure:
             if strict:
-                label = name or key or "array"
-                raise RuntimeError(f"{label}: bad array subscript")
+                if self._diag.style == "bash":
+                    parts = text.split()
+                    err_tok = parts[-1] if parts else text
+                    self._report_error(
+                        f'{text}: syntax error in expression (error token is "{err_tok}")',
+                        line=self.current_line,
+                    )
+                else:
+                    self._report_error(
+                        self._diag_msg(DiagnosticKey.ARITH_SYNTAX_ERROR),
+                        line=self.current_line,
+                        context="subscript",
+                    )
+                raise
             return None
         except Exception:
             if strict:
