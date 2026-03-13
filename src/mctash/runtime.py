@@ -22,6 +22,7 @@ import threading
 import time
 import fnmatch
 import re
+import warnings
 import traceback
 import textwrap
 import uuid
@@ -3310,12 +3311,9 @@ class Runtime:
         return out
 
     def _expand_asdl_conditional_argv(self, node: dict[str, Any]) -> list[str]:
-        """Expand [[ ... ]] words without field splitting/pathname expansion."""
+        """Return raw [[ ... ]] words; evaluate operands lazily in _run_test."""
         words = node.get("words") or []
-        out: list[str] = []
-        for w in words:
-            out.extend(self._expand_asdl_word_fields(w, split_glob=False))
-        return out
+        return [self._asdl_word_to_text(w) for w in words]
 
     def _expand_asdl_declare_argv(
         self, node: dict[str, Any], cmd_name: str
@@ -3496,10 +3494,13 @@ class Runtime:
             finally:
                 self._alias_textual_depth -= 1
         try:
-            self._validate_asdl_simple_like_words(node)
             if raw_words and raw_words[0] == "[[":
+                # Do not eagerly validate/expand all [[ operands. Bash
+                # short-circuit evaluation can avoid invalid substitutions in
+                # non-evaluated branches.
                 argv = self._expand_asdl_conditional_argv(node)
             else:
+                self._validate_asdl_simple_like_words(node)
                 argv = self._expand_asdl_simple_argv(node)
         except RuntimeError as e:
             msg = str(e)
@@ -15108,7 +15109,7 @@ class Runtime:
                         i += 2
                         continue
                     j = i + 1
-                    while j < len(fmt) and fmt[j] not in "diouxXseEfFgGaA":
+                    while j < len(fmt) and fmt[j] not in "diouxXseEfFgGaAqbc":
                         j += 1
                     if j >= len(fmt):
                         out.append(fmt[i:])
@@ -15118,7 +15119,21 @@ class Runtime:
                     val = vals[vi] if vi < len(vals) else ""
                     vi += 1
                     if spec == "s":
-                        out.append(directive % val)
+                        try:
+                            out.append(directive % val)
+                        except Exception:
+                            out.append(str(val))
+                    elif spec == "q":
+                        out.append(self._transform_q_quote(str(val)))
+                    elif spec == "b":
+                        out.append(self._decode_backslash_escapes(str(val)))
+                    elif spec == "c":
+                        try:
+                            num = int(str(val), 0)
+                            out.append(chr(num & 0xFF))
+                        except Exception:
+                            sval = str(val)
+                            out.append(sval[:1] if sval else "")
                     elif spec in ["d", "i", "o", "u", "x", "X"]:
                         try:
                             num = int(val, 0)
@@ -15126,18 +15141,30 @@ class Runtime:
                             num = 0
                         if spec == "u":
                             num &= (1 << 64) - 1
-                            out.append((directive[:-1] + "d") % num)
+                            try:
+                                out.append((directive[:-1] + "d") % num)
+                            except Exception:
+                                out.append(str(num))
                         elif spec in ["x", "X", "o"] and num < 0:
                             num &= (1 << 64) - 1
-                            out.append(directive % num)
+                            try:
+                                out.append(directive % num)
+                            except Exception:
+                                out.append(str(num))
                         else:
-                            out.append(directive % num)
+                            try:
+                                out.append(directive % num)
+                            except Exception:
+                                out.append(str(num))
                     elif spec in ["e", "E", "f", "F", "g", "G", "a", "A"]:
                         try:
                             num = float(val)
                         except ValueError:
                             num = 0.0
-                        out.append(directive % num)
+                        try:
+                            out.append(directive % num)
+                        except Exception:
+                            out.append(str(num))
                     else:
                         out.append(val)
                     i = j + 1
@@ -17632,26 +17659,13 @@ class Runtime:
 
     def _run_test(self, name: str, args: List[str]) -> int:
         tokens = list(args)
+        in_dbl_bracket = name == "[["
         if name == "[":
             if tokens and tokens[-1] == "]":
                 tokens = tokens[:-1]
         if name == "[[":
             if tokens and tokens[-1] == "]]":
                 tokens = tokens[:-1]
-            if "||" in tokens:
-                idx = tokens.index("||")
-                left = self._run_test("[[", tokens[:idx] + ["]]"])
-                if left == 0:
-                    return 0
-                right = self._run_test("[[", tokens[idx + 1 :] + ["]]"])
-                return right
-            if "&&" in tokens:
-                idx = tokens.index("&&")
-                left = self._run_test("[[", tokens[:idx] + ["]]"])
-                if left != 0:
-                    return left
-                right = self._run_test("[[", tokens[idx + 1 :] + ["]]"])
-                return right
         import locale
 
         def _int_or_zero(s: str) -> int:
@@ -17660,22 +17674,63 @@ class Runtime:
             except Exception:
                 return 0
 
+        def _cond_expand(tok: str) -> str:
+            if not in_dbl_bracket:
+                return tok
+            return self._expand_assignment_word_protected(tok)
+
+        def _token_is_quoted(tok: str) -> bool:
+            return ("'" in tok) or ('"' in tok) or ("\\" in tok)
+
+        def _set_bash_rematch(match: re.Match[str] | None) -> None:
+            if self._bash_compat_level is None:
+                return
+            if match is None:
+                arr = ShellArray([], {"array"})
+                self._store_typed_var("BASH_REMATCH", arr)
+                self._set_var_attrs("BASH_REMATCH", array=True)
+                self._set_subscript_projection("BASH_REMATCH", "")
+                return
+            vals = [match.group(0)] + list(match.groups())
+            arr = ShellArray(vals, {"array"})
+            self._store_typed_var("BASH_REMATCH", arr)
+            self._set_var_attrs("BASH_REMATCH", array=True)
+            self._set_subscript_projection("BASH_REMATCH", vals[0] if vals else "")
+
+        def _arith_int_or_error(s: str) -> int:
+            try:
+                return int(self._expand_arith(s, context="test"))
+            except ArithExpansionFailure:
+                raise ValueError("arith")
+            except Exception:
+                raise ValueError("arith")
+
         i = 0
 
         def parse_or() -> bool:
             nonlocal i
             val = parse_and()
-            while i < len(tokens) and tokens[i] == "-o":
+            op_or = "||" if in_dbl_bracket else "-o"
+            while i < len(tokens) and tokens[i] == op_or:
                 i += 1
-                val = val or parse_and()
+                # Short-circuit: still parse rhs to consume tokens, but avoid
+                # evaluating it when lhs is true.
+                if val:
+                    _ = parse_and_skip()
+                else:
+                    val = parse_and()
             return val
 
         def parse_and() -> bool:
             nonlocal i
             val = parse_not()
-            while i < len(tokens) and tokens[i] == "-a":
+            op_and = "&&" if in_dbl_bracket else "-a"
+            while i < len(tokens) and tokens[i] == op_and:
                 i += 1
-                val = val and parse_not()
+                if not val:
+                    _ = parse_not_skip()
+                else:
+                    val = parse_not()
             return val
 
         def parse_not() -> bool:
@@ -17684,6 +17739,53 @@ class Runtime:
                 i += 1
                 return not parse_not()
             return parse_primary()
+
+        def parse_and_skip() -> bool:
+            nonlocal i
+            _ = parse_not_skip()
+            op_and = "&&" if in_dbl_bracket else "-a"
+            while i < len(tokens) and tokens[i] == op_and:
+                i += 1
+                _ = parse_not_skip()
+            return False
+
+        def parse_not_skip() -> bool:
+            nonlocal i
+            if i < len(tokens) and tokens[i] == "!":
+                i += 1
+                _ = parse_not_skip()
+                return False
+            _ = parse_primary_skip()
+            return False
+
+        def parse_primary_skip() -> bool:
+            nonlocal i
+            if i >= len(tokens):
+                return False
+            t = tokens[i]
+            if t in {"(", "\\("}:
+                i += 1
+                _ = parse_or_skip()
+                if i < len(tokens) and tokens[i] in {")", "\\)"}:
+                    i += 1
+                return False
+            if i + 1 < len(tokens) and t in {"-e", "-v", "-n", "-z", "-f", "-d", "-x", "-t", "-s"}:
+                i += 2
+                return False
+            if i + 2 < len(tokens):
+                i += 3
+                return False
+            i += 1
+            return False
+
+        def parse_or_skip() -> bool:
+            nonlocal i
+            _ = parse_and_skip()
+            op_or = "||" if in_dbl_bracket else "-o"
+            while i < len(tokens) and tokens[i] == op_or:
+                i += 1
+                _ = parse_and_skip()
+            return False
 
         def parse_primary() -> bool:
             nonlocal i
@@ -17699,7 +17801,7 @@ class Runtime:
             # Unary primaries.
             if i + 1 < len(tokens) and t in {"-e", "-v", "-n", "-z", "-f", "-d", "-x", "-t", "-s"}:
                 op = t
-                arg = tokens[i + 1]
+                arg = _cond_expand(tokens[i + 1])
                 i += 2
                 if op == "-e":
                     return os.path.exists(arg)
@@ -17728,21 +17830,50 @@ class Runtime:
                         return False
             # Binary primaries.
             if i + 2 < len(tokens):
-                left = tokens[i]
+                raw_left = tokens[i]
+                left = _cond_expand(raw_left)
                 op = tokens[i + 1]
-                right = tokens[i + 2]
-                if op in {"=", "!="}:
+                raw_right = tokens[i + 2]
+                right = _cond_expand(raw_right)
+                if op in {"=", "==", "!="}:
                     i += 3
-                    out = (left == right)
-                    return out if op == "=" else (not out)
+                    if in_dbl_bracket and not _token_is_quoted(raw_right):
+                        out = self._shell_pattern_match(left, right)
+                    else:
+                        out = (left == right)
+                    return out if op in {"=", "=="} else (not out)
+                if in_dbl_bracket and op == "=~":
+                    i += 3
+                    try:
+                        with warnings.catch_warnings():
+                            warnings.simplefilter("ignore", FutureWarning)
+                            m = re.search(right, left)
+                    except re.error:
+                        m = None
+                    _set_bash_rematch(m)
+                    return m is not None
                 if op in {"<", ">"}:
                     i += 3
                     cmp = locale.strcoll(left, right)
                     return cmp < 0 if op == "<" else cmp > 0
+                if op in {"-ef", "-nt", "-ot"}:
+                    i += 3
+                    try:
+                        if op == "-ef":
+                            return os.path.samefile(left, right)
+                        if op == "-nt":
+                            return os.path.getmtime(left) > os.path.getmtime(right)
+                        return os.path.getmtime(left) < os.path.getmtime(right)
+                    except Exception:
+                        return False
                 if op in {"-eq", "-ne", "-gt", "-ge", "-lt", "-le"}:
                     i += 3
-                    lnum = _int_or_zero(left)
-                    rnum = _int_or_zero(right)
+                    if in_dbl_bracket:
+                        lnum = _arith_int_or_error(left)
+                        rnum = _arith_int_or_error(right)
+                    else:
+                        lnum = _int_or_zero(left)
+                        rnum = _int_or_zero(right)
                     if op == "-eq":
                         return lnum == rnum
                     if op == "-ne":
@@ -17756,11 +17887,18 @@ class Runtime:
                     if op == "-le":
                         return lnum <= rnum
             # Fallback: non-empty string test.
+            t = _cond_expand(t)
             i += 1
             return t != ""
 
-        result = parse_or()
-        return 0 if result else 1
+        try:
+            result = parse_or()
+            return 0 if result else 1
+        except ValueError:
+            return 1
+        except RuntimeError as e:
+            self._print_stderr(str(e))
+            return self._runtime_error_status(str(e))
 
     def _test_var_is_set(self, expr: str) -> bool:
         parsed = self._parse_subscripted_name(expr)
