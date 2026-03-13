@@ -1013,6 +1013,7 @@ class Runtime:
         self._compiled_cache: Dict[tuple[str, str], Callable[["Runtime"], int]] = {}
         self._compile_fallback_seen: set[str] = set()
         self._compiled_depth: int = 0
+        self._subscript_arith_reported: bool = False
         self._legacy_path_hits: Dict[str, int] = {}
         self._strict_asdl_only: bool = self.env.get("MCTASH_STRICT_ASDL", "").strip().lower() in {
             "1",
@@ -11720,15 +11721,27 @@ class Runtime:
                 name = m_comp.group(1)
                 op = m_comp.group(2)
                 tail = m_comp.group(3)
-                vals: list[str] = []
+                vals: list[AssignmentEntry] = []
                 while True:
                     if tail.endswith(")"):
                         chunk = tail[:-1]
                         if chunk != "":
-                            vals.append(chunk)
+                            vals.append(
+                                AssignmentEntry(
+                                    text=chunk,
+                                    explicit_index_syntax=(re.match(r"^\[(.*)\](\+?=)(.*)$", chunk) is not None),
+                                    expanded=False,
+                                )
+                            )
                         break
                     if tail != "":
-                        vals.append(tail)
+                        vals.append(
+                            AssignmentEntry(
+                                text=tail,
+                                explicit_index_syntax=(re.match(r"^\[(.*)\](\+?=)(.*)$", tail) is not None),
+                                expanded=False,
+                            )
+                        )
                     i += 1
                     if i >= len(folded_words):
                         return None
@@ -11744,12 +11757,18 @@ class Runtime:
                 if i + 1 >= len(folded_words) or folded_words[i + 1] != "(":
                     return None
                 i += 2
-                vals = []
+                vals: list[AssignmentEntry] = []
                 while i < len(folded_words):
                     cur = folded_words[i]
                     if cur == ")":
                         break
-                    vals.append(cur)
+                    vals.append(
+                        AssignmentEntry(
+                            text=cur,
+                            explicit_index_syntax=(re.match(r"^\[(.*)\](\+?=)(.*)$", cur) is not None),
+                            expanded=False,
+                        )
+                    )
                     i += 1
                 if i >= len(folded_words) or folded_words[i] != ")":
                     return None
@@ -11795,28 +11814,13 @@ class Runtime:
         self,
         name: str,
         op: str,
-        values: list[str] | list[tuple[str, bool]] | list[AssignmentEntry],
+        values: list[AssignmentEntry],
         *,
         attrs_override: set[str] | None = None,
     ) -> None:
         if self._bash_compat_level is None:
             raise RuntimeError(f"{name}: compound assignment requires BASH_COMPAT")
-        normalized: list[AssignmentEntry] = []
-        for v in values:
-            if isinstance(v, AssignmentEntry):
-                normalized.append(v)
-                continue
-            if isinstance(v, tuple):
-                normalized.append(AssignmentEntry(str(v[0]), bool(v[1]), False))
-                continue
-            tok = str(v)
-            normalized.append(
-                AssignmentEntry(
-                    tok,
-                    re.match(r"^\[(.*)\](\+?=)(.*)$", tok) is not None,
-                    False,
-                )
-            )
+        normalized: list[AssignmentEntry] = values
         attrs = set(attrs_override) if attrs_override is not None else self._var_attrs.get(name, set())
         if "assoc" in attrs:
             cur_map = self._typed_vars.get(name)
@@ -11880,18 +11884,20 @@ class Runtime:
                 continue
             try:
                 idx = self._eval_index_subscript(idx_expr, out_vals, strict=True, name=name)
-            except ArithExpansionFailure:
-                # Fatal arithmetic syntax in explicit index: keep previous
-                # variable value instead of partially applying later entries.
-                if op != "+=":
-                    # For compound replacement assignments, bash leaves the
-                    # array as an explicitly empty array after fatal index
-                    # arithmetic errors.
-                    self._typed_vars[name] = out_vals
-                    self._set_var_attrs(name, array=True)
-                    self._set_subscript_projection(name, "")
-                return
             except RuntimeError:
+                if self._subscript_arith_reported:
+                    self._subscript_arith_reported = False
+                    # Fatal arithmetic syntax in explicit index: keep previous
+                    # variable value instead of partially applying later
+                    # entries.
+                    if op != "+=":
+                        # For compound replacement assignments, bash leaves the
+                        # array as an explicitly empty array after fatal index
+                        # arithmetic errors.
+                        self._typed_vars[name] = out_vals
+                        self._set_var_attrs(name, array=True)
+                        self._set_subscript_projection(name, "")
+                    return
                 self._report_error(f"[{idx_text}]={rhs_raw}: bad array subscript", line=self.current_line)
                 continue
             if idx is None:
@@ -11918,14 +11924,14 @@ class Runtime:
             proj = str(out_vals[0])
         self._set_subscript_projection(name, proj)
 
-    def _parse_compound_assignment_rhs_entries(self, rhs: str) -> list[tuple[str, bool]] | None:
+    def _parse_compound_assignment_rhs_entries(self, rhs: str) -> list[AssignmentEntry] | None:
         text = rhs.strip()
         if not (text.startswith("(") and text.endswith(")")):
             return None
         inner = text[1:-1]
         if inner.strip() == "":
             return []
-        vals: list[tuple[str, bool]] = []
+        vals: list[AssignmentEntry] = []
         reader = TokenReader(inner)
         ctx = LexContext(reserved_words=set(), allow_reserved=False, allow_newline=False)
         tokens: list[Token] = []
@@ -11942,14 +11948,18 @@ class Runtime:
             # Preserve original lexical spelling (quotes/escapes included) so
             # expansion keeps compound-entry quoting boundaries.
             lexeme = inner[start:end].strip()
-            vals.append((lexeme, re.match(r"^\[(.*)\](\+?=)(.*)$", lexeme) is not None))
+            vals.append(
+                AssignmentEntry(
+                    text=lexeme,
+                    explicit_index_syntax=(re.match(r"^\[(.*)\](\+?=)(.*)$", lexeme) is not None),
+                    expanded=False,
+                )
+            )
         return vals
 
-    def _parse_compound_assignment_rhs(self, rhs: str) -> list[str] | None:
+    def _parse_compound_assignment_rhs(self, rhs: str) -> list[AssignmentEntry] | None:
         entries = self._parse_compound_assignment_rhs_entries(rhs)
-        if entries is None:
-            return None
-        return [v for v, _ in entries]
+        return entries
 
     def _compound_assignment_unexpected_token(self, rhs: str) -> str | None:
         text = rhs.strip()
@@ -11975,8 +11985,9 @@ class Runtime:
         out: dict[str, str] = {}
         i = 0
         while i < len(entries):
-            tok, explicit_idx_syntax = entries[i]
-            if explicit_idx_syntax:
+            entry = entries[i]
+            tok = entry.text
+            if entry.explicit_index_syntax:
                 m = re.match(r"^\[(.*)\](\+?=)(.*)$", tok)
                 if m is None:
                     return None
@@ -11989,9 +12000,10 @@ class Runtime:
                     out[key] = val
                 i += 1
                 continue
-            key = self._expand_assignment_word(tok)
+            key = tok if entry.expanded else self._expand_assignment_word(tok)
             if i + 1 < len(entries):
-                val = self._expand_assignment_word(entries[i + 1][0])
+                nxt = entries[i + 1]
+                val = nxt.text if nxt.expanded else self._expand_assignment_word(nxt.text)
                 i += 2
             else:
                 val = ""
@@ -12128,7 +12140,9 @@ class Runtime:
                         line=self.current_line,
                         context="subscript",
                     )
-                raise
+                self._subscript_arith_reported = True
+                label = name or key or "array"
+                raise RuntimeError(f"{label}: bad array subscript")
             return None
         except Exception:
             if strict:
@@ -12895,7 +12909,7 @@ class Runtime:
                     self._set_subscript_projection(name, str(base.get("0", "")))
                     continue
                 if is_array_target:
-                    comp_entries: list[tuple[str, bool]] | None = None
+                    comp_entries: list[AssignmentEntry] | None = None
                     if (
                         raw_value is not None
                         and raw_op == op
