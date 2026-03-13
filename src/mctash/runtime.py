@@ -11902,7 +11902,7 @@ class Runtime:
                 scalar_value, scalar_set = self._get_var_with_state(base)
                 if not scalar_set:
                     return "", False
-                idx = self._eval_index_subscript(key, [], strict=True, name=base, empty_is_zero=True)
+                idx = self._eval_index_subscript(key, [], strict=False, name=base, empty_is_zero=True)
                 if idx is None or idx != 0:
                     return "", False
                 return scalar_value, True
