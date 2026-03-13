@@ -1006,8 +1006,6 @@ class Runtime:
         self._global_var_store: Dict[str, object] = {
             k: ShellScalar(value=str(v), attrs={"exported"}) for k, v in self.env.items()
         }
-        self._var_attrs: Dict[str, set[str]] = {}
-        self._typed_vars: Dict[str, object] = {}
         self.disabled_builtins: set[str] = set()
         self._dir_stack: list[str] = [self.env.get("PWD", os.getcwd())]
         self._disowned_nohup: set[int] = set()
@@ -1142,10 +1140,14 @@ class Runtime:
         self.env.setdefault("DIRSTACK", "()")
         self.env.setdefault("FUNCNAME", "()")
         # Keep bash special arrays visible in declare -a listings.
-        self._typed_vars.setdefault("BASH_SOURCE", [])
-        self._typed_vars.setdefault("BASH_LINENO", ["0"])
-        self._typed_vars.setdefault("DIRSTACK", [])
-        self._typed_vars.setdefault("FUNCNAME", [])
+        if self._lookup_typed_var("BASH_SOURCE") is None:
+            self._store_typed_var("BASH_SOURCE", ShellArray([], {"array"}))
+        if self._lookup_typed_var("BASH_LINENO") is None:
+            self._store_typed_var("BASH_LINENO", ShellArray(["0"], {"array"}))
+        if self._lookup_typed_var("DIRSTACK") is None:
+            self._store_typed_var("DIRSTACK", ShellArray([], {"array"}))
+        if self._lookup_typed_var("FUNCNAME") is None:
+            self._store_typed_var("FUNCNAME", ShellArray([], {"array"}))
         self._set_var_attrs("BASH_SOURCE", array=True)
         self._set_var_attrs("BASH_LINENO", array=True)
         self._set_var_attrs("DIRSTACK", array=True)
@@ -6016,8 +6018,8 @@ class Runtime:
         tmp = tempfile.TemporaryFile()
         saved_env = dict(self.env)
         saved_locals = [dict(s) for s in self.local_stack]
-        saved_typed = copy.deepcopy(self._typed_vars)
-        saved_attrs = {k: set(v) for k, v in self._var_attrs.items()}
+        saved_var_store = copy.deepcopy(self._global_var_store)
+        saved_local_var_store = [copy.deepcopy(s) for s in self._local_var_store_stack]
         saved_readonly = set(self.readonly_vars)
         saved_opts = dict(self.options)
         saved_positional = list(self.positional)
@@ -6043,8 +6045,8 @@ class Runtime:
         finally:
             self.env = saved_env
             self.local_stack = saved_locals
-            self._typed_vars = saved_typed
-            self._var_attrs = saved_attrs
+            self._global_var_store = saved_var_store
+            self._local_var_store_stack = saved_local_var_store
             self.readonly_vars = saved_readonly
             self.options = saved_opts
             self.positional = saved_positional
@@ -12973,7 +12975,7 @@ class Runtime:
 
         if print_vars:
             if not names:
-                all_names: set[str] = set(self.env.keys()) | set(self._var_attrs.keys()) | set(self._typed_vars.keys())
+                all_names: set[str] = set(self.env.keys()) | set(self._global_var_store.keys())
                 for scope in self.local_stack:
                     all_names.update(scope.keys())
                 for scope in self._local_var_store_stack:
@@ -17038,7 +17040,8 @@ class Runtime:
         saved_offset = self._line_offset
         saved_options = dict(self.options)
         saved_env = dict(self.env)
-        saved_typed_vars = copy.deepcopy(self._typed_vars)
+        saved_var_store = copy.deepcopy(self._global_var_store)
+        saved_local_var_store = [copy.deepcopy(s) for s in self._local_var_store_stack]
         saved_local_stack = [dict(scope) for scope in self.local_stack]
         saved_positional = list(self.positional)
         saved_script_name = self.script_name
@@ -17051,7 +17054,8 @@ class Runtime:
         # Evaluate command substitution in an isolated mutable state so
         # temporary mutations don't leak back through shared dict objects.
         self.env = dict(saved_env)
-        self._typed_vars = copy.deepcopy(saved_typed_vars)
+        self._global_var_store = copy.deepcopy(saved_var_store)
+        self._local_var_store_stack = [copy.deepcopy(s) for s in saved_local_var_store]
         self.local_stack = [dict(scope) for scope in saved_local_stack]
         self.positional = list(saved_positional)
         # In bash/ash POSIX behavior, command substitution under `set -e`
@@ -17076,7 +17080,8 @@ class Runtime:
             self._line_offset = saved_offset
             self.options = saved_options
             self.env = saved_env
-            self._typed_vars = saved_typed_vars
+            self._global_var_store = saved_var_store
+            self._local_var_store_stack = saved_local_var_store
             self.local_stack = saved_local_stack
             self.positional = saved_positional
             self.script_name = saved_script_name
@@ -17112,7 +17117,8 @@ class Runtime:
         saved_offset = self._line_offset
         saved_options = dict(self.options)
         saved_env = dict(self.env)
-        saved_typed_vars = copy.deepcopy(self._typed_vars)
+        saved_var_store = copy.deepcopy(self._global_var_store)
+        saved_local_var_store = [copy.deepcopy(s) for s in self._local_var_store_stack]
         saved_local_stack = [dict(scope) for scope in self.local_stack]
         saved_positional = list(self.positional)
         saved_script_name = self.script_name
@@ -17123,7 +17129,8 @@ class Runtime:
         base = (self.current_line or 1) + line_bias
         self._line_offset = saved_offset + (base - 1)
         self.env = dict(saved_env)
-        self._typed_vars = copy.deepcopy(saved_typed_vars)
+        self._global_var_store = copy.deepcopy(saved_var_store)
+        self._local_var_store_stack = [copy.deepcopy(s) for s in saved_local_var_store]
         self.local_stack = [dict(scope) for scope in saved_local_stack]
         self.positional = list(saved_positional)
         if not saved_options.get("posix", False):
@@ -17153,7 +17160,8 @@ class Runtime:
             self._line_offset = saved_offset
             self.options = saved_options
             self.env = saved_env
-            self._typed_vars = saved_typed_vars
+            self._global_var_store = saved_var_store
+            self._local_var_store_stack = saved_local_var_store
             self.local_stack = saved_local_stack
             self.positional = saved_positional
             self.script_name = saved_script_name
