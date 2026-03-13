@@ -1108,13 +1108,24 @@ class Runtime:
         except Exception:
             seed = 0
         self._random_state = seed & 0x7FFFFFFF
-        if self._random_state == 0:
-            self._random_state = 1
 
     def _next_random(self) -> str:
-        # LCG-based 15-bit RANDOM surface; deterministic under assignment.
-        self._random_state = (1103515245 * self._random_state + 12345) & 0x7FFFFFFF
-        out = (self._random_state >> 16) & 0x7FFF
+        # Bash-compatible RANDOM generator:
+        # - state transition: Park-Miller minimal standard generator
+        # - output folding: ((state >> 16) ^ (state & 0xFFFF)) & 0x7FFF
+        # This matches modern bash behavior after `RANDOM=<seed>`.
+        rseed = self._random_state
+        if rseed == 0:
+            rseed = 123459876
+        h = rseed // 127773
+        l = rseed - (127773 * h)
+        t = (16807 * l) - (2836 * h)
+        self._random_state = (t + 0x7FFFFFFF) if t < 0 else t
+        if self._bash_compat_level is not None and self._bash_compat_level <= 50:
+            # bash compat <=5.0 historical RANDOM surface
+            out = self._random_state & 0x7FFF
+        else:
+            out = ((self._random_state >> 16) ^ (self._random_state & 0xFFFF)) & 0x7FFF
         s = str(out)
         self.env["RANDOM"] = s
         return s
@@ -10769,13 +10780,9 @@ class Runtime:
     def _substring(self, value: str, arg_text: str) -> str:
         if arg_text == "":
             raise RuntimeError(self._format_error("syntax error: missing '}'", line=self.current_line))
-        if ":" in arg_text:
-            off_text, len_text = arg_text.split(":", 1)
-            has_len = True
-        else:
-            off_text, len_text = arg_text, ""
-            has_len = False
-        off = self._to_int_arith(off_text if off_text != "" else "0")
+        off_text, len_text, has_len = self._split_substring_arg(arg_text)
+        off_expr = self._expand_assignment_word(off_text if off_text != "" else "0")
+        off = int(self._expand_arith(off_expr if off_expr != "" else "0", context="subscript"))
         n = len(value)
         if off < 0:
             if -off > n:
@@ -10787,7 +10794,8 @@ class Runtime:
             return value[off:]
         if len_text == "":
             return ""
-        ln = self._to_int_arith(len_text)
+        len_expr = self._expand_assignment_word(len_text if len_text != "" else "0")
+        ln = int(self._expand_arith(len_expr if len_expr != "" else "0", context="subscript"))
         if ln < 0:
             end = n + ln
             if end < off:
@@ -10800,12 +10808,7 @@ class Runtime:
     def _slice_fields(self, values: list[str], arg_text: str) -> list[str]:
         if arg_text == "":
             raise RuntimeError(self._format_error("syntax error: missing '}'", line=self.current_line))
-        if ":" in arg_text:
-            off_text, len_text = arg_text.split(":", 1)
-            has_len = True
-        else:
-            off_text, len_text = arg_text, ""
-            has_len = False
+        off_text, len_text, has_len = self._split_substring_arg(arg_text)
         try:
             off = int(self._expand_arith(off_text if off_text != "" else "0", context="subscript"))
         except Exception:
@@ -10835,12 +10838,7 @@ class Runtime:
     def _slice_indexed_array(self, values: list[object], arg_text: str) -> list[str]:
         if arg_text == "":
             raise RuntimeError(self._format_error("syntax error: missing '}'", line=self.current_line))
-        if ":" in arg_text:
-            off_text, len_text = arg_text.split(":", 1)
-            has_len = True
-        else:
-            off_text, len_text = arg_text, ""
-            has_len = False
+        off_text, len_text, has_len = self._split_substring_arg(arg_text)
         try:
             off = int(self._expand_arith(off_text if off_text != "" else "0", context="subscript"))
         except Exception:
@@ -11129,7 +11127,10 @@ class Runtime:
     def _expand_arith(self, expr: str, context: str | None = None) -> str:
         raw_expr = expr
         expanded_expr = expr
-        if "\\$" not in expr:
+        # Keep single quotes literal in arithmetic context so invalid forms
+        # like $(( 'foo' )) raise syntax errors instead of being quote-removed
+        # into identifiers.
+        if "\\$" not in expr and "'" not in expr:
             try:
                 expanded_expr = self._expand_assignment_word(expr)
             except Exception:
@@ -11230,10 +11231,92 @@ class Runtime:
                     return True
             return False
 
+        def _prev_is_operand() -> bool:
+            if not tokens:
+                return False
+            t = tokens[-1]
+            if t in {")", "]"}:
+                return True
+            if t in {
+                "<<=",
+                ">>=",
+                "**",
+                "++",
+                "--",
+                "<=",
+                ">=",
+                "==",
+                "!=",
+                "&&",
+                "||",
+                "<<",
+                ">>",
+                "+=",
+                "-=",
+                "*=",
+                "/=",
+                "%=",
+                "&=",
+                "^=",
+                "|=",
+                "=",
+                "?",
+                ":",
+                ",",
+                "(",
+                "[",
+                "+",
+                "-",
+                "*",
+                "/",
+                "%",
+                "!",
+                "~",
+                "<",
+                ">",
+                "&",
+                "^",
+                "|",
+            }:
+                return False
+            return True
+
+        def _prev_kind() -> str:
+            if not tokens:
+                return "none"
+            t = tokens[-1]
+            if t in {")", "]"}:
+                return "close"
+            if re.fullmatch(r"[0-9]+(?:#[0-9A-Za-z@_]+)?", t):
+                return "num"
+            if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", t):
+                return "var"
+            return "other"
+
         while i < n:
             ch = expr[i]
             if ch.isspace():
                 i += 1
+                continue
+            if expr.startswith("+++", i):
+                if _prev_is_operand():
+                    if _prev_kind() == "num":
+                        tokens.extend(["+", "++"])
+                    else:
+                        tokens.extend(["++", "+"])
+                else:
+                    tokens.extend(["++", "+"])
+                i += 3
+                continue
+            if expr.startswith("---", i):
+                if _prev_is_operand():
+                    if _prev_kind() == "num":
+                        tokens.extend(["-", "--"])
+                    else:
+                        tokens.extend(["--", "-"])
+                else:
+                    tokens.extend(["--", "-"])
+                i += 3
                 continue
             matched_op = None
             for op in ops:
@@ -11457,12 +11540,32 @@ class Runtime:
             return False
         return node[0] in {"var", "sub"}
 
+    def _arith_is_const_expr(self, node: Any) -> bool:
+        if not isinstance(node, tuple) or not node:
+            return False
+        t = node[0]
+        if t == "num":
+            return True
+        if t == "unary":
+            return self._arith_is_const_expr(node[2])
+        if t == "bin":
+            return self._arith_is_const_expr(node[2]) and self._arith_is_const_expr(node[3])
+        if t == "ternary":
+            return (
+                self._arith_is_const_expr(node[1])
+                and self._arith_is_const_expr(node[2])
+                and self._arith_is_const_expr(node[3])
+            )
+        if t == "comma":
+            return self._arith_is_const_expr(node[1]) and self._arith_is_const_expr(node[2])
+        return False
+
     def _arith_eval_node(self, node: Any) -> int:
         if not isinstance(node, tuple) or not node:
             raise ValueError("invalid arithmetic node")
         t = node[0]
         if t == "num":
-            return self._arith_parse_number(str(node[1]))
+            return self._arith_narrow_int(self._arith_parse_number(str(node[1])))
         if t == "var":
             return self._arith_get_var_int(str(node[1]), seen=set())
         if t == "sub":
@@ -11478,15 +11581,25 @@ class Runtime:
             op = str(node[1])
             child = node[2]
             if op == "++":
-                old, setter = self._arith_resolve_lvalue(child)
-                new = self._arith_narrow_int(old + 1)
-                setter(new)
-                return new
+                if self._arith_is_lvalue(child):
+                    old, setter = self._arith_resolve_lvalue(child)
+                    new = self._arith_narrow_int(old + 1)
+                    setter(new)
+                    return new
+                # Bash accepts ++<number> as a value expression without
+                # side-effects.
+                if self._arith_is_const_expr(child):
+                    return self._arith_eval_node(child)
+                raise ValueError("invalid increment target")
             if op == "--":
-                old, setter = self._arith_resolve_lvalue(child)
-                new = self._arith_narrow_int(old - 1)
-                setter(new)
-                return new
+                if self._arith_is_lvalue(child):
+                    old, setter = self._arith_resolve_lvalue(child)
+                    new = self._arith_narrow_int(old - 1)
+                    setter(new)
+                    return new
+                if self._arith_is_const_expr(child):
+                    return self._arith_eval_node(child)
+                raise ValueError("invalid decrement target")
             v = self._arith_eval_node(child)
             if op == "+":
                 return v
@@ -11509,33 +11622,43 @@ class Runtime:
             raise ValueError("unknown postfix op")
         if t == "assign":
             op = str(node[1])
-            old, setter = self._arith_resolve_lvalue(node[2])
             rhs = self._arith_eval_node(node[3])
             if op == "=":
+                _, setter = self._arith_resolve_lvalue(node[2])
                 out = rhs
             elif op == "+=":
+                old, setter = self._arith_resolve_lvalue(node[2])
                 out = self._arith_narrow_int(old + rhs)
             elif op == "-=":
+                old, setter = self._arith_resolve_lvalue(node[2])
                 out = self._arith_narrow_int(old - rhs)
             elif op == "*=":
+                old, setter = self._arith_resolve_lvalue(node[2])
                 out = self._arith_narrow_int(old * rhs)
             elif op == "/=":
+                old, setter = self._arith_resolve_lvalue(node[2])
                 if rhs == 0:
                     raise ZeroDivisionError()
                 out = self._arith_narrow_int(int(old / rhs))
             elif op == "%=":
+                old, setter = self._arith_resolve_lvalue(node[2])
                 if rhs == 0:
                     raise ZeroDivisionError()
                 out = self._arith_narrow_int(old % rhs)
             elif op == "<<=":
+                old, setter = self._arith_resolve_lvalue(node[2])
                 out = self._arith_narrow_int(old << rhs)
             elif op == ">>=":
+                old, setter = self._arith_resolve_lvalue(node[2])
                 out = self._arith_narrow_int(old >> rhs)
             elif op == "&=":
+                old, setter = self._arith_resolve_lvalue(node[2])
                 out = self._arith_narrow_int(old & rhs)
             elif op == "^=":
+                old, setter = self._arith_resolve_lvalue(node[2])
                 out = self._arith_narrow_int(old ^ rhs)
             elif op == "|=":
+                old, setter = self._arith_resolve_lvalue(node[2])
                 out = self._arith_narrow_int(old | rhs)
             else:
                 raise ValueError("unknown assignment op")
@@ -11612,6 +11735,23 @@ class Runtime:
             v -= (1 << 64)
         return v
 
+    def _arith_text_to_int(self, raw: str, *, seen: set[str]) -> int:
+        text = str(raw)
+        if text == "":
+            return 0
+        try:
+            return self._arith_narrow_int(self._arith_parse_number(text))
+        except Exception:
+            try:
+                return self._arith_narrow_int(self._eval_arith_expr_with_seen(text, set(seen)))
+            except Exception:
+                # Keep malformed arithmetic text diagnostics consistent with
+                # variable arithmetic expansion behavior.
+                raw_s = text.strip()
+                if re.search(r"[+\\-*/%<>&^|?:(),]", raw_s):
+                    raise
+                return 0
+
     def _arith_resolve_lvalue(self, node: Any) -> tuple[int, Callable[[int], None]]:
         if not isinstance(node, tuple) or not node:
             raise ValueError("invalid lvalue")
@@ -11631,10 +11771,7 @@ class Runtime:
                 cur_map = dict(typed) if isinstance(typed, dict) else {}
                 key = self._arith_assoc_key_from_node(node[2])
                 old_raw = str(cur_map.get(key, ""))
-                try:
-                    old = self._arith_parse_number(old_raw)
-                except Exception:
-                    old = self._arith_get_var_int(old_raw, seen={base})
+                old = self._arith_text_to_int(old_raw, seen={base})
 
                 def _set(v: int) -> None:
                     self._assign_shell_var(f"{base}[{key}]", str(v))
@@ -11650,10 +11787,7 @@ class Runtime:
             old = 0
             if 0 <= idx < len(cur_arr) and cur_arr[idx] is not None:
                 raw = str(cur_arr[idx])
-                try:
-                    old = self._arith_parse_number(raw)
-                except Exception:
-                    old = self._arith_get_var_int(raw, seen={base})
+                old = self._arith_text_to_int(raw, seen={base})
 
             def _set(v: int, _idx: int = idx) -> None:
                 self._assign_shell_var(f"{base}[{_idx}]", str(v))
@@ -11678,12 +11812,7 @@ class Runtime:
         if "assoc" in attrs and isinstance(typed, dict):
             key = self._arith_assoc_key_from_node(idx_or_node)
             raw = str(typed.get(key, ""))
-            if raw == "":
-                return 0
-            try:
-                return self._arith_parse_number(raw)
-            except Exception:
-                return self._arith_get_var_int(raw, seen={base})
+            return self._arith_text_to_int(raw, seen={base})
         idx = int(idx_or_node)
         if isinstance(typed, list):
             if idx < 0:
@@ -11691,11 +11820,17 @@ class Runtime:
                 idx = (max_idx + 1 + idx) if max_idx is not None else idx
             if 0 <= idx < len(typed) and typed[idx] is not None:
                 raw = str(typed[idx])
-                try:
-                    return self._arith_parse_number(raw)
-                except Exception:
-                    return self._arith_get_var_int(raw, seen={base})
+                return self._arith_text_to_int(raw, seen={base})
             return 0
+        # Bash arithmetic treats scalar vars as index 0 for `name[expr]`.
+        # This preserves recursive arithmetic behavior for cases like:
+        #   a='(a[n]=++n)<7&&a[0]'; ((a[0]))
+        # Non-zero indexes against scalar vars evaluate to 0.
+        if idx == 0:
+            raw, is_set = self._get_var_with_state(base)
+            if not is_set or raw == "":
+                return 0
+            return self._arith_text_to_int(raw, seen={base})
         return 0
 
     def _arith_get_var_int(self, name: str, *, seen: set[str]) -> int:
@@ -11707,11 +11842,16 @@ class Runtime:
         if not is_set or raw == "":
             return 0
         try:
-            return self._arith_parse_number(raw)
+            return self._arith_narrow_int(self._arith_parse_number(raw))
         except Exception:
             try:
                 return self._eval_arith_expr_with_seen(raw, seen2)
             except Exception:
+                # Bash treats malformed arithmetic text in variable values as
+                # arithmetic syntax errors (e.g. A='4 + '; $((A))).
+                raw_s = str(raw).strip()
+                if re.search(r"[+\\-*/%<>&^|?:(),]", raw_s):
+                    raise
                 return 0
 
     def _eval_arith_expr_with_seen(self, expr: str, seen: set[str]) -> int:
@@ -11964,6 +12104,10 @@ class Runtime:
         obj = self._lookup_var_obj(name)
         if isinstance(obj, ShellScalar):
             if obj.tie is not None:
+                if name == "RANDOM":
+                    if name in self.env:
+                        return self.env.get(name, "")
+                    return str(obj.value or "")
                 try:
                     return self._tie_value_to_shell(obj.tie.getter, obj.tie.tie_type)
                 except Exception:
@@ -12128,6 +12272,53 @@ class Runtime:
                 continue
             out.append(str(v))
         return out
+
+    def _split_substring_arg(self, arg_text: str) -> tuple[str, str, bool]:
+        # Find the substring length separator ':' at top-level arithmetic
+        # context, not ':' tokens that belong to ternary expressions.
+        depth_paren = 0
+        depth_brack = 0
+        depth_brace = 0
+        q_depth = 0
+        i = 0
+        while i < len(arg_text):
+            ch = arg_text[i]
+            if arg_text.startswith("${", i):
+                depth_brace += 1
+                i += 2
+                continue
+            if ch == "}" and depth_brace > 0:
+                depth_brace -= 1
+                i += 1
+                continue
+            if ch == "(":
+                depth_paren += 1
+                i += 1
+                continue
+            if ch == ")" and depth_paren > 0:
+                depth_paren -= 1
+                i += 1
+                continue
+            if ch == "[":
+                depth_brack += 1
+                i += 1
+                continue
+            if ch == "]" and depth_brack > 0:
+                depth_brack -= 1
+                i += 1
+                continue
+            if depth_paren == 0 and depth_brack == 0 and depth_brace == 0 and ch == "?":
+                q_depth += 1
+                i += 1
+                continue
+            if depth_paren == 0 and depth_brack == 0 and depth_brace == 0 and ch == ":":
+                if q_depth > 0:
+                    q_depth -= 1
+                    i += 1
+                    continue
+                return arg_text[:i], arg_text[i + 1 :], True
+            i += 1
+        return arg_text, "", False
 
     @staticmethod
     def _array_max_index(seq: list[object]) -> int | None:
@@ -12803,6 +12994,14 @@ class Runtime:
     def _get_var_with_state(self, name: str) -> tuple[str, bool]:
         obj0 = self._lookup_var_obj(name)
         if isinstance(obj0, ShellScalar) and obj0.tie is not None:
+            if name == "RANDOM":
+                try:
+                    val = self._tie_value_to_shell(obj0.tie.getter, obj0.tie.tie_type)
+                except Exception:
+                    val = "0"
+                obj0.value = val
+                self.env[name] = val
+                return val, True
             return self._get_var(name), True
         parsed = self._parse_subscripted_name(name)
         if parsed is not None:
